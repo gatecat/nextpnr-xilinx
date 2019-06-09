@@ -112,7 +112,7 @@ public class json2dcp {
                 if (p < 0) {
                     size = 32;
                 } else {
-                    while (p > (1L << size))
+                    while (p >= (1L << size))
                         ++size;
                 }
                 return size + "'h" + Integer.toHexString(p);
