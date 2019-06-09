@@ -366,7 +366,7 @@ struct USPacker
                 if (anet == nullptr || anet->name != ctx->id("$PACKER_GND_NET"))
                     continue;
                 IdString raport;
-                if (dt.rports > 1) {
+                if (dt.rports >= 1) {
                     NPNR_ASSERT(dt.rports == 1); // FIXME
                     raport =
                             ctx->id(dt.abits <= 6 ? ("DPRA" + std::to_string(i)) : ("DPRA[" + std::to_string(i) + "]"));
@@ -561,6 +561,12 @@ struct USPacker
 
         io_rules[ctx->id("$nextpnr_obuf")].new_type = ctx->id("IOB_OUTBUF");
         io_rules[ctx->id("$nextpnr_obuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "OBUF");
+
+        io_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
+        io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
+        io_rules[ctx->id("IBUF")].new_type = ctx->id("IOB_INBUF");
+        io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IBUFCTRL");
+
         generic_xform(io_rules, true);
     }
 };

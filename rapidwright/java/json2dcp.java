@@ -5,6 +5,9 @@ import com.xilinx.rapidwright.design.*;
 import com.xilinx.rapidwright.device.PartNameTools;
 import com.xilinx.rapidwright.device.*;
 import com.google.gson.*;
+import com.xilinx.rapidwright.edif.EDIFCell;
+import com.xilinx.rapidwright.edif.EDIFNet;
+import com.xilinx.rapidwright.edif.EDIFTools;
 import com.xilinx.rapidwright.util.RapidWright;
 import jnr.ffi.annotations.In;
 import org.json.JSONObject;
@@ -194,9 +197,25 @@ public class json2dcp {
             }
         }
 
+        EDIFCell top = des.getNetlist().getTopCell();
+        EDIFNet edif_gnd = EDIFTools.getStaticNet(NetType.GND, top, des.getNetlist());
+        EDIFNet edif_vcc = EDIFTools.getStaticNet(NetType.VCC, top, des.getNetlist());
+
         for (NextpnrNet nn : ndes.nets.values()) {
             //System.out.println("create net " + nn.name);
-            Net n = des.createNet(escape_name(nn.name));
+            Net n;
+            if (nn.name.equals("$PACKER_VCC_NET")) {
+                n = new Net("GLOBAL_LOGIC1", edif_vcc);
+                des.addNet(n);
+            }
+            else if (nn.name.equals("$PACKER_GND_NET")) {
+                n = new Net("GLOBAL_LOGIC0", edif_gnd);
+                des.addNet(n);
+            }
+            else {
+                n = new Net(escape_name(nn.name), new EDIFNet(escape_name(nn.name), des.getTopEDIFCell()));
+                des.addNet(n);
+            }
             nn.rwNet = n;
             if (nn.driver != null && nn.driver.cell.rwCell != null) {
                 if (!nn.driver.cell.attrs.containsKey("X_ORIG_PORT_" + nn.driver.name))
@@ -218,18 +237,48 @@ public class json2dcp {
             for (int i = 0; i < (routing.length-2); i+=3) {
                 String wire = routing[i];
                 String pip = routing[i+1];
-                if (pip.isEmpty() || pip.startsWith("SITEPIP"))
+
+                if (pip.isEmpty())
                     continue;
-                String[] sp = pip.split("/");
-                String tile = sp[0];
-                String[] wires = sp[1].split("\\.");
-                Tile t = des.getDevice().getTile(tile);
-                int src = Integer.parseInt(wires[0]), dst = Integer.parseInt(wires[1]);
-                if (src < t.getWireCount() && dst < t.getWireCount())
-                    n.addPIP(t.getPIP(src, dst));
+                if (!pip.startsWith("SITEPIP")) {
+                    String[] sp = pip.split("/");
+                    String tile = sp[0];
+                    String[] wires = sp[1].split("\\.");
+                    Tile t = des.getDevice().getTile(tile);
+                    int src = Integer.parseInt(wires[0]), dst = Integer.parseInt(wires[1]);
+                    if (src < t.getWireCount() && dst < t.getWireCount())
+                        n.addPIP(t.getPIP(src, dst));
+                }
+
+            }
+
+            for (int i = 0; i < (routing.length-2); i+=3) {
+                String wire = routing[i];
+                String pip = routing[i + 1];
+
+                if (pip.isEmpty())
+                    continue;
+                if (pip.startsWith("SITEPIP")) {
+                    String[] sp = pip.split("/");
+                    SiteInst si = des.getSiteInstFromSiteName(sp[1]);
+                    if (si == null)
+                        si = des.createSiteInst(des.getDevice().getSite(sp[1]));
+                    BEL b = si.getBEL(sp[2]);
+                    System.out.println(nn.name + " " + sp[1] + " " + sp[2] + " " + sp[3]);
+
+                    if (b == null)
+                        continue;
+                    for (BELPin bp : b.getPins())
+                        if (bp.getSiteWireName().equals(sp[3])) {
+                            System.out.println(nn.name + " " +b.getName() + " SITEPIP -> " + bp.getName());
+                            si.addSitePIP(b.getName(), bp.getName());
+                        }
+                }
+
             }
 
         }
+        /*
         for (NextpnrCell nc : ndes.cells.values()) {
             if (nc.rwCell == null)
                 continue;
@@ -239,6 +288,8 @@ public class json2dcp {
                 System.out.println("    " + e.getKey() + "->" + e.getValue());
             }
         }
+
+         */
         des.writeCheckpoint(args[2]);
     }
 
