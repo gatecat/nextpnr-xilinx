@@ -207,31 +207,40 @@ public class json2dcp {
 
         Design des = new Design("top", args[0]);
 
+        HashMap<String, String> siteToPin = new HashMap<>();
+        for (PackagePin p : des.getDevice().getActivePackage().getPackagePinMap().values())
+            if (p != null && p.getSite() != null)
+                siteToPin.put(p.getSite().getName(), p.getName());
+
         for (NextpnrCell nc : ndes.cells.values()) {
             if (!nc.attrs.containsKey("X_ORIG_TYPE"))
                 continue;
-            if (nc.type.equals("IOB_OUTBUF") || nc.type.equals("IOB_IBUFCTRL"))
-                continue;
-            nc.rwCell = des.createAndPlaceCell(nc.name, Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE")), nc.attrs.get("NEXTPNR_BEL"));
+            if (nc.type.equals("IOB_INBUF") || nc.type.equals("IOB_OUTBUF")  || nc.type.equals("IOB_IBUFCTRL")) {
+                nc.rwCell = des.createAndPlaceIOB(nc.name, nc.type.equals("IOB_OUTBUF") ? PinType.OUT : PinType.IN,
+                        siteToPin.get(nc.attrs.get("NEXTPNR_BEL").split("/")[0]), "LVCMOS33");
+            } else {
+                nc.rwCell = des.createAndPlaceCell(nc.name, Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE")), nc.attrs.get("NEXTPNR_BEL"));
 
-            Map<String, String> map = nc.rwCell.getPinMappingsP2L();
-            Object[] pins = map.keySet().toArray();
-            for (Object p : pins)
-                nc.rwCell.removePinMapping(p.toString());
+                Map<String, String> map = nc.rwCell.getPinMappingsP2L();
+                Object[] pins = map.keySet().toArray();
+                for (Object p : pins)
+                    nc.rwCell.removePinMapping(p.toString());
 
-            for (NextpnrCellPort p : nc.ports.values()) {
-                if (!nc.attrs.containsKey("X_ORIG_PORT_" + p.name))
-                    continue;
-                String[] orig_ports = nc.attrs.get("X_ORIG_PORT_" + p.name).split(" ");
+                for (NextpnrCellPort p : nc.ports.values()) {
+                    if (!nc.attrs.containsKey("X_ORIG_PORT_" + p.name))
+                        continue;
+                    String[] orig_ports = nc.attrs.get("X_ORIG_PORT_" + p.name).split(" ");
 
-                for (String orig : orig_ports)
-                    nc.rwCell.addPinMapping(p.name, orig);
+                    for (String orig : orig_ports)
+                        nc.rwCell.addPinMapping(p.name, orig);
+                }
+
+                for (Map.Entry<String, String> param : nc.params.entrySet()) {
+                    nc.rwCell.addProperty(param.getKey(), param.getValue());
+                    //System.out.println(param.getKey() + " = " + param.getValue());
+                }
             }
 
-            for (Map.Entry<String, String> param : nc.params.entrySet()) {
-                nc.rwCell.addProperty(param.getKey(), param.getValue());
-                //System.out.println(param.getKey() + " = " + param.getValue());
-            }
         }
 
         EDIFCell top = des.getNetlist().getTopCell();

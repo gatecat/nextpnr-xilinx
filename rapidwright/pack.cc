@@ -564,8 +564,8 @@ struct USPacker
 
         io_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
         io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
-        io_rules[ctx->id("IBUF")].new_type = ctx->id("IOB_INBUF");
-        io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IBUFCTRL");
+        io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
+        io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
 
         generic_xform(io_rules, true);
     }
