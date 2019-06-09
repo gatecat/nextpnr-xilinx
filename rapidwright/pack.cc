@@ -557,7 +557,10 @@ struct USPacker
         log_info("Inserting IO buffers..\n");
         std::unordered_map<IdString, XFormRule> io_rules;
         io_rules[ctx->id("$nextpnr_ibuf")].new_type = ctx->id("IOB_IBUFCTRL");
+        io_rules[ctx->id("$nextpnr_ibuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "IBUFCTRL");
+
         io_rules[ctx->id("$nextpnr_obuf")].new_type = ctx->id("IOB_OUTBUF");
+        io_rules[ctx->id("$nextpnr_obuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "OBUF");
         generic_xform(io_rules, true);
     }
 };

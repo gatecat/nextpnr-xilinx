@@ -21,5 +21,5 @@ add_jar(rapidwright_bbaexport SOURCES rapidwright/java/bbaexport.java MANIFEST r
 
 file(WRITE rapidwright/java/json2dcp.mf "Manifest-Version: 1.0\n")
 file(APPEND rapidwright/java/json2dcp.mf "Main-Class: dev.fpga.rapidwright.json2dcp\n")
-file(APPEND rapidwright/java/json2dcp.mf "Class-Path: ${RAPIDWRIGHT_JARS_STR} \n ${GSON_PATH}")
+file(APPEND rapidwright/java/json2dcp.mf "Class-Path: ${RAPIDWRIGHT_JARS_STR} \n ${GSON_PATH}\n")
 add_jar(rapidwright_json2dcp SOURCES rapidwright/java/json2dcp.java MANIFEST rapidwright/java/json2dcp.mf)

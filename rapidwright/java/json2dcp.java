@@ -2,7 +2,9 @@ package dev.fpga.rapidwright;
 
 import com.google.gson.stream.JsonReader;
 import com.xilinx.rapidwright.design.*;
+import com.xilinx.rapidwright.device.PartNameTools;
 import com.google.gson.*;
+import com.xilinx.rapidwright.util.RapidWright;
 import org.json.JSONObject;
 
 import java.io.FileNotFoundException;
@@ -96,7 +98,7 @@ public class json2dcp {
         }
 
         void Import(JsonObject des) {
-            JsonObject top = des.getAsJsonObject("modules").getAsJsonObject("top");
+            JsonObject top = des.getAsJsonObject("modules").getAsJsonObject(des.getAsJsonObject("modules").keySet().toArray()[0].toString());
             JsonObject netJson = top.getAsJsonObject("netnames");
             for(Map.Entry<String, JsonElement> entry : netJson.entrySet()) {
                 NextpnrNet net = new NextpnrNet(entry.getKey());
@@ -161,6 +163,16 @@ public class json2dcp {
 
         NextpnrDesign ndes = new NextpnrDesign();
         ndes.Import(new JsonParser().parse(new FileReader(args[1])).getAsJsonObject());
+
+        Design des = new Design("top", args[0]);
+
+        for (NextpnrCell nc : ndes.cells.values()) {
+            if (!nc.attrs.containsKey("X_ORIG_TYPE"))
+                continue;
+            nc.rwCell = des.createAndPlaceCell(nc.name, Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE")), nc.attrs.get("NEXTPNR_BEL"));
+        }
+
+        des.writeCheckpoint(args[2]);
     }
 
 }
