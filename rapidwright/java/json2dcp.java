@@ -11,9 +11,11 @@ import com.xilinx.rapidwright.edif.EDIFTools;
 import com.xilinx.rapidwright.util.RapidWright;
 import jnr.ffi.annotations.In;
 import org.json.JSONObject;
+import org.python.antlr.ast.Str;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -102,6 +104,36 @@ public class json2dcp {
             rwd = null;
         }
 
+        String parseParam(JsonElement val) {
+            JsonPrimitive prim = val.getAsJsonPrimitive();
+            if (prim.isNumber()) {
+                int p = prim.getAsInt();
+                int size = 1;
+                if (p < 0) {
+                    size = 32;
+                } else {
+                    while (p > (1L << size))
+                        ++size;
+                }
+                return size + "'h" + Integer.toHexString(p);
+            } else {
+                String s = prim.getAsString();
+                boolean is_binary = true;
+                for (char c : s.toCharArray()) {
+                    if (c != '0' && c != '1' && c != 'x') {
+                        is_binary = false;
+                        break;
+                    }
+                }
+                if (is_binary) {
+                    s = s.replace('x', '0');
+                    BigInteger bi = new BigInteger(s, 2);
+                    return bi.bitLength() + "'h" + bi.toString(16);
+                }
+                return s;
+            }
+        }
+
         void Import(JsonObject des) {
             JsonObject top = des.getAsJsonObject("modules").getAsJsonObject(des.getAsJsonObject("modules").keySet().toArray()[0].toString());
             JsonObject netJson = top.getAsJsonObject("netnames");
@@ -151,7 +183,7 @@ public class json2dcp {
                 // FIXME: parse numerical params correctly
                 JsonObject params = data.getAsJsonObject("parameters");
                 for (Map.Entry<String, JsonElement> param : params.entrySet())
-                    cell.params.put(param.getKey(), param.getValue().getAsString());
+                    cell.params.put(param.getKey(), parseParam(param.getValue()));
 
                 cells.put(entry.getKey(), cell);
             }
@@ -194,6 +226,11 @@ public class json2dcp {
 
                 for (String orig : orig_ports)
                     nc.rwCell.addPinMapping(p.name, orig);
+            }
+
+            for (Map.Entry<String, String> param : nc.params.entrySet()) {
+                nc.rwCell.addProperty(param.getKey(), param.getValue());
+                //System.out.println(param.getKey() + " = " + param.getValue());
             }
         }
 
