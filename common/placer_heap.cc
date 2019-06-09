@@ -174,7 +174,6 @@ class HeAPPlacer
         std::vector<std::unordered_set<IdString>> heap_runs;
         std::unordered_set<IdString> all_celltypes;
         std::unordered_map<IdString, int> ct_count;
-
         for (auto cell : place_cells) {
             if (!all_celltypes.count(cell->type)) {
                 heap_runs.push_back(std::unordered_set<IdString>{cell->type});
@@ -189,6 +188,13 @@ class HeAPPlacer
                 heap_runs.clear();
                 break;
             }
+
+#if 1
+        // Never want to deal with LUTs, FFs, MUXFxs seperately,
+        // for now disable all single-cell-type runs and only have heteregenous
+        // runs
+        heap_runs.clear();
+#endif
 
         heap_runs.push_back(all_celltypes);
         // The main HeAP placer loop
@@ -638,7 +644,8 @@ class HeAPPlacer
                     if (other == &port)
                         return;
                     int o_pos = cell_pos(other->cell);
-                    double weight = 1.0 / (ni->users.size() * std::max<double>(1, std::abs(o_pos - this_pos)));
+                    double weight = 1.0 / (ni->users.size() *
+                                           std::max<double>(1, (yaxis ? 2 : 1) * std::abs(o_pos - this_pos)));
 
                     if (user_idx != -1 && net_crit.count(ni->name)) {
                         auto &nc = net_crit.at(ni->name);
@@ -664,7 +671,7 @@ class HeAPPlacer
                 int l_pos = legal_pos(solve_cells.at(row));
                 int c_pos = cell_pos(solve_cells.at(row));
 
-                double weight = alpha * iter / std::max<double>(1, std::abs(l_pos - c_pos));
+                double weight = alpha * iter / std::max<double>(1, (yaxis ? 2 : 1) * std::abs(l_pos - c_pos));
                 // Add an arc from legalised to current position
                 es.add_coeff(row, row, weight);
                 es.add_rhs(row, weight * l_pos);
@@ -709,7 +716,7 @@ class HeAPPlacer
                 ymin = std::min(ymin, usrloc.y);
                 ymax = std::max(ymax, usrloc.y);
             }
-            hpwl += (xmax - xmin) + (ymax - ymin);
+            hpwl += (xmax - xmin) + 2 * (ymax - ymin);
         }
         return hpwl;
     }
@@ -946,7 +953,7 @@ class HeAPPlacer
         sl_time += std::chrono::duration<float>(endt - startt).count();
     }
     // Implementation of the cut-based spreading as described in the HeAP/SimPL papers
-    static constexpr float beta = 0.9;
+    static constexpr float beta = 0.47;
 
     struct ChainExtent
     {
@@ -1264,17 +1271,20 @@ class HeAPPlacer
                 auto &reg = regions.at(rid);
                 while (reg.overused()) {
                     bool changed = false;
-                    if (reg.x0 > 0) {
-                        grow_region(reg, reg.x0 - 1, reg.y0, reg.x1, reg.y1);
-                        changed = true;
-                        if (!reg.overused())
-                            break;
-                    }
-                    if (reg.x1 < p->max_x) {
-                        grow_region(reg, reg.x0, reg.y0, reg.x1 + 1, reg.y1);
-                        changed = true;
-                        if (!reg.overused())
-                            break;
+                    // 2 x units for every 1 y unit to account for INT gaps between CLBs
+                    for (int j = 0; j < 2; j++) {
+                        if (reg.x0 > 0) {
+                            grow_region(reg, reg.x0 - 1, reg.y0, reg.x1, reg.y1);
+                            changed = true;
+                            if (!reg.overused())
+                                break;
+                        }
+                        if (reg.x1 < p->max_x) {
+                            grow_region(reg, reg.x0, reg.y0, reg.x1 + 1, reg.y1);
+                            changed = true;
+                            if (!reg.overused())
+                                break;
+                        }
                     }
                     if (reg.y0 > 0) {
                         grow_region(reg, reg.x0, reg.y0 - 1, reg.x1, reg.y1);
@@ -1518,7 +1528,7 @@ bool placer_heap(Context *ctx, PlacerHeapCfg cfg) { return HeAPPlacer(ctx, cfg).
 
 PlacerHeapCfg::PlacerHeapCfg(Context *ctx) : Settings(ctx)
 {
-    alpha = get<float>("placerHeap/alpha", 0.1);
+    alpha = get<float>("placerHeap/alpha", 0.08);
     criticalityExponent = get<int>("placerHeap/criticalityExponent", 2);
     timingWeight = get<int>("placerHeap/timingWeight", 10);
 }

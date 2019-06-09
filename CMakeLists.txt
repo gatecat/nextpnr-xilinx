@@ -2,11 +2,11 @@
 cmake_minimum_required(VERSION 3.3)
 project(nextpnr)
 
-option(BUILD_GUI "Build GUI" ON)
-option(BUILD_PYTHON "Build Python Integration" ON)
+option(BUILD_GUI "Build GUI" OFF)
+option(BUILD_PYTHON "Build Python Integration" OFF)
 option(BUILD_TESTS "Build GUI" OFF)
 option(BUILD_HEAP "Build HeAP analytic placer" ON)
-option(USE_OPENMP "Use OpenMP to accelerate analytic placer" OFF)
+option(USE_OPENMP "Use OpenMP to accelerate analytic placer" ON)
 option(COVERAGE "Add code coverage info" OFF)
 option(STATIC_BUILD "Create static build" OFF)
 option(EXTERNAL_CHIPDB "Create build with pre-built chipdb binaries" OFF)
@@ -28,9 +28,9 @@ if (EXTERNAL_CHIPDB)
 endif()
 
 # List of families to build
-set(FAMILIES generic ice40 ecp5)
+set(FAMILIES generic ice40 ecp5 rapidwright)
 
-set(ARCH "" CACHE STRING "Architecture family for nextpnr build")
+set(ARCH "rapidwright" CACHE STRING "Architecture family for nextpnr build")
 set_property(CACHE ARCH PROPERTY STRINGS ${FAMILIES})
 
 if (NOT ARCH)

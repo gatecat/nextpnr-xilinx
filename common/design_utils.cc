@@ -64,6 +64,8 @@ void print_utilisation(const Context *ctx)
     }
     std::map<IdString, int> available_types;
     for (auto bel : ctx->getBels()) {
+        if (ctx->getBelHidden(bel))
+            continue;
         available_types[ctx->getBelType(bel)]++;
     }
     log_break();
@@ -112,6 +114,7 @@ void disconnect_port(const Context *ctx, CellInfo *cell, IdString port_name)
         if (port.net->driver.cell == cell && port.net->driver.port == port_name)
             port.net->driver.cell = nullptr;
     }
+    port.net = nullptr;
 }
 
 void connect_ports(Context *ctx, CellInfo *cell1, IdString port1_name, CellInfo *cell2, IdString port2_name)

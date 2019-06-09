@@ -68,7 +68,7 @@ class SAPlacer
         int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
         // Number of cells at each extremity
         int nx0 = 0, nx1 = 0, ny0 = 0, ny1 = 0;
-        wirelen_t hpwl() const { return wirelen_t((x1 - x0) + (y1 - y0)); }
+        wirelen_t hpwl() const { return wirelen_t((x1 - x0) + 2 * (y1 - y0)); }
     };
 
   public:
@@ -684,7 +684,8 @@ class SAPlacer
 
         int dx = diameter, dy = diameter;
         if (cell->region != nullptr && cell->region->constr_bels) {
-            dx = std::min(diameter, (region_bounds[cell->region->name].x1 - region_bounds[cell->region->name].x0) + 1);
+            dx = std::min(2 * diameter,
+                          (region_bounds[cell->region->name].x1 - region_bounds[cell->region->name].x0) + 1);
             dy = std::min(diameter, (region_bounds[cell->region->name].y1 - region_bounds[cell->region->name].y0) + 1);
             // Clamp location to within bounds
             curr_loc.x = std::max(region_bounds[cell->region->name].x0, curr_loc.x);

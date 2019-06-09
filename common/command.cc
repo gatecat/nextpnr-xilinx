@@ -27,8 +27,8 @@
 #include "pybindings.h"
 #endif
 
-#include <boost/algorithm/string/join.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/join.hpp>
 #include <boost/filesystem/convenience.hpp>
 #include <boost/program_options.hpp>
 #include <fstream>
@@ -286,16 +286,16 @@ int CommandHandler::executeMain(std::unique_ptr<Context> ctx)
             execute_python_file(filename.c_str());
     } else
 #endif
-    if (vm.count("json") || vm.count("load")) {
-        bool do_pack  = vm.count("pack-only")!=0 || vm.count("no-pack")==0;
-        bool do_place = vm.count("pack-only")==0 && vm.count("no-place")==0;
-        bool do_route = vm.count("pack-only")==0 && vm.count("no-route")==0;
+            if (vm.count("json") || vm.count("load")) {
+        bool do_pack = vm.count("pack-only") != 0 || vm.count("no-pack") == 0;
+        bool do_place = vm.count("pack-only") == 0 && vm.count("no-place") == 0;
+        bool do_route = vm.count("pack-only") == 0 && vm.count("no-route") == 0;
 
         if (do_pack) {
             run_script_hook("pre-pack");
             if (!ctx->pack() && !ctx->force)
                 log_error("Packing design failed.\n");
-        } 
+        }
         assign_budget(ctx.get());
         ctx->check();
         print_utilisation(ctx.get());
@@ -317,7 +317,7 @@ int CommandHandler::executeMain(std::unique_ptr<Context> ctx)
         customBitstream(ctx.get());
     }
 
-    if (vm.count("write")) {        
+    if (vm.count("write")) {
         std::string filename = vm["write"].as<std::string>();
         std::ofstream f(filename);
         if (!write_json_file(f, filename, ctx.get()))

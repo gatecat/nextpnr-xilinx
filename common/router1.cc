@@ -431,8 +431,11 @@ struct Router1
                 if (it.second.strength < STRENGTH_LOCKED && wire_to_arcs.count(it.first) == 0)
                     unbind_wires.push_back(it.first);
 
-            for (auto it : unbind_wires)
+            for (auto it : unbind_wires) {
+                if (ctx->debug)
+                    log_info("   setup unbinding wire %s\n", ctx->nameOfWire(it));
                 ctx->unbindWire(it);
+            }
         }
     }
 
@@ -527,6 +530,9 @@ struct Router1
                             conflictWireNet = ctx->getConflictingWireNet(next_wire);
                             if (conflictWireNet == nullptr)
                                 continue;
+                            auto wire_it = conflictWireNet->wires.find(next_wire);
+                            if (wire_it != conflictWireNet->wires.end() && wire_it->second.strength > STRENGTH_STRONG)
+                                continue;
                         }
                     }
 
@@ -537,6 +543,9 @@ struct Router1
                         if (conflictPipWire == WireId()) {
                             conflictPipNet = ctx->getConflictingPipNet(pip);
                             if (conflictPipNet == nullptr)
+                                continue;
+                            auto wire_it = conflictPipNet->wires.find(ctx->getPipDstWire(pip));
+                            if (wire_it != conflictPipNet->wires.end() && wire_it->second.strength > STRENGTH_STRONG)
                                 continue;
                         }
                     }
@@ -560,6 +569,13 @@ struct Router1
                         if (scores_it != wireScores.end())
                             next_penalty += scores_it->second * cfg.wireRipupPenalty;
                         next_penalty += cfg.wireRipupPenalty;
+
+                        NetInfo *bound = ctx->getBoundWireNet(conflictWireWire);
+                        if (bound != nullptr) {
+                            auto wire_it = bound->wires.find(conflictWireWire);
+                            if (wire_it != bound->wires.end() && wire_it->second.strength > STRENGTH_STRONG)
+                                continue;
+                        }
                     }
 
                     if (conflictPipWire != WireId()) {
@@ -567,6 +583,13 @@ struct Router1
                         if (scores_it != wireScores.end())
                             next_penalty += scores_it->second * cfg.wireRipupPenalty;
                         next_penalty += cfg.wireRipupPenalty;
+
+                        NetInfo *bound = ctx->getBoundWireNet(conflictPipWire);
+                        if (bound != nullptr) {
+                            auto wire_it = bound->wires.find(conflictPipWire);
+                            if (wire_it != bound->wires.end() && wire_it->second.strength > STRENGTH_STRONG)
+                                continue;
+                        }
                     }
 
                     if (conflictWireNet != nullptr) {
@@ -676,7 +699,9 @@ struct Router1
             if (ctx->debug) {
                 delay_t path_delay_delta = ctx->estimateDelay(cursor, dst_wire) - accumulated_path_delay;
 
-                log("  node %s (%+.2f %+.2f)\n", ctx->nameOfWire(cursor), ctx->getDelayNS(path_delay_delta),
+                log("  node %s (%s) est %.02f (%+.2f %+.2f)\n", ctx->nameOfWire(cursor),
+                    IdString(ctx->wireIntent(cursor)).c_str(ctx),
+                    ctx->getDelayNS(ctx->estimateDelay(cursor, dst_wire, true)), ctx->getDelayNS(path_delay_delta),
                     ctx->getDelayNS(path_delay_delta - last_path_delay_delta));
 
                 last_path_delay_delta = path_delay_delta;
@@ -702,11 +727,13 @@ struct Router1
 
                 if (pip == PipId()) {
                     if (ctx->debug)
-                        log("    bind wire %s\n", ctx->nameOfWire(cursor));
+                        log("    bind wire %s (%s)\n", ctx->nameOfWire(cursor),
+                            IdString(ctx->wireIntent(cursor)).c_str(ctx));
                     ctx->bindWire(cursor, net_info, STRENGTH_WEAK);
                 } else {
                     if (ctx->debug)
-                        log("    bind pip %s\n", ctx->nameOfPip(pip));
+                        log("    bind pip %s delay %.03f\n", ctx->nameOfPip(pip),
+                            ctx->getDelayNS(ctx->getPipDelay(pip).maxDelay()));
                     ctx->bindPip(pip, net_info, STRENGTH_WEAK);
                 }
             }
