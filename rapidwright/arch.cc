@@ -97,17 +97,41 @@ BelId Arch::getBelByName(IdString name) const
             tile_by_name[chip_info->tile_insts[i].name.get()] = i;
         }
     }
-    auto split = split_identifier_name(name.str(this));
-    int tile = tile_by_name.at(split.first);
-    auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
-    IdString belname = id(split.second);
-    for (int i = 0; i < tile_info.num_bels; i++) {
-        if (tile_info.bel_data[i].name == belname.index) {
-            ret.tile = tile;
-            ret.index = i;
-            break;
+
+    if (site_by_name.empty()) {
+        for (int i = 0; i < chip_info->num_tiles; i++) {
+            auto &tile = chip_info->tile_insts[i];
+            for (int j = 0; j < tile.num_sites; j++)
+                site_by_name[tile.site_insts[j].name.get()] = std::make_pair(i, j);
         }
     }
+
+    auto split = split_identifier_name(name.str(this));
+    if (site_by_name.count(split.first)) {
+        int tile, site;
+        std::tie(tile, site) = site_by_name.at(split.first);
+        auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
+        IdString belname = id(split.second);
+        for (int i = 0; i < tile_info.num_bels; i++) {
+            if (tile_info.bel_data[i].site == site && tile_info.bel_data[i].name == belname.index) {
+                ret.tile = tile;
+                ret.index = i;
+                break;
+            }
+        }
+    } else {
+        int tile = tile_by_name.at(split.first);
+        auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
+        IdString belname = id(split.second);
+        for (int i = 0; i < tile_info.num_bels; i++) {
+            if (tile_info.bel_data[i].name == belname.index) {
+                ret.tile = tile;
+                ret.index = i;
+                break;
+            }
+        }
+    }
+
     return ret;
 }
 
@@ -183,9 +207,17 @@ PipId Arch::getPipByName(IdString name) const
 IdString Arch::getPipName(PipId pip) const
 {
     NPNR_ASSERT(pip != PipId());
-    return id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
-              std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
-              std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
+    if (locInfo(pip).pip_data[pip.index].site != -1 && locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL &&
+        locInfo(pip).pip_data[pip.index].bel != -1) {
+        return id(std::string("SITEPIP/") +
+                  chip_info->tile_insts[pip.tile].site_insts[locInfo(pip).pip_data[pip.index].site].name.get() +
+                  std::string("/") + IdString(locInfo(pip).pip_data[pip.index].bel).str(this) + "/" +
+                  IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this));
+    } else {
+        return id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
+                  std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
+                  std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -381,6 +413,8 @@ bool Arch::place()
         log_error("US+ architecture does not support placer '%s'\n", placer.c_str());
     }
     fixupPlacement();
+    getCtx()->attrs[getCtx()->id("step")] = "place";
+    archInfoToAttributes();
     return true;
 }
 
@@ -568,6 +602,8 @@ bool Arch::route()
     log_info("       base %d adder %d\n", speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_base_delay,
              speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_fanout_adder);
 #endif
+    getCtx()->attrs[getCtx()->id("step")] = "route";
+    archInfoToAttributes();
     return result;
 }
 

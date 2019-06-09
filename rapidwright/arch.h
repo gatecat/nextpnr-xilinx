@@ -565,6 +565,7 @@ struct Arch : BaseCtx
     const ChipInfoPOD *chip_info;
 
     mutable std::unordered_map<std::string, int> tile_by_name;
+    mutable std::unordered_map<std::string, std::pair<int, int>> site_by_name;
 
     std::unordered_map<WireId, NetInfo *> wire_to_net;
     std::unordered_map<PipId, NetInfo *> pip_to_net;
@@ -622,8 +623,14 @@ struct Arch : BaseCtx
     IdString getBelName(BelId bel) const
     {
         NPNR_ASSERT(bel != BelId());
-        return id(std::string(chip_info->tile_insts[bel.tile].name.get()) + "/" +
-                  IdString(locInfo(bel).bel_data[bel.index].name).c_str(this));
+        int site = locInfo(bel).bel_data[bel.index].site;
+        if (site != -1) {
+            return id(std::string(chip_info->tile_insts[bel.tile].site_insts[site].name.get()) + "/" +
+                      IdString(locInfo(bel).bel_data[bel.index].name).str(this));
+        } else {
+            return id(std::string(chip_info->tile_insts[bel.tile].name.get()) + "/" +
+                      IdString(locInfo(bel).bel_data[bel.index].name).str(this));
+        }
     }
 
     uint32_t getBelChecksum(BelId bel) const { return bel.index; }
@@ -777,11 +784,17 @@ struct Arch : BaseCtx
     IdString getWireName(WireId wire) const
     {
         NPNR_ASSERT(wire != WireId());
-        return id(std::string(chip_info
-                                      ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
-                                                                   : wire.tile]
-                                      .name.get()) +
-                  "/" + IdString(wireInfo(wire).name).c_str(this));
+        if (wire.tile != -1 && locInfo(wire).wire_data[wire.index].site != -1) {
+            return id(std::string("SITEWIRE/") +
+                      chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +
+                      std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this));
+        } else {
+            return id(std::string(chip_info
+                                          ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
+                                                                       : wire.tile]
+                                          .name.get()) +
+                      "/" + IdString(wireInfo(wire).name).c_str(this));
+        }
     }
 
     IdString getWireType(WireId wire) const;

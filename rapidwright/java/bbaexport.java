@@ -3,6 +3,7 @@ package dev.fpga.rapidwright;
 
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.SiteInst;
+import com.xilinx.rapidwright.device.PartNameTools;
 import com.xilinx.rapidwright.device.*;
 import com.xilinx.rapidwright.util.Utils;
 import jnr.ffi.annotations.In;
@@ -127,7 +128,7 @@ public class bbaexport {
             String key = s.getSiteTypeEnum().toString() + s.getSiteIndexInTile() + "/" + wire;
             if (siteWiresToWireIndex.containsKey(key))
                 return siteWiresToWireIndex.get(key);
-            NextpnrWire nw = new NextpnrWire(key, wires.size(), makeConstId("SITE_WIRE"));
+            NextpnrWire nw = new NextpnrWire(wire, wires.size(), makeConstId("SITE_WIRE"));
             nw.is_site = true;
             nw.site = s.getSiteIndexInTile();
             if (wire.equals("GND_WIRE"))
@@ -142,7 +143,7 @@ public class bbaexport {
         private NextpnrBel addBel(SiteInst s, int siteVariant, BEL b) {
             if (b.getBELClass() == BELClass.PORT)
                 return null;
-            NextpnrBel nb = new NextpnrBel(s.getSiteTypeEnum().toString() + s.getSite().getSiteIndexInTile() + "/" + b.getName(),
+            NextpnrBel nb = new NextpnrBel(b.getName(),
                     bels.size(), getBelTypeOverride(b.getBELType()), b.getBELType(), s.getSite().getSiteIndexInTile(), siteVariant, getBelZoverride(s.getTile(), b),
                     (b.getBELClass() == BELClass.RBEL) ? 1 : 0);
             bels.add(nb);

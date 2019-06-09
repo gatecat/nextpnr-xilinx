@@ -573,6 +573,8 @@ bool Arch::pack()
     packer.pack_ffs();
     packer.pack_lutffs();
     assignArchInfo();
+    attrs[id("step")] = "pack";
+    archInfoToAttributes();
     return true;
 }
 
