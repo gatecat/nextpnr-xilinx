@@ -200,6 +200,7 @@ public class bbaexport {
             else {
                 if (((s.getSiteTypeEnum() == SiteTypeEnum.SLICEL || s.getSiteTypeEnum() == SiteTypeEnum.SLICEM))) {
                     // Permutation pseudo-pips for LUT pins
+/*
                     String pn = bp.getSiteWireName();
                     if (pn.length() == 2 && "ABCDEFGH".contains(pn.substring(0, 1)) && "12345".contains(pn.substring(1, 2))) {
                         // No permutation for 6 ATM
@@ -215,6 +216,8 @@ public class bbaexport {
                         }
 
                     }
+
+ */
                 }
                 np = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePinName)), siteWireToWire(s, bp.getSiteWireName()),
                         0, NextpnrPipType.SITE_ENTRANCE);

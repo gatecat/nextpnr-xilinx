@@ -257,27 +257,30 @@ void Arch::fixupPlacement()
             CellInfo *lut5 = lt.cells[z << 4 | BEL_5LUT];
             if (lut5 == nullptr)
                 continue;
-            std::set<IdString> lut5Inputs, lut6Inputs;
+            std::unordered_map<IdString, std::vector<int>> lut5Inputs, lut6Inputs;
             for (int i = 0; i < lut5->lutInfo.input_count; i++)
                 if (lut5->lutInfo.input_sigs[i])
-                    lut5Inputs.insert(lut5->lutInfo.input_sigs[i]->name);
+                    lut5Inputs[lut5->lutInfo.input_sigs[i]->name].push_back(i);
             CellInfo *lut6 = lt.cells[z << 4 | BEL_6LUT];
             if (lut6) {
                 for (int i = 0; i < lut6->lutInfo.input_count; i++)
                     if (lut6->lutInfo.input_sigs[i])
-                        lut6Inputs.insert(lut6->lutInfo.input_sigs[i]->name);
+                        lut6Inputs[lut6->lutInfo.input_sigs[i]->name].push_back(i);
             }
             std::set<IdString> uniqueInputs;
             for (auto i5 : lut5Inputs)
-                uniqueInputs.insert(i5);
+                uniqueInputs.insert(i5.first);
             for (auto i6 : lut6Inputs)
-                uniqueInputs.insert(i6);
+                uniqueInputs.insert(i6.first);
             // Disconnect LUT inputs, and re-connect them to not overlap
             IdString ports[6] = {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6};
             for (auto p : ports) {
                 disconnect_port(getCtx(), lut5, p);
-                if (lut6)
+                lut5->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
+                if (lut6) {
+                    lut6->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
                     disconnect_port(getCtx(), lut6, p);
+                }
             }
             int index = 0;
             for (auto i : uniqueInputs) {
@@ -287,6 +290,13 @@ void Arch::fixupPlacement()
                         lut5->ports[ports[index]].type = PORT_IN;
                     }
                     connect_port(getCtx(), nets.at(i).get(), lut5, ports[index]);
+                    lut5->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = "";
+                    bool first = true;
+                    for (auto inp : lut5Inputs[i]) {
+                        lut5->attrs[id("X_ORIG_PORT_" + ports[index].str(this))].str +=
+                                (first ? "I" : " I") + std::to_string(inp);
+                        first = false;
+                    }
                 }
                 if (lut6 && lut6Inputs.count(i)) {
                     if (!lut6->ports.count(ports[index])) {
@@ -294,12 +304,21 @@ void Arch::fixupPlacement()
                         lut6->ports[ports[index]].type = PORT_IN;
                     }
                     connect_port(getCtx(), nets.at(i).get(), lut6, ports[index]);
+
+                    lut6->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = "";
+                    bool first = true;
+                    for (auto inp : lut6Inputs[i]) {
+                        lut6->attrs[id("X_ORIG_PORT_" + ports[index].str(this))].str +=
+                                (first ? "I" : " I") + std::to_string(inp);
+                        first = false;
+                    }
                 }
                 ++index;
             }
             rename_port(getCtx(), lut5, id_O6, id_O5);
+            lut5->attrs.erase(id("X_ORIG_PORT_O6"));
+            lut5->attrs[id("X_ORIG_PORT_O5")] = "O";
             // FIXME: connect A6 of 6LUT to VCC
-            // FIXME: preserve original ordering, and permute INIT accordingly
         }
     }
 }

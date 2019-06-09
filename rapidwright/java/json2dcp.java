@@ -178,6 +178,20 @@ public class json2dcp {
             if (nc.type.equals("IOB_OUTBUF") || nc.type.equals("IOB_IBUFCTRL"))
                 continue;
             nc.rwCell = des.createAndPlaceCell(nc.name, Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE")), nc.attrs.get("NEXTPNR_BEL"));
+
+            Map<String, String> map = nc.rwCell.getPinMappingsP2L();
+            Object[] pins = map.keySet().toArray();
+            for (Object p : pins)
+                nc.rwCell.removePinMapping(p.toString());
+
+            for (NextpnrCellPort p : nc.ports.values()) {
+                if (!nc.attrs.containsKey("X_ORIG_PORT_" + p.name))
+                    continue;
+                String[] orig_ports = nc.attrs.get("X_ORIG_PORT_" + p.name).split(" ");
+
+                for (String orig : orig_ports)
+                    nc.rwCell.addPinMapping(p.name, orig);
+            }
         }
 
         for (NextpnrNet nn : ndes.nets.values()) {
@@ -194,13 +208,14 @@ public class json2dcp {
                 if (usr.cell.rwCell != null) {
                     if (!usr.cell.attrs.containsKey("X_ORIG_PORT_" + usr.name))
                         continue;
-                    //System.out.println("connect " + n.getName() + " -> " + usr.cell.name + "." + usr.name);
-                    n.connect(usr.cell.rwCell, usr.cell.attrs.get("X_ORIG_PORT_" + usr.name));
+                    String[] orig_ports = usr.cell.attrs.get("X_ORIG_PORT_" + usr.name).split(" ");
+                    for (String orig : orig_ports)
+                        n.connect(usr.cell.rwCell, orig);
                 }
             }
 
             String[] routing = nn.attrs.get("ROUTING").split(";");
-            for (int i = 0; i < routing.length; i+=3) {
+            for (int i = 0; i < (routing.length-2); i+=3) {
                 String wire = routing[i];
                 String pip = routing[i+1];
                 if (pip.isEmpty() || pip.startsWith("SITEPIP"))
@@ -215,7 +230,15 @@ public class json2dcp {
             }
 
         }
-
+        for (NextpnrCell nc : ndes.cells.values()) {
+            if (nc.rwCell == null)
+                continue;
+            System.out.println(nc.name + ": ");
+            Map<String, String> map = nc.rwCell.getPinMappingsP2L();
+            for (Map.Entry<String, String> e : map.entrySet()) {
+                System.out.println("    " + e.getKey() + "->" + e.getValue());
+            }
+        }
         des.writeCheckpoint(args[2]);
     }
 

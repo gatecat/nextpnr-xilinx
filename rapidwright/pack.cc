@@ -85,8 +85,8 @@ struct USPacker
             }
             if (new_name != pname) {
                 rename_port(ctx, ci, pname, new_name);
-                ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
             }
+            ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
         }
 
         std::vector<IdString> xform_params;
