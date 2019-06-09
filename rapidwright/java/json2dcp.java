@@ -313,7 +313,6 @@ public class json2dcp {
                     if (si == null)
                         si = des.createSiteInst(des.getDevice().getSite(sp[1]));
                     BEL b = si.getBEL(sp[2]);
-                    System.out.println(nn.name + " " + sp[1] + " " + sp[2] + " " + sp[3]);
 
                     if (b == null)
                         continue;

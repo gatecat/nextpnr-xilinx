@@ -656,6 +656,8 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
 TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, int &clockInfoCount) const
 {
     if (cell->type == id_SLICE_LUTX) {
+        if (get_net_or_empty(cell, id_O5) == nullptr && get_net_or_empty(cell, id_O6) == nullptr)
+            return TMG_IGNORE;
         if (port == id_A1 || port == id_A2 || port == id_A3 || port == id_A4 || port == id_A5 || port == id_A6)
             return TMG_COMB_INPUT;
         else if (port == id_O5 || port == id_O6)

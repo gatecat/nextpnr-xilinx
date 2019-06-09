@@ -1,0 +1,9 @@
+*.dcp
+*.xdef
+*_tb
+*.json
+*_out.v
+*.log
+*.vcd
+*.jou
+.Xil
