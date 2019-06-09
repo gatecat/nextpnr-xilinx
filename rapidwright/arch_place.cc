@@ -314,11 +314,18 @@ void Arch::fixupPlacement()
                     }
                 }
                 ++index;
-            }
+            };
             rename_port(getCtx(), lut5, id_O6, id_O5);
             lut5->attrs.erase(id("X_ORIG_PORT_O6"));
             lut5->attrs[id("X_ORIG_PORT_O5")] = "O";
-            // FIXME: connect A6 of 6LUT to VCC
+
+            if (lut6) {
+                if (!lut6->ports.count(id_A6)) {
+                    lut6->ports[id_A6].name = id_A6;
+                    lut6->ports[id_A6].type = PORT_IN;
+                }
+                connect_port(getCtx(), nets[id("$PACKER_VCC_NET")].get(), lut6, id_A6);
+            }
         }
     }
 }

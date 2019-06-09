@@ -12,6 +12,7 @@ import com.xilinx.rapidwright.util.RapidWright;
 import jnr.ffi.annotations.In;
 import org.json.JSONObject;
 import org.python.antlr.ast.Str;
+import org.python.modules.math;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -115,7 +116,7 @@ public class json2dcp {
                     while (p >= (1L << size))
                         ++size;
                 }
-                return size + "'h" + Integer.toHexString(p);
+                return "32'h" + Integer.toHexString(p);
             } else {
                 String s = prim.getAsString();
                 boolean is_binary = true;
@@ -128,7 +129,7 @@ public class json2dcp {
                 if (is_binary) {
                     s = s.replace('x', '0');
                     BigInteger bi = new BigInteger(s, 2);
-                    return bi.bitLength() + "'h" + bi.toString(16);
+                    return s.length() + "'h" + bi.toString(16);
                 }
                 return s;
             }
@@ -194,6 +195,16 @@ public class json2dcp {
         return name.replace("\\", "__").replace("/", "_");
     }
 
+    public static String fixup_init(String orig, int K) {
+        // Vivado seems *very* fussy here
+        String hex = orig.split("'h")[1];
+        int bits = (1 << K);
+        int digits = Math.max(bits / 4, 1);
+        while (hex.length() < digits)
+            hex = "0" + hex;
+        return bits + "'h" + hex;
+    }
+
     public static void main(String[] args) throws FileNotFoundException {
 
         if (args.length < 3) {
@@ -219,7 +230,8 @@ public class json2dcp {
                 nc.rwCell = des.createAndPlaceIOB(nc.name, nc.type.equals("IOB_OUTBUF") ? PinType.OUT : PinType.IN,
                         siteToPin.get(nc.attrs.get("NEXTPNR_BEL").split("/")[0]), "LVCMOS33");
             } else {
-                nc.rwCell = des.createAndPlaceCell(nc.name, Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE")), nc.attrs.get("NEXTPNR_BEL"));
+                Unisim unitype = Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE"));
+                nc.rwCell = des.createAndPlaceCell(nc.name, unitype, nc.attrs.get("NEXTPNR_BEL"));
 
                 Map<String, String> map = nc.rwCell.getPinMappingsP2L();
                 Object[] pins = map.keySet().toArray();
@@ -236,7 +248,30 @@ public class json2dcp {
                 }
 
                 for (Map.Entry<String, String> param : nc.params.entrySet()) {
-                    nc.rwCell.addProperty(param.getKey(), param.getValue());
+                    String value = param.getValue();
+                    if (param.getKey().equals("INIT")) {
+                        switch(unitype) {
+                            case LUT1:
+                                value = fixup_init(value, 1);
+                                break;
+                            case LUT2:
+                                value = fixup_init(value, 2);
+                                break;
+                            case LUT3:
+                                value = fixup_init(value, 3);
+                                break;
+                            case LUT4:
+                                value = fixup_init(value, 4);
+                                break;
+                            case LUT5:
+                                value = fixup_init(value, 5);
+                                break;
+                            case LUT6:
+                                value = fixup_init(value, 6);
+                                break;
+                        }
+                    }
+                    nc.rwCell.addProperty(param.getKey(), value);
                     //System.out.println(param.getKey() + " = " + param.getValue());
                 }
             }
@@ -271,11 +306,18 @@ public class json2dcp {
             }
             for (NextpnrCellPort usr : nn.users) {
                 if (usr.cell.rwCell != null) {
-                    if (!usr.cell.attrs.containsKey("X_ORIG_PORT_" + usr.name))
-                        continue;
-                    String[] orig_ports = usr.cell.attrs.get("X_ORIG_PORT_" + usr.name).split(" ");
-                    for (String orig : orig_ports)
-                        n.connect(usr.cell.rwCell, orig);
+                    if (usr.cell.attrs.containsKey("X_ORIG_PORT_" + usr.name)) {
+                        String[] orig_ports = usr.cell.attrs.get("X_ORIG_PORT_" + usr.name).split(" ");
+                        for (String orig : orig_ports)
+                            n.connect(usr.cell.rwCell, orig);
+                    } else {
+                        // Special case where no logical pin exists, mostly where we tie A6 high for a fractured LUT
+                        BELPin belPin = usr.cell.rwCell.getBEL().getPin(usr.name);
+                        if (belPin != null && belPin.getConnectedSitePinName() != null) {
+                            n.createPin(false, belPin.getConnectedSitePinName(), usr.cell.rwCell.getSiteInst());
+                        }
+                    }
+
                 }
             }
         }
