@@ -232,7 +232,10 @@ public class json2dcp {
                         n.connect(usr.cell.rwCell, orig);
                 }
             }
+        }
 
+        for (NextpnrNet nn : ndes.nets.values()) {
+            Net n = nn.rwNet;
             String[] routing = nn.attrs.get("ROUTING").split(";");
             for (int i = 0; i < (routing.length-2); i+=3) {
                 String wire = routing[i];
@@ -268,28 +271,34 @@ public class json2dcp {
 
                     if (b == null)
                         continue;
-                    for (BELPin bp : b.getPins())
-                        if (bp.getSiteWireName().equals(sp[3])) {
-                            System.out.println(nn.name + " " +b.getName() + " SITEPIP -> " + bp.getName());
-                            si.addSitePIP(b.getName(), bp.getName());
+
+                    for (BELPin bp : b.getPins()) {
+                        for (SitePIP sitePIP : bp.getSitePIPs()) {
+                            if (sitePIP.getInputPin().getSiteWireName().equals(sp[3])) {
+                                si.addSitePIP(sitePIP);
+
+                                // FIXME: when does/n't site PIP insertion work?
+                                BELPin startPin = null;
+                                for (BEL other : si.getBELs())
+                                    for (BELPin p : other.getPins())
+                                        if(p.isOutput() && p.getSiteWireName().equals(sitePIP.getInputPin().getSiteWireName()))
+                                            startPin = p;
+                                if (startPin != null) {
+                                    for (BEL other : si.getBELs())
+                                        for (BELPin p : other.getPins())
+                                            if (p.isInput() && p.getSiteWireName().equals(sitePIP.getOutputPin().getSiteWireName()))
+                                                si.routeIntraSiteNet(n, startPin, p);
+                                }
+
+                            }
                         }
+                    }
+
                 }
 
             }
-
-        }
-        /*
-        for (NextpnrCell nc : ndes.cells.values()) {
-            if (nc.rwCell == null)
-                continue;
-            System.out.println(nc.name + ": ");
-            Map<String, String> map = nc.rwCell.getPinMappingsP2L();
-            for (Map.Entry<String, String> e : map.entrySet()) {
-                System.out.println("    " + e.getKey() + "->" + e.getValue());
-            }
         }
 
-         */
         des.writeCheckpoint(args[2]);
     }
 
