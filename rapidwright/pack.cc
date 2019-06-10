@@ -170,8 +170,60 @@ struct USPacker
             add_port("I1", PORT_IN);
             add_port("S", PORT_IN);
             add_port("O", PORT_OUT);
+        } else if (type == ctx->id("CARRY8")) {
+            add_port("CI", PORT_IN);
+            add_port("CI_TOP", PORT_IN);
+
+            for (int i = 0; i < 8; i++) {
+                add_port("DI[" + std::to_string(i) + "]", PORT_IN);
+                add_port("S[" + std::to_string(i) + "]", PORT_IN);
+                add_port("CO[" + std::to_string(i) + "]", PORT_OUT);
+                add_port("O[" + std::to_string(i) + "]", PORT_OUT);
+            }
+        } else if (type == ctx->id("MUXCY")) {
+            add_port("CI", PORT_IN);
+            add_port("DI", PORT_IN);
+            add_port("S", PORT_IN);
+            add_port("O", PORT_OUT);
         }
         return cell;
+    }
+
+    std::unique_ptr<CellInfo> create_lut(const std::string &name, const std::vector<NetInfo *> &inputs, NetInfo *output, const Property &init) {
+        std::unique_ptr<CellInfo> cell{new CellInfo};
+        cell->type = ctx->id("LUT" + std::to_string(inputs.size()));
+        cell->name = ctx->id(name);
+        for (size_t i = 0; i < inputs.size(); i++) {
+            IdString ip = ctx->id("I" + std::to_string(i));
+            cell->ports[ip].name = ip;
+            cell->ports[ip].type = PORT_IN;
+            connect_port(ctx, inputs.at(i), cell.get(), ip);
+        }
+        cell->ports[ctx->id("O")].name = ctx->id("O");
+        cell->ports[ctx->id("O")].type = PORT_OUT;
+        connect_port(ctx, output, cell.get(), ctx->id("O"));
+        cell->params[ctx->id("INIT")] = init;
+        return cell;
+    }
+
+    int autoidx = 0;
+
+    std::unique_ptr<CellInfo> feed_through_lut(NetInfo * net, const std::vector<PortRef> &feed_users) {
+        std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
+        feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
+        Property init;
+        init.setNumber(2); // truth table: 0, 1
+        std::unique_ptr<CellInfo> lut = create_lut(net->name.str(ctx) + "$LUT$" + std::to_string(++autoidx),
+                                                   {net}, feedthru_net.get(), init);
+
+        for (auto &usr : feed_users) {
+            disconnect_port(ctx, usr.cell, usr.port);
+            connect_port(ctx, feedthru_net.get(), usr.cell, usr.port);
+        }
+
+        IdString netname = feedthru_net->name;
+        ctx->nets[netname] = std::move(feedthru_net);
+        return lut;
     }
 
     void pack_luts()
@@ -550,6 +602,157 @@ struct USPacker
         for (auto dn : dead_nets) {
             ctx->nets.erase(dn);
         }
+    }
+
+    struct CarryGroup {
+        std::vector<CellInfo *> muxcys;
+        std::vector<CellInfo *> xorcys;
+    };
+
+    bool has_illegal_fanout(NetInfo *carry) {
+        // FIXME: sometimes we can feed out of the chain
+        if (carry->users.size() > 2)
+            return true;
+        CellInfo *muxcy = nullptr, *xorcy = nullptr;
+        for (auto & usr : carry->users) {
+            if (usr.cell->type == ctx->id("MUXCY")) {
+                if (muxcy != nullptr)
+                    return true;
+                else if (usr.port != ctx->id("CI"))
+                    return true;
+                else
+                    muxcy = usr.cell;
+            } else if (usr.cell->type == ctx->id("XORCY")) {
+                if (xorcy != nullptr)
+                    return true;
+                else if (usr.port != ctx->id("CI"))
+                    return true;
+                else
+                    xorcy = usr.cell;
+            } else {
+                return true;
+            }
+        }
+        if (muxcy && xorcy) {
+            NetInfo *muxcy_s = get_net_or_empty(xorcy, ctx->id("S"));
+            NetInfo *xorcy_li = get_net_or_empty(xorcy, ctx->id("LI"));
+            if (muxcy_s != xorcy_li)
+                return true;
+        }
+        return false;
+    }
+
+    void pack_carries()
+    {
+        log_info("Packing carries..\n");
+        std::vector<CellInfo *> root_muxcys;
+        // Find MUXCYs
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type != ctx->id("MUXCY"))
+                continue;
+            NetInfo *ci_net = get_net_or_empty(ci, ctx->id("CI"));
+            if (ci_net == nullptr || ci_net->driver.cell == nullptr || ci_net->driver.cell->type != ctx->id("MUXCY") || has_illegal_fanout(ci_net)) {
+                root_muxcys.push_back(ci);
+            }
+        }
+
+        // Create chains from root MUXCYs
+        std::vector<CarryGroup> groups;
+        int muxcy_count = 0, xorcy_count = 0;
+        for (auto root : root_muxcys) {
+            CarryGroup group;
+
+            CellInfo *muxcy = root;
+            NetInfo *mux_ci = nullptr;
+            while (true) {
+
+                group.muxcys.push_back(muxcy);
+                ++muxcy_count;
+                mux_ci = get_net_or_empty(muxcy, ctx->id("CI"));
+                NetInfo *mux_s = get_net_or_empty(muxcy, ctx->id("S"));
+                group.xorcys.push_back(nullptr);
+                if (mux_s != nullptr) {
+                    for (auto &user : mux_s->users) {
+                        if (user.cell->type == ctx->id("XORCY") && user.port == ctx->id("LI")) {
+                            CellInfo *xorcy = user.cell;
+                            NetInfo *xor_ci = get_net_or_empty(xorcy, ctx->id("CI"));
+                            if (xor_ci == mux_ci) {
+                                group.xorcys.back() = xorcy;
+                                ++xorcy_count;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                mux_ci = get_net_or_empty(muxcy, ctx->id("O"));
+                if (mux_ci == nullptr)
+                    break;
+                if (has_illegal_fanout(mux_ci))
+                    break;
+                muxcy = nullptr;
+                for (auto &user : mux_ci->users) {
+                    if (user.cell->type == ctx->id("MUXCY")) {
+                        muxcy = user.cell;
+                        break;
+                    }
+                }
+                if (muxcy == nullptr)
+                    break;
+            }
+            if (mux_ci != nullptr) {
+                if (mux_ci->users.size() == 1 && mux_ci->users.at(0).cell->type == ctx->id("XORCY") && mux_ci->users.at(0).port == ctx->id("CI")) {
+                    // Trailing XORCY at end, can pack into chain.
+                    CellInfo *xorcy = mux_ci->users.at(0).cell;
+                    std::unique_ptr<CellInfo> dummy_muxcy = create_cell(ctx->id("MUXCY"), ctx->id(xorcy->name.str(ctx) + "$legal_muxcy$"));
+                    connect_port(ctx, mux_ci, dummy_muxcy.get(), ctx->id("CI"));
+                    connect_port(ctx, get_net_or_empty(xorcy, ctx->id("LI")), dummy_muxcy.get(), ctx->id("S"));
+                    group.muxcys.push_back(dummy_muxcy.get());
+                    group.xorcys.push_back(xorcy);
+                    new_cells.push_back(std::move(dummy_muxcy));
+                } else if (mux_ci->users.size() > 0) {
+                    // Users other than a MUXCY
+                    // Feed out with a zero-driving LUT and a XORCY
+                    // (creating a zero-driver using Vcc and an inverter for now...)
+                    Property init;
+                    init.setNumber(1); // Inverter: truth table 1, 0
+                    std::unique_ptr<CellInfo> zero_lut = create_lut(mux_ci->name.str(ctx) + "$feed$zero", {ctx->nets[ctx->id("$PACKER_VCC_NET")].get()}, nullptr, init);
+                    std::unique_ptr<CellInfo> feed_xorcy = create_cell(ctx->id("XORCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$xor"));
+                    std::unique_ptr<CellInfo> dummy_muxcy = create_cell(ctx->id("MUXCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$muxcy"));
+
+                    CellInfo *last_muxcy = mux_ci->driver.cell;
+
+                    disconnect_port(ctx, last_muxcy, ctx->id("O"));
+
+                    connect_ports(ctx, zero_lut.get(), ctx->id("O"), feed_xorcy.get(), ctx->id("LI"));
+                    connect_ports(ctx, zero_lut.get(), ctx->id("O"), dummy_muxcy.get(), ctx->id("S"));
+                    connect_ports(ctx, last_muxcy, ctx->id("O"), feed_xorcy.get(), ctx->id("CI"));
+                    connect_ports(ctx, last_muxcy, ctx->id("O"), dummy_muxcy.get(), ctx->id("CI"));
+
+                    connect_port(ctx, mux_ci, feed_xorcy.get(), ctx->id("O"));
+
+                    group.muxcys.push_back(dummy_muxcy.get());
+                    group.xorcys.push_back(feed_xorcy.get());
+                    new_cells.push_back(std::move(zero_lut));
+                    new_cells.push_back(std::move(feed_xorcy));
+                }
+            }
+
+            groups.push_back(group);
+        }
+        flush_cells();
+
+        log_info("   Grouped %d MUXCYs and %d XORCYs into %d chains.\n", muxcy_count, xorcy_count, int(root_muxcys.size()));
+        
+        for (auto &grp : groups) {
+            int index = 0;
+
+
+        }
+
+        flush_cells();
+
     }
 
     void pack_io()
