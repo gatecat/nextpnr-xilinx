@@ -28,7 +28,9 @@ public class bbaexport {
         TILE_ROUTING,
         SITE_ENTRANCE,
         SITE_EXIT,
-        SITE_INTERNAL
+        SITE_INTERNAL,
+        LUT_PERMUTATION,
+        LUT_ROUTETHRU,
     }
 
     static class NextpnrBelPin {
@@ -78,6 +80,7 @@ public class bbaexport {
         public NextpnrPipType type;
 
         public int bel = -1;
+        public int extra_data = 0;
         public int site = -1;
         public int siteVariant = -1;
     }
@@ -200,24 +203,26 @@ public class bbaexport {
             else {
                 if (((s.getSiteTypeEnum() == SiteTypeEnum.SLICEL || s.getSiteTypeEnum() == SiteTypeEnum.SLICEM))) {
                     // Permutation pseudo-pips for LUT pins
-/*
+
                     String pn = bp.getSiteWireName();
-                    if (pn.length() == 2 && "ABCDEFGH".contains(pn.substring(0, 1)) && "12345".contains(pn.substring(1, 2))) {
+                    if (pn.length() == 2 && "ABCDEFGH".contains(pn.substring(0, 1)) && "123456".contains(pn.substring(1, 2))) {
                         // No permutation for 6 ATM
-                        int i = "12345".indexOf(pn.substring(1, 2)) + 1;
-                        for (int j = 1; j <= 5; j++) {
-                            if (i == j)
-                                continue;
+                        int i = "123456".indexOf(pn.substring(1, 2)) + 1;
+                        for (int j = 1; j <= 6; j++) {
+                            if ((i == 6) != (j == 6))
+                                continue; // don't allow permutation of input 6
                             NextpnrPip pp = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(pn.substring(0, 1) + j)), siteWireToWire(s, bp.getSiteWireName()),
-                                    0, NextpnrPipType.SITE_ENTRANCE);
+                                    0, NextpnrPipType.LUT_PERMUTATION);
+                            // extra data: eigth[3:0]; from[3:0]; to[3:0]
+                            pp.extra_data = ("ABCDEFGH".indexOf(pn.substring(0,1)) << 8) | ((j - 1) << 4) | (i - 1);
                             wires.get(pp.from).pips_dh.add(pp.index);
                             wires.get(pp.to).pips_uh.add(pp.index);
                             pips.add(pp);
                         }
 
+                        return null;
                     }
 
- */
                 }
                 np = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePinName)), siteWireToWire(s, bp.getSiteWireName()),
                         0, NextpnrPipType.SITE_ENTRANCE);
@@ -321,9 +326,14 @@ public class bbaexport {
             boolean isLogic = (tt == TileTypeEnum.CLEM || tt == TileTypeEnum.CLEM_R || tt == TileTypeEnum.CLEL_L || tt == TileTypeEnum.CLEL_R);
             for (PIP p : t.getPIPs()) {
                 // FIXME: route-thru PIPs (site pips will capture some of these anyway)
-                if (p.isRouteThru() && isLogic)
-                    continue;
-                addPIP(p, false);
+                NextpnrPip np = addPIP(p, false);
+                if (p.isRouteThru() && isLogic) {
+                    np.type = NextpnrPipType.LUT_ROUTETHRU;
+                    // extra data: eigth[3:0]; from[3:0]; to[3:0]
+                    String fromPin = p.getStartWireName(), toPin = p.getEndWireName();
+                    fromPin = fromPin.substring(fromPin.length() - 2);
+                    np.extra_data = ("ABCDEFGH".indexOf(fromPin.substring(0,1)) << 8) | ("123456".indexOf(fromPin.substring(1, 2)) << 4) | (toPin.endsWith("MUX") ? 1 : 0);
+                }
                 if (p.isBidirectional())
                     addPIP(p, true);
             }
@@ -338,6 +348,7 @@ public class bbaexport {
 
     static class NextpnrSiteInst {
         public String name;
+        public String packagePin;
         public int site_x, site_y;
         public int inter_x, inter_y;
     }
@@ -508,6 +519,12 @@ public class bbaexport {
         }
 
         // Tile entries
+
+        HashMap<String, String> siteToPin = new HashMap<>();
+        for (PackagePin p : d.getActivePackage().getPackagePinMap().values())
+            if (p != null && p.getSite() != null)
+                siteToPin.put(p.getSite().getName(), p.getName());
+
         for (int y = 0; y < d.getRows(); y++) {
             for (int x = 0; x < d.getColumns(); x++) {
                 Tile t = d.getTile(y, x);
@@ -519,6 +536,10 @@ public class bbaexport {
                 for (Site s : t.getSites()) {
                     NextpnrSiteInst nsi = new NextpnrSiteInst();
                     nsi.name = s.getName();
+                    if (siteToPin.containsKey(s.getName()))
+                        nsi.packagePin = siteToPin.get(s.getName());
+                    else
+                        nsi.packagePin = "."; // fixme: empty strings in bba
                     nsi.site_x = s.getInstanceX();
                     nsi.site_y = s.getInstanceY();
 
@@ -632,6 +653,7 @@ public class bbaexport {
                 bba.printf("u16 %d\n", p.type.ordinal()); // pip type/flags
 
                 bba.printf("u32 %d\n", p.bel); //bel name constid for site pips
+                bba.printf("u32 %d\n", p.extra_data); //extra data for pseudo-pips
                 bba.printf("u16 %d\n", p.site); //site index in tile for site pips
                 bba.printf("u16 %d\n", p.siteVariant); //site variant index for site pips
             }
@@ -757,6 +779,7 @@ public class bbaexport {
             bba.printf("label ti%d_sites\n", ti.index);
             for (NextpnrSiteInst si : ti.sites) {
                 bba.printf("str |%s|\n", si.name);
+                bba.printf("str |%s|\n", si.packagePin);
                 bba.printf("u32 %d\n", si.site_x); //X nominal coordinate
                 bba.printf("u32 %d\n", si.site_y); //Y nominal coordinate
                 bba.printf("u32 %d\n", si.inter_x); //X intercon tile coordinate

@@ -244,7 +244,8 @@ public class json2dcp {
                     String[] orig_ports = nc.attrs.get("X_ORIG_PORT_" + p.name).split(" ");
 
                     for (String orig : orig_ports)
-                        nc.rwCell.addPinMapping(p.name, orig);
+                        if (!orig.trim().isEmpty())
+                            nc.rwCell.addPinMapping(p.name, orig.trim());
                 }
 
                 for (Map.Entry<String, String> param : nc.params.entrySet()) {
@@ -308,8 +309,9 @@ public class json2dcp {
                 if (usr.cell.rwCell != null) {
                     if (usr.cell.attrs.containsKey("X_ORIG_PORT_" + usr.name)) {
                         String[] orig_ports = usr.cell.attrs.get("X_ORIG_PORT_" + usr.name).split(" ");
-                        for (String orig : orig_ports)
+                        for (String orig : orig_ports) {
                             n.connect(usr.cell.rwCell, orig);
+                        }
                     } else {
                         // Special case where no logical pin exists, mostly where we tie A6 high for a fractured LUT
                         BELPin belPin = usr.cell.rwCell.getBEL().getPin(usr.name);

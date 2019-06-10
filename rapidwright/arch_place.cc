@@ -314,7 +314,7 @@ void Arch::fixupPlacement()
                     }
                 }
                 ++index;
-            };
+            }
             rename_port(getCtx(), lut5, id_O6, id_O5);
             lut5->attrs.erase(id("X_ORIG_PORT_O6"));
             lut5->attrs[id("X_ORIG_PORT_O5")] = "O";
@@ -325,6 +325,121 @@ void Arch::fixupPlacement()
                     lut6->ports[id_A6].type = PORT_IN;
                 }
                 connect_port(getCtx(), nets[id("$PACKER_VCC_NET")].get(), lut6, id_A6);
+            }
+        }
+    }
+}
+
+void Arch::fixupRouting()
+{
+    log_info("Running post-routing legalisation...\n");
+    /*
+     * Convert LUT permutation into correct physical connections (i.e. effectively eliminating the permutation pips),
+     * then specifying the permutation as a new physical-to-logical mapping using X_ORIG_PORT. This keeps RapidWright
+     * and Vivado happy, preserving the original logical netlist
+     */
+    std::unordered_map<int, std::vector<int>> used_perm_pips; // tile -> [extra_data] for LUT perm pips
+
+    for (auto net : sorted(nets)) {
+        NetInfo *ni = net.second;
+        for (auto &wire : ni->wires) {
+            PipId pip = wire.second.pip;
+            if (pip == PipId())
+                continue;
+            auto &pd = locInfo(pip).pip_data[pip.index];
+            if (pd.flags != PIP_LUT_PERMUTATION)
+                continue;
+            used_perm_pips[pip.tile].push_back(pd.extra_data);
+        }
+    }
+
+    for (size_t ti = 0; ti < tileStatus.size(); ti++) {
+        if (!used_perm_pips.count(int(ti)))
+            continue;
+        auto &ts = tileStatus.at(ti);
+        if (ts.lts == nullptr)
+            continue;
+
+        auto &lt = *(ts.lts);
+        for (int z = 0; z < 8; z++) {
+            CellInfo *lut5 = lt.cells[z << 4 | BEL_5LUT];
+            CellInfo *lut6 = lt.cells[z << 4 | BEL_6LUT];
+            if (lut5 == nullptr && lut6 == nullptr)
+                continue;
+            auto &pp = used_perm_pips.at(ti);
+            // from -> to
+            std::unordered_map<IdString, std::vector<IdString>> new_connections;
+            IdString ports[6] = {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6};
+            for (auto pip : pp) {
+                if (((pip >> 8) & 0xF) != z)
+                    continue;
+                new_connections[ports[(pip >> 4) & 0xF]].push_back(ports[pip & 0xF]);
+            }
+            std::unordered_map<IdString, NetInfo *> orig_nets;
+            std::unordered_map<IdString, std::string> orig_ports_l6, orig_ports_l5;
+            for (int i = 0; i < 6; i++) {
+                NetInfo *l6net = lut6 ? get_net_or_empty(lut6, ports[i]) : nullptr;
+                NetInfo *l5net = lut5 ? get_net_or_empty(lut5, ports[i]) : nullptr;
+                orig_nets[ports[i]] = (l6net ? l6net : l5net);
+                if (lut6)
+                    orig_ports_l6[ports[i]] = str_or_default(lut6->attrs, id("X_ORIG_PORT_" + ports[i].str(this)));
+                if (lut5)
+                    orig_ports_l5[ports[i]] = str_or_default(lut5->attrs, id("X_ORIG_PORT_" + ports[i].str(this)));
+            }
+            for (auto &nc : new_connections) {
+                if (lut6)
+                    disconnect_port(getCtx(), lut6, nc.first);
+                if (lut5)
+                    disconnect_port(getCtx(), lut5, nc.first);
+                for (auto &dst : nc.second) {
+                    if (lut6)
+                        disconnect_port(getCtx(), lut6, dst);
+                    if (lut5)
+                        disconnect_port(getCtx(), lut5, dst);
+                }
+            }
+            for (int i = 0; i < 6; i++) {
+                if (lut6)
+                    lut6->attrs.erase(id("X_ORIG_PORT_" + ports[i].str(this)));
+                if (lut5)
+                    lut5->attrs.erase(id("X_ORIG_PORT_" + ports[i].str(this)));
+            }
+            for (int i = 0; i < 6; i++) {
+                auto p = ports[i];
+                if (!new_connections.count(p) || new_connections.at(p).empty())
+                    continue;
+                if (lut6) {
+                    if (!lut6->ports.count(p)) {
+                        lut6->ports[p].name = p;
+                        lut6->ports[p].type = PORT_IN;
+                    }
+                    connect_port(getCtx(), orig_nets[new_connections.at(p).front()], lut6, p);
+                    lut6->attrs[id("X_ORIG_PORT_" + p.str(this))] = "";
+                    auto &orig_attr = lut6->attrs[id("X_ORIG_PORT_" + p.str(this))].str;
+                    bool first = true;
+                    for (auto &nc : new_connections.at(p)) {
+                        orig_attr += orig_ports_l6[nc] + (first ? "" : " ");
+                        first = false;
+                    }
+                    if (orig_attr.empty())
+                        lut6->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
+                }
+                if (lut5) {
+                    if (!lut5->ports.count(p)) {
+                        lut5->ports[p].name = p;
+                        lut5->ports[p].type = PORT_IN;
+                    }
+                    connect_port(getCtx(), orig_nets[new_connections.at(p).front()], lut5, p);
+                    lut5->attrs[id("X_ORIG_PORT_" + p.str(this))] = "";
+                    auto &orig_attr = lut5->attrs[id("X_ORIG_PORT_" + p.str(this))].str;
+                    bool first = true;
+                    for (auto &nc : new_connections.at(p)) {
+                        orig_attr += orig_ports_l5[nc] + (first ? "" : " ");
+                        first = false;
+                    }
+                    if (orig_attr.empty())
+                        lut5->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
+                }
             }
         }
     }

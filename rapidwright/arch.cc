@@ -437,6 +437,8 @@ void Arch::routeVcc()
                 break;
             }
             for (auto uh : getPipsUphill(curr)) {
+                if (!checkPipAvail(uh))
+                    continue;
                 WireId src = getPipSrcWire(uh);
                 if (backtrace.count(src))
                     continue;
@@ -482,6 +484,8 @@ void Arch::routeClock()
                     break;
                 }
                 for (auto uh : getPipsUphill(curr)) {
+                    if (!checkPipAvail(uh))
+                        continue;
                     WireId src = getPipSrcWire(uh);
                     if (backtrace.count(src))
                         continue;
@@ -602,6 +606,7 @@ bool Arch::route()
     log_info("       base %d adder %d\n", speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_base_delay,
              speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_fanout_adder);
 #endif
+    fixupRouting();
     getCtx()->attrs[getCtx()->id("step")] = "route";
     archInfoToAttributes();
     return result;

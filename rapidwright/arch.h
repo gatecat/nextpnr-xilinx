@@ -121,6 +121,8 @@ enum PipType
     PIP_SITE_ENTRY = 1,
     PIP_SITE_EXIT = 2,
     PIP_SITE_INTERNAL = 3,
+    PIP_LUT_PERMUTATION = 4,
+    PIP_LUT_ROUTETHRU = 5
 };
 
 NPNR_PACKED_STRUCT(struct PipInfoPOD {
@@ -129,6 +131,7 @@ NPNR_PACKED_STRUCT(struct PipInfoPOD {
     int16_t flags;
 
     int32_t bel;          // name of bel containing pip
+    int32_t extra_data;   // for special pips like lut permutation
     int16_t site;         // site index in tile
     int16_t site_variant; // site variant index in tile
 });
@@ -174,6 +177,7 @@ NPNR_PACKED_STRUCT(struct TileTypeInfoPOD {
 
 NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
     RelPtr<char> name;
+    RelPtr<char> pin;
     int32_t site_x, site_y;
     int32_t inter_x, inter_y;
 });
@@ -955,6 +959,36 @@ struct Arch : BaseCtx
                         return true; // Ground driver only available if lowest 5LUT not used
                 }
             }
+        } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_PERMUTATION) {
+            LogicTileStatus *lts = tileStatus[pip.tile].lts;
+            if (lts == nullptr)
+                return false;
+            int eight = (locInfo(pip).pip_data[pip.index].extra_data >> 8) & 0xF;
+
+            if (((locInfo(pip).pip_data[pip.index].extra_data >> 4) & 0xF) ==
+                (locInfo(pip).pip_data[pip.index].extra_data & 0xF))
+                return false; // from==to, always valid
+
+            const CellInfo *lut6 = lts->cells[(eight << 4) | BEL_6LUT];
+            if (lut6 != nullptr && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
+                return true;
+            const CellInfo *lut5 = lts->cells[(eight << 4) | BEL_5LUT];
+            if (lut5 != nullptr && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl))
+                return true;
+        } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
+            int eight = (locInfo(pip).pip_data[pip.index].extra_data >> 8) & 0xF;
+            int dest = (locInfo(pip).pip_data[pip.index].extra_data) & 0x1;
+            if (dest & 0x1)
+                return true; // FIXME: routethru to MUX
+            LogicTileStatus *lts = tileStatus[pip.tile].lts;
+            if (lts == nullptr)
+                return false;
+            const CellInfo *lut6 = lts->cells[(eight << 4) | BEL_6LUT];
+            if (lut6 != nullptr)
+                return true;
+            const CellInfo *lut5 = lts->cells[(eight << 4) | BEL_5LUT];
+            if (lut5 != nullptr)
+                return true;
         }
         return false;
     }
@@ -1285,6 +1319,7 @@ struct Arch : BaseCtx
     void assignCellInfo(CellInfo *cell);
 
     void fixupPlacement();
+    void fixupRouting();
 
     void routeVcc();
     void routeClock();
