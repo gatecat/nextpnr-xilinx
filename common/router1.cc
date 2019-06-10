@@ -504,7 +504,7 @@ struct Router1
             visited[qw.wire] = qw;
         }
 
-        while (visitCnt++ < maxVisitCnt && !queue.empty()) {
+        while (visitCnt++ < maxVisitCnt && !queue.empty() && (src_wire != dst_wire)) {
             QueuedWire qw = queue.top();
             queue.pop();
 

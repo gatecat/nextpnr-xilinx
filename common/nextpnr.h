@@ -322,6 +322,24 @@ struct Property
         str = other;
         return *this;
     }
+
+    Property()
+    {
+        is_string = true;
+        str = "";
+    };
+
+    explicit Property(const std::string &other)
+    {
+        is_string = true;
+        str = other;
+    }
+
+    explicit Property(int other)
+    {
+        is_string = false;
+        num = other;
+    }
 };
 
 struct ClockConstraint;

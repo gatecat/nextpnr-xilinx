@@ -259,6 +259,8 @@ BelId Arch::getBelByLocation(Loc loc) const
 
 delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
 {
+    if (src == dst)
+        return 0;
     int src_x, src_y, dst_x, dst_y;
     int src_intent = wireIntent(src), dst_intent = wireIntent(dst);
     // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)

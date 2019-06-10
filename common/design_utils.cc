@@ -123,7 +123,8 @@ void connect_ports(Context *ctx, CellInfo *cell1, IdString port1_name, CellInfo 
     if (port1.net == nullptr) {
         // No net on port1; need to create one
         std::unique_ptr<NetInfo> p1net(new NetInfo());
-        p1net->name = ctx->id(cell1->name.str(ctx) + "$conn$" + port1_name.str(ctx));
+        p1net->name = ctx->id(cell1->name.str(ctx) + "$conn$" + port1_name.str(ctx) + "$to$" + cell2->name.str(ctx) +
+                              "$" + port2_name.str(ctx));
         connect_port(ctx, p1net.get(), cell1, port1_name);
         IdString p1name = p1net->name;
         NPNR_ASSERT(!ctx->cells.count(p1name));
