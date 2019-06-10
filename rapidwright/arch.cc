@@ -358,7 +358,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
         base += 1000;
     if (src_intent == ID_NODE_PINFEED && dst_x == src_x && dst_y == src_y)
         base -= 200;
-    else if (src_intent == ID_NODE_LOCAL && dst_x == src_x && dst_y == src_y)
+    else if ((src_intent == ID_NODE_LOCAL || src_intent == ID_NODE_PINBOUNCE) && dst_x == src_x && dst_y == src_y)
         base -= 100;
     if (src_intent == ID_NODE_CLE_OUTPUT)
         base -= 80;
