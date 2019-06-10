@@ -404,6 +404,8 @@ bool Arch::place()
         cfg.criticalityExponent = 7;
         cfg.ioBufTypes.insert(id("IOB_IBUFCTRL"));
         cfg.ioBufTypes.insert(id("IOB_OUTBUF"));
+        cfg.ioBufTypes.insert(id_PSEUDO_GND);
+        cfg.ioBufTypes.insert(id_PSEUDO_VCC);
         if (!placer_heap(getCtx(), cfg))
             return false;
     } else if (placer == "sa") {
@@ -424,6 +426,20 @@ void Arch::routeVcc()
     // Special pass for faster routing of Vcc psuedo-net
     NetInfo *vcc = nets[id("$PACKER_VCC_NET")].get();
     bindWire(getCtx()->getNetinfoSourceWire(vcc), vcc, STRENGTH_STRONG);
+#if 0
+    WireId wire0 = getCtx()->getNetinfoSourceWire(vcc);
+    Loc drvloc = getBelLocation(vcc->driver.cell->bel);
+    BelId bel = vcc->driver.cell->bel;
+    log_info("%d %d %d %d\n", vcc->driver.cell->bel.tile, drvloc.x, drvloc.y, (getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC));
+    log_info("%s\n", nameOfWire(wire0));
+    for (auto pip1 : getPipsDownhill(wire0)) {
+        WireId wire1 = getPipDstWire(pip1);
+        log_info("   -> %s\n", nameOfWire(wire1));
+        for (auto pip2 : getPipsDownhill(wire1))
+            log_info("       -> %s\n", nameOfWire(getPipDstWire(pip2)));
+
+    }
+#endif
     for (auto &usr : vcc->users) {
         std::queue<WireId> visit;
         std::unordered_map<WireId, PipId> backtrace;

@@ -235,13 +235,18 @@ bool Arch::isBelLocationValid(BelId bel) const
                 return false;
             }
         }
+    } else {
+        for (auto bel : getBelsByTile(bel.tile % chip_info->width, bel.tile / chip_info->width))
+            if (getBoundBelCell(bel) != nullptr && usp_bel_hard_unavail(bel))
+                return false;
     }
     return true;
 }
 
 bool Arch::isValidBelForCell(CellInfo *cell, BelId bel) const
 {
-    // FIXME
+    if (usp_bel_hard_unavail(bel))
+        return false;
     return true;
 }
 
