@@ -5,9 +5,7 @@ import com.xilinx.rapidwright.design.*;
 import com.xilinx.rapidwright.device.PartNameTools;
 import com.xilinx.rapidwright.device.*;
 import com.google.gson.*;
-import com.xilinx.rapidwright.edif.EDIFCell;
-import com.xilinx.rapidwright.edif.EDIFNet;
-import com.xilinx.rapidwright.edif.EDIFTools;
+import com.xilinx.rapidwright.edif.*;
 import com.xilinx.rapidwright.util.RapidWright;
 import jnr.ffi.annotations.In;
 import org.json.JSONObject;
@@ -205,6 +203,26 @@ public class json2dcp {
         return bits + "'h" + hex;
     }
 
+    public static void connect_log_and_phys(Net net, Cell cell, String logical_pin) {
+        // Similar to RapidWright's net.connect; but handles some special cases correctly
+        if (cell.getType().equals("INBUF") || cell.getType().equals("IBUFCTRL"))
+            net.connect(cell, logical_pin); // must use connect here
+        else if (cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null) {
+            // Create logical connection only
+            if (logical_pin.endsWith("]")) {
+                int open_pos = logical_pin.lastIndexOf('[');
+                String log_bus = logical_pin.substring(0, open_pos);
+                int port_index = Integer.parseInt(logical_pin.substring(open_pos + 1, logical_pin.length() - 1));
+                int bus_width = cell.getEDIFCellInst().getPort(log_bus).getWidth();
+                net.getLogicalNet().createPortInst(log_bus, (bus_width - 1) - port_index, cell.getEDIFCellInst());
+            } else {
+                net.getLogicalNet().createPortInst(logical_pin, cell.getEDIFCellInst());
+            }
+        } else {
+            net.connect(cell, logical_pin);
+        }
+    }
+
     public static void main(String[] args) throws FileNotFoundException {
 
         if (args.length < 3) {
@@ -303,14 +321,15 @@ public class json2dcp {
                 if (!nn.driver.cell.attrs.containsKey("X_ORIG_PORT_" + nn.driver.name))
                     continue;
                 //System.out.println("connect " + n.getName() + " <- " + nn.driver.cell.name + "." + nn.driver.name);
-                n.connect(nn.driver.cell.rwCell, nn.driver.cell.attrs.get("X_ORIG_PORT_" + nn.driver.name));
+                connect_log_and_phys(n, nn.driver.cell.rwCell, nn.driver.cell.attrs.get("X_ORIG_PORT_" + nn.driver.name));
             }
             for (NextpnrCellPort usr : nn.users) {
                 if (usr.cell.rwCell != null) {
                     if (usr.cell.attrs.containsKey("X_ORIG_PORT_" + usr.name)) {
                         String[] orig_ports = usr.cell.attrs.get("X_ORIG_PORT_" + usr.name).split(" ");
                         for (String orig : orig_ports) {
-                            n.connect(usr.cell.rwCell, orig);
+                            connect_log_and_phys(n, usr.cell.rwCell, orig);
+                            //n.connect(usr.cell.rwCell, orig);
                         }
                     } else {
                         // Special case where no logical pin exists, mostly where we tie A6 high for a fractured LUT
@@ -349,9 +368,7 @@ public class json2dcp {
                 String wire = routing[i];
                 String pip = routing[i + 1];
 
-                if (pip.isEmpty())
-                    continue;
-                if (pip.startsWith("SITEPIP")) {
+                if (!pip.isEmpty() && pip.startsWith("SITEPIP")) {
                     String[] sp = pip.split("/");
                     SiteInst si = des.getSiteInstFromSiteName(sp[1]);
                     if (si == null)
@@ -383,6 +400,35 @@ public class json2dcp {
                         }
                     }
 
+                }
+
+                if (wire.startsWith("SITEWIRE")) {
+                    String[] sw = wire.split("/");
+                    SiteInst si = des.getSiteInstFromSiteName(sw[1]);
+                    if (si == null)
+                        si = des.createSiteInst(des.getDevice().getSite(sw[1]));
+                    // FIXME: when does/n't site Wire insertion work?
+                    BELPin startPin = null;
+                    for (BEL other : si.getBELs()) {
+                        if (other.getBELClass() == BELClass.RBEL || other.getBELClass() == BELClass.PORT)
+                            continue;
+                        for (BELPin p : other.getPins())
+                            if(p.isOutput() && p.getSiteWireName().equals(sw[2]))
+                                startPin = p;
+                    }
+
+                    if (startPin != null) {
+                        for (BEL other : si.getBELs()) {
+                            if (other.getBELClass() == BELClass.RBEL || other.getBELClass() == BELClass.PORT)
+                                continue;
+                            for (BELPin p : other.getPins())
+                                if (p.isInput() && p.getSiteWireName().equals(sw[2])) {
+                                    si.routeIntraSiteNet(n, startPin, p);
+                                    //System.out.println(startPin.getBEL().getName() + "." + startPin.getName() + " -> " + p.getBEL().getName() + "." + p.getName());
+                                }
+                        }
+
+                    }
                 }
 
             }

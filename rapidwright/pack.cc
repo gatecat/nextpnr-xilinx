@@ -750,6 +750,7 @@ struct USPacker
                     group.xorcys.push_back(feed_xorcy.get());
                     new_cells.push_back(std::move(zero_lut));
                     new_cells.push_back(std::move(feed_xorcy));
+                    new_cells.push_back(std::move(dummy_muxcy));
                 }
             }
 
