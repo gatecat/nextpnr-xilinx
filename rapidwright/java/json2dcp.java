@@ -17,6 +17,7 @@ import java.io.FileReader;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 public class json2dcp {
@@ -207,17 +208,23 @@ public class json2dcp {
         // Similar to RapidWright's net.connect; but handles some special cases correctly
         if (cell.getType().equals("INBUF") || cell.getType().equals("IBUFCTRL"))
             net.connect(cell, logical_pin); // must use connect here
-        else if (cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null) {
+        else if (cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]")) {
             // Create logical connection only
+            EDIFPortInst epi;
             if (logical_pin.endsWith("]")) {
                 int open_pos = logical_pin.lastIndexOf('[');
                 String log_bus = logical_pin.substring(0, open_pos);
                 int port_index = Integer.parseInt(logical_pin.substring(open_pos + 1, logical_pin.length() - 1));
                 int bus_width = cell.getEDIFCellInst().getPort(log_bus).getWidth();
-                net.getLogicalNet().createPortInst(log_bus, (bus_width - 1) - port_index, cell.getEDIFCellInst());
+                epi = net.getLogicalNet().createPortInst(log_bus, (bus_width - 1) - port_index, cell.getEDIFCellInst());
             } else {
-                net.getLogicalNet().createPortInst(logical_pin, cell.getEDIFCellInst());
+                epi = net.getLogicalNet().createPortInst(logical_pin, cell.getEDIFCellInst());
             }
+            // If there is a physical pin connect it too
+            ArrayList<String> dummy_list = new ArrayList<>();
+            SitePinInst spi = cell.getSitePinFromPortInst(epi, dummy_list);
+            if (spi != null)
+                net.addPin(spi);
         } else {
             net.connect(cell, logical_pin);
         }
@@ -364,11 +371,12 @@ public class json2dcp {
 
             }
 
+
             for (int i = 0; i < (routing.length-2); i+=3) {
                 String wire = routing[i];
                 String pip = routing[i + 1];
 
-                if (!pip.isEmpty() && pip.startsWith("SITEPIP")) {
+                if (!pip.isEmpty() && pip.startsWith("SITEPIP") && !nn.name.equals("$PACKER_GND_NET")) {
                     String[] sp = pip.split("/");
                     SiteInst si = des.getSiteInstFromSiteName(sp[1]);
                     if (si == null)
@@ -402,7 +410,7 @@ public class json2dcp {
 
                 }
 
-                if (wire.startsWith("SITEWIRE")) {
+                if (wire.startsWith("SITEWIRE") && !nn.name.equals("$PACKER_GND_NET")) {
                     String[] sw = wire.split("/");
                     SiteInst si = des.getSiteInstFromSiteName(sw[1]);
                     if (si == null)
@@ -419,8 +427,8 @@ public class json2dcp {
 
                     if (startPin != null) {
                         for (BEL other : si.getBELs()) {
-                            if (other.getBELClass() == BELClass.RBEL || other.getBELClass() == BELClass.PORT)
-                                continue;
+                            //if (other.getBELClass() == BELClass.RBEL || other.getBELClass() == BELClass.PORT)
+                            //    continue;
                             for (BELPin p : other.getPins())
                                 if (p.isInput() && p.getSiteWireName().equals(sw[2])) {
                                     si.routeIntraSiteNet(n, startPin, p);

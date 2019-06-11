@@ -947,9 +947,12 @@ struct USPacker
         std::unordered_map<IdString, XFormRule> c8_chained_rules;
         c8_chained_rules[ctx->id("CARRY8")].new_type = ctx->id("CARRY8");
         c8_chained_rules[ctx->id("CARRY8")].port_xform[ctx->id("CI")] = ctx->id("CIN");
+        c8_chained_rules[ctx->id("CARRY8")].set_params.emplace_back(ctx->id("CARRY_TYPE"), Property("SINGLE_CY8"));
         std::unordered_map<IdString, XFormRule> c8_init_rules;
         c8_init_rules[ctx->id("CARRY8")].new_type = ctx->id("CARRY8");
         c8_init_rules[ctx->id("CARRY8")].port_xform[ctx->id("CI")] = ctx->id("AX");
+        c8_init_rules[ctx->id("CARRY8")].set_params.emplace_back(ctx->id("CARRY_TYPE"), Property("SINGLE_CY8"));
+
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
             if (ci->type != ctx->id("CARRY8"))
@@ -958,6 +961,9 @@ struct USPacker
                 xform_cell(c8_init_rules, ci);
             else
                 xform_cell(c8_chained_rules, ci);
+            ci->ports[ctx->id("EX")].name = ctx->id("EX");
+            ci->ports[ctx->id("EX")].type = PORT_IN;
+            connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("EX"));
         }
     }
 
@@ -1040,6 +1046,7 @@ void Arch::assignCellInfo(CellInfo *cell)
         for (int i = 0; i < 8; i++) {
             cell->carryInfo.out_sigs[i] = get_net_or_empty(cell, id("O" + std::to_string(i)));
             cell->carryInfo.cout_sigs[i] = get_net_or_empty(cell, id("CO" + std::to_string(i)));
+            cell->carryInfo.x_sigs[i] = get_net_or_empty(cell, id(std::string(1, 'A' + i) + "X"));
         }
     }
 }

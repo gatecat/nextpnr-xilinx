@@ -966,8 +966,8 @@ struct Arch : BaseCtx
                 auto &wi = wireInfo(dst);
                 if (wi.intent == ID_INTENT_SITE_GND) {
                     LogicTileStatus *lts = tileStatus[dst.tile].lts;
-                    if (lts != nullptr && lts->cells[BEL_5LUT] != nullptr)
-                        return true; // Ground driver only available if lowest 5LUT not used
+                    if (lts != nullptr && (lts->cells[BEL_5LUT] != nullptr || lts->cells[BEL_6LUT] != nullptr))
+                        return true; // Ground driver only available if lowest 5LUT and 6LUT not used
                 }
             }
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_PERMUTATION) {
@@ -989,6 +989,8 @@ struct Arch : BaseCtx
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
             int eight = (locInfo(pip).pip_data[pip.index].extra_data >> 8) & 0xF;
             int dest = (locInfo(pip).pip_data[pip.index].extra_data) & 0x1;
+            if (eight == 0)
+                return true; // FIXME: conflict with ground
             if (dest & 0x1)
                 return true; // FIXME: routethru to MUX
             LogicTileStatus *lts = tileStatus[pip.tile].lts;

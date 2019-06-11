@@ -133,6 +133,15 @@ bool Arch::isBelLocationValid(BelId bel) const
                 if (i == 4)
                     out_fmux = lts.cells[BEL_F9MUX];
 
+                CellInfo *carry8 = lts.cells[BEL_CARRY8];
+                // CARRY8 might use X
+                if (carry8 != nullptr && carry8->carryInfo.x_sigs[i] != nullptr) {
+                    if (x_net == nullptr)
+                        x_net = carry8->carryInfo.x_sigs[i];
+                    else if (x_net != carry8->carryInfo.x_sigs[i])
+                        return false;
+                }
+
                 // FF1 might use X, if it isn't driven directly
                 CellInfo *ff1 = lts.cells[i << 4 | BEL_FF];
                 if (ff1 != nullptr && ff1->ffInfo.d != nullptr && ff1->ffInfo.d->driver.cell != nullptr) {
@@ -176,7 +185,6 @@ bool Arch::isBelLocationValid(BelId bel) const
                     mux_output_used = true;
                 }
 
-                CellInfo *carry8 = lts.cells[BEL_CARRY8];
                 if (carry8 != nullptr && carry8->carryInfo.out_sigs[i] != nullptr) {
                     // FIXME: direct connections to FF
                     if (mux_output_used)

@@ -172,7 +172,7 @@ struct ArchCellInfo
         } ffInfo;
         struct
         {
-            NetInfo *out_sigs[8], *cout_sigs[8];
+            NetInfo *out_sigs[8], *cout_sigs[8], *x_sigs[8];
         } carryInfo;
         struct
         {
