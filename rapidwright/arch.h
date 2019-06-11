@@ -670,6 +670,10 @@ struct Arch : BaseCtx
             ts.eights[3].dirty = true;
             ts.eights[4].dirty = true;
             break;
+        case BEL_CARRY8:
+            for (int i = 0; i < 8; i++)
+                ts.eights[i].dirty = true;
+            break;
         }
     }
 

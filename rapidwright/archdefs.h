@@ -160,6 +160,7 @@ struct ArchCellInfo
             bool is_memory, is_srl;
             int input_count, output_count;
             int memory_group;
+            bool only_drives_carry;
             NetInfo *input_sigs[6], *output_sigs[2];
             NetInfo *di1_net, *di2_net;
         } lutInfo;
@@ -169,6 +170,10 @@ struct ArchCellInfo
             bool is_paired;
             NetInfo *clk, *sr, *ce, *d;
         } ffInfo;
+        struct
+        {
+            NetInfo *out_sigs[8], *cout_sigs[8];
+        } carryInfo;
         struct
         {
             NetInfo *sel, *out;

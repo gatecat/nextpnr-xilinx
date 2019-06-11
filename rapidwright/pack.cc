@@ -786,7 +786,7 @@ struct USPacker
                     c8->constr_parent = root;
                     root->constr_children.push_back(c8);
                     c8->constr_x = 0;
-                    c8->constr_y = i / 8;
+                    c8->constr_y = -i / 8;
                     c8->constr_abs_z = true;
                     c8->constr_z = BEL_CARRY8;
                 }
@@ -889,7 +889,7 @@ struct USPacker
                     root->constr_children.push_back(s_lut);
                     s_lut->constr_parent = root;
                     s_lut->constr_x = 0;
-                    s_lut->constr_y = i / 8;
+                    s_lut->constr_y = -i / 8;
                     s_lut->constr_abs_z = true;
                     s_lut->constr_z = (z << 4 | BEL_6LUT);
                 }
@@ -897,7 +897,7 @@ struct USPacker
                     root->constr_children.push_back(di_lut);
                     di_lut->constr_parent = root;
                     di_lut->constr_x = 0;
-                    di_lut->constr_y = i / 8;
+                    di_lut->constr_y = -i / 8;
                     di_lut->constr_abs_z = true;
                     di_lut->constr_z = (z << 4 | BEL_5LUT);
                 }
@@ -1017,6 +1017,11 @@ void Arch::assignCellInfo(CellInfo *cell)
         cell->lutInfo.memory_group = 0; // fixme
         cell->lutInfo.is_srl = cell->attrs.count(id("X_LUT_AS_SRL"));
         cell->lutInfo.is_memory = cell->attrs.count(id("X_LUT_AS_DRAM"));
+        cell->lutInfo.only_drives_carry = false;
+        if (cell->constr_parent != nullptr && cell->lutInfo.output_sigs[0] != nullptr &&
+            cell->lutInfo.output_sigs[0]->users.size() == 1 &&
+            cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
+            cell->lutInfo.only_drives_carry = true;
     } else if (cell->type == id_SLICE_FFX) {
         cell->ffInfo.d = get_net_or_empty(cell, id_D);
         cell->ffInfo.clk = get_net_or_empty(cell, id_CLK);
@@ -1031,6 +1036,11 @@ void Arch::assignCellInfo(CellInfo *cell)
     } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX) {
         cell->muxInfo.sel = get_net_or_empty(cell, id_S0);
         cell->muxInfo.out = get_net_or_empty(cell, id_OUT);
+    } else if (cell->type == id_CARRY8) {
+        for (int i = 0; i < 8; i++) {
+            cell->carryInfo.out_sigs[i] = get_net_or_empty(cell, id("O" + std::to_string(i)));
+            cell->carryInfo.cout_sigs[i] = get_net_or_empty(cell, id("CO" + std::to_string(i)));
+        }
     }
 }
 

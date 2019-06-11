@@ -169,11 +169,18 @@ bool Arch::isBelLocationValid(BelId bel) const
                 NetInfo *out5 = nullptr;
                 if (lut6 != nullptr && lut6->lutInfo.output_count == 2)
                     out5 = lut6->lutInfo.output_sigs[1];
-                else if (lut5 != nullptr)
+                else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
                     out5 = lut5->lutInfo.output_sigs[0];
                 if (out5 != nullptr && (out5->users.size() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
                                                                    (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
-                    // FIXME: CARRY8
+                    mux_output_used = true;
+                }
+
+                CellInfo *carry8 = lts.cells[BEL_CARRY8];
+                if (carry8 != nullptr && carry8->carryInfo.out_sigs[i] != nullptr) {
+                    // FIXME: direct connections to FF
+                    if (mux_output_used)
+                        return false;
                     mux_output_used = true;
                 }
                 if (out_fmux != nullptr) {
