@@ -352,6 +352,25 @@ public class json2dcp {
 
         for (NextpnrNet nn : ndes.nets.values()) {
             Net n = nn.rwNet;
+
+            HashSet<String> inverted_wires = new HashSet<>();
+            for (NextpnrCellPort sink : nn.users) {
+                if (sink.cell.attrs.containsKey("X_ORIG_PORT_" + sink.name)) {
+                    String[] orig_ports = sink.cell.attrs.get("X_ORIG_PORT_" + sink.name).split(" ");
+                    if (sink.cell.rwCell == null)
+                        continue;
+                    for (String orig : orig_ports) {
+                        if (!sink.cell.params.getOrDefault("IS_" + orig + "_INVERTED", "0").endsWith("1"))
+                            continue;
+                        BELPin sinkpin = sink.cell.rwCell.getBEL().getPin(sink.name);
+                        if (sinkpin == null)
+                            continue;
+                        inverted_wires.add(sink.cell.rwCell.getSiteName() + "/" + sinkpin.getSiteWireName());
+                        //System.out.println(sink.cell.rwCell.getSiteName() + "/" + sinkpin.getSiteWireName());
+                    }
+                }
+            }
+
             String[] routing = nn.attrs.get("ROUTING").split(";");
             for (int i = 0; i < (routing.length-2); i+=3) {
                 String wire = routing[i];
@@ -371,7 +390,6 @@ public class json2dcp {
 
             }
 
-
             for (int i = 0; i < (routing.length-2); i+=3) {
                 String wire = routing[i];
                 String pip = routing[i + 1];
@@ -389,9 +407,12 @@ public class json2dcp {
                     for (BELPin bp : b.getPins()) {
                         for (SitePIP sitePIP : bp.getSitePIPs()) {
                             if (sitePIP.getInputPin().getSiteWireName().equals(sp[3])) {
-                                si.addSitePIP(sitePIP);
 
-                                // FIXME: when does/n't site PIP insertion work?
+                                // Don't route through when inverting
+
+                                if (inverted_wires.contains(si.getSiteName() + "/" + sitePIP.getOutputPin().getSiteWireName()))
+                                    continue;
+
                                 BELPin startPin = null;
                                 for (BEL other : si.getBELs())
                                     for (BELPin p : other.getPins())
@@ -403,6 +424,11 @@ public class json2dcp {
                                             if (p.isInput() && p.getSiteWireName().equals(sitePIP.getOutputPin().getSiteWireName()))
                                                 si.routeIntraSiteNet(n, startPin, p);
                                 }
+
+
+                                si.addSitePIP(sitePIP);
+
+                                // FIXME: when does/n't site PIP insertion work?
 
                             }
                         }
