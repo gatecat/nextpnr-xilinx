@@ -23,7 +23,7 @@ checking.
 
 ## Creating chip database from RapidWright
 
- - Run `java -jar rapidwright_bbaexport.jar xczu2cg-sbva484-1-e ./rapidwright/constids.inc ~/rapidwright/xczu2cg.bba`
+ - Run `java -jar rapidwright_bbaexport.jar xczu2cg-sbva484-1-e rapidwright/constids.inc rapidwright/xczu2cg.bba`
    - This uses RapidWright to build a textual representation of a chip database for nextpnr
    - Replace `xczu2cg-sbva484-1-e` and the bba filename with the device you want to target. You can build multiple
      databases for multiple devices if desired (subject to the support caveats above)
