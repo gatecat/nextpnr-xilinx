@@ -17,12 +17,12 @@
  *
  */
 
+#include <boost/algorithm/string.hpp>
 #include "design_utils.h"
 #include "log.h"
 #include "nextpnr.h"
 #include "timing.h"
 #include "util.h"
-
 NEXTPNR_NAMESPACE_BEGIN
 
 inline NetInfo *port_or_nullptr(const CellInfo *cell, IdString name)
@@ -345,6 +345,36 @@ void Arch::fixupPlacement()
                     lut6->ports[id_A6].type = PORT_IN;
                 }
                 connect_port(getCtx(), nets[id("$PACKER_VCC_NET")].get(), lut6, id_A6);
+            }
+        }
+    }
+    for (auto cell : sorted(cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == id("PSS_ALTO_CORE")) {
+            log_info("Tieing unused PSS inputs to constants...\n");
+            for (IdString pname : getBelPins(ci->bel)) {
+                if (ci->ports.count(pname))
+                    continue;
+                if (getBelPinType(ci->bel, pname) == PORT_OUT)
+                    continue;
+                std::string name = pname.str(this);
+                if (name.find("_PAD_") != std::string::npos)
+                    continue;
+                if (name.find("PSVERSION") != std::string::npos || name.find("PSSGTS") != std::string::npos ||
+                    name == "PSSGPWRDWNB" || name == "PSSGHIGHB" || name == "PSSFSTCFGB" || name == "PSSCFGRESETB" ||
+                    name == "PCFGPORB" || name.find("IDCODE") != std::string::npos ||
+                    name.find("BSCAN") != std::string::npos)
+                    continue;
+                bool constval = false;
+                if (name == "NIRQ1LPDRPU" || name == "NIRQ0LPDRPU" || name == "NFIQ1LPDRPU" || name == "NFIQ0LPDRPU")
+                    constval = true;
+                if (boost::ends_with(name, "SSIN") || name == "EMIOSDIO1WP" || name == "EMIOSDIO0WP" ||
+                    boost::ends_with(name, "RSOP") || boost::ends_with(name, "REOP") ||
+                    boost::ends_with(name, "GMIITXCLK") || name == "DPVIDEOINCLK" || name == "DPSAXISAUDIOCLK")
+                    constval = true;
+                ci->ports[pname].name = pname;
+                ci->ports[pname].type = PORT_IN;
+                connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
             }
         }
     }

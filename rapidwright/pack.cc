@@ -982,6 +982,9 @@ struct USPacker
         io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
         io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
 
+        io_rules[ctx->id("PS8")].new_type = ctx->id("PSS_ALTO_CORE");
+        io_rules[ctx->id("BUFG_PS")].new_type = ctx->id("BUFCE_BUFG_PS");
+
         generic_xform(io_rules, true);
     }
 };
