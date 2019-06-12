@@ -253,7 +253,7 @@ public class json2dcp {
                 continue;
             if (nc.type.equals("IOB_INBUF") || nc.type.equals("IOB_OUTBUF")  || nc.type.equals("IOB_IBUFCTRL")) {
                 nc.rwCell = des.createAndPlaceIOB(nc.name, nc.type.equals("IOB_OUTBUF") ? PinType.OUT : PinType.IN,
-                        siteToPin.get(nc.attrs.get("NEXTPNR_BEL").split("/")[0]), "LVCMOS33");
+                        siteToPin.get(nc.attrs.get("NEXTPNR_BEL").split("/")[0]), nc.attrs.getOrDefault("IOSTANDARD", "LVCMOS33"));
             } else {
                 Unisim unitype = Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE"));
                 nc.rwCell = des.createAndPlaceCell(nc.name, unitype, nc.attrs.get("NEXTPNR_BEL"));
@@ -295,10 +295,22 @@ public class json2dcp {
                             case LUT6:
                                 value = fixup_init(value, 6);
                                 break;
+                            case FDRE:
+                            case FDSE:
+                            case FDCE:
+                            case FDPE:
+                                value = "1'b" + value.substring(value.length() - 1);
+                                break;
                         }
                     }
                     nc.rwCell.addProperty(param.getKey(), value);
                     //System.out.println(param.getKey() + " = " + param.getValue());
+                }
+
+                if (nc.rwCell.getType().equals("RAMD64E")) {
+                    // FIXME: move to nextpnr
+                    nc.rwCell.addProperty("RAM_ADDRESS_MASK", "2'b11");
+                    nc.rwCell.addProperty("RAM_ADDRESS_SPACE", "2'b11");
                 }
             }
 
