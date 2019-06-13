@@ -482,7 +482,9 @@ void Arch::routeClock()
     // Special pass for faster routing of global clock psuedo-net
     for (auto net : sorted(nets)) {
         NetInfo *ni = net.second;
-        if (ni->driver.cell == nullptr || ni->driver.cell->type != id_BUFGCTRL || ni->driver.port != id("O"))
+        if (ni->driver.cell == nullptr ||
+            (ni->driver.cell->type != id_BUFGCTRL && ni->driver.cell->type != id("BUFCE_BUFG_PS")) ||
+            ni->driver.port != id("O"))
             continue;
         log_info("    routing clock '%s'\n", ni->name.c_str(this));
         bindWire(getCtx()->getNetinfoSourceWire(ni), ni, STRENGTH_LOCKED);

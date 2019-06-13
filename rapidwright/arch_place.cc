@@ -353,7 +353,7 @@ void Arch::fixupPlacement()
         if (ci->type == id("PSS_ALTO_CORE")) {
             log_info("Tieing unused PSS inputs to constants...\n");
             for (IdString pname : getBelPins(ci->bel)) {
-                if (ci->ports.count(pname))
+                if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr && ci->ports.at(pname).net->driver.cell != nullptr)
                     continue;
                 if (getBelPinType(ci->bel, pname) == PORT_OUT)
                     continue;
@@ -374,6 +374,10 @@ void Arch::fixupPlacement()
                     constval = true;
                 ci->ports[pname].name = pname;
                 ci->ports[pname].type = PORT_IN;
+                if (ci->ports[pname].net != nullptr) {
+                    disconnect_port(getCtx(), ci, pname);
+                    ci->attrs.erase(id("X_ORIG_PORT_" + name));
+                }
                 connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
             }
         }

@@ -58,6 +58,7 @@ struct USPacker
             ctx->cells.erase(pcell);
         }
         for (auto &ncell : new_cells) {
+            NPNR_ASSERT(!ctx->cells.count(ncell->name));
             ctx->cells[ncell->name] = std::move(ncell);
         }
         packed_cells.clear();
