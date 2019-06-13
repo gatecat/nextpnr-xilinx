@@ -42,6 +42,9 @@ bool Arch::isBelLocationValid(BelId bel) const
             return true;
         LogicTileStatus &lts = *(tileStatus[bel.tile].lts);
         bool is_slicem = (belTileType == id_CLEM) || (belTileType == id_CLEM_R);
+        bool tile_is_memory = false;
+        if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
+            tile_is_memory = true;
         // Check eight-tiles (mostly LUT-related validity)
         for (int i = 0; i < 8; i++) {
             if (lts.eights[i].dirty) {
@@ -104,6 +107,8 @@ bool Arch::isBelLocationValid(BelId bel) const
                     if (lut5->lutInfo.di2_net != nullptr)
                         return false;
                 }
+
+
                 CellInfo *mux = nullptr;
                 // Eights A, C, E, G: F7MUX uses X input
                 if (i == 0 || i == 2 || i == 4 || i == 6)
@@ -173,6 +178,11 @@ bool Arch::isBelLocationValid(BelId bel) const
                             return false;
                     }
                 }
+
+
+                if ((i == 3) || (i == 5) || (i == 6))
+                    if (tile_is_memory && x_net != nullptr)
+                        return false; //collision with top address bits
 
                 bool mux_output_used = false;
                 NetInfo *out5 = nullptr;
