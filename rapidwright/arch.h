@@ -647,6 +647,14 @@ struct Arch : BaseCtx
         if (tts.lts == nullptr)
             tts.lts = new LogicTileStatus();
         auto &ts = *(tts.lts);
+        if (z == ((7 << 4) | BEL_6LUT)) {
+            if ((cell != nullptr && cell->lutInfo.is_memory) ||
+                (ts.cells[z] != nullptr && ts.cells[z]->lutInfo.is_memory)) {
+                // Special case - memory write port invalidates everything
+                for (int i = 0; i < 8; i++)
+                    ts.eights[i].dirty = true;
+            }
+        }
         ts.cells[z] = cell;
         // determine which sections to mark as dirty
         switch (z & 0xF) {

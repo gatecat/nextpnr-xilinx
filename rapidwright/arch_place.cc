@@ -108,7 +108,6 @@ bool Arch::isBelLocationValid(BelId bel) const
                         return false;
                 }
 
-
                 CellInfo *mux = nullptr;
                 // Eights A, C, E, G: F7MUX uses X input
                 if (i == 0 || i == 2 || i == 4 || i == 6)
@@ -179,10 +178,9 @@ bool Arch::isBelLocationValid(BelId bel) const
                     }
                 }
 
-
                 if ((i == 3) || (i == 5) || (i == 6))
                     if (tile_is_memory && x_net != nullptr)
-                        return false; //collision with top address bits
+                        return false; // collision with top address bits
 
                 bool mux_output_used = false;
                 NetInfo *out5 = nullptr;
@@ -363,7 +361,8 @@ void Arch::fixupPlacement()
         if (ci->type == id("PSS_ALTO_CORE")) {
             log_info("Tieing unused PSS inputs to constants...\n");
             for (IdString pname : getBelPins(ci->bel)) {
-                if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr && ci->ports.at(pname).net->driver.cell != nullptr)
+                if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr &&
+                    ci->ports.at(pname).net->driver.cell != nullptr)
                     continue;
                 if (getBelPinType(ci->bel, pname) == PORT_OUT)
                     continue;
