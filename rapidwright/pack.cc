@@ -541,6 +541,8 @@ struct USPacker
         flush_cells();
     }
 
+    std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
+
     void pack_constants()
     {
         log_info("Packing constants..\n");
