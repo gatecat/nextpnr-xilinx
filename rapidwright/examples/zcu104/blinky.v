@@ -20,19 +20,14 @@ module top;
     (* BEL="IOB_X3Y292/OUTBUF", keep *)
     OBUF led3_obuf (.I(led[3]));
 
-    BUFGCTRL #(
-    .IS_CE1_INVERTED(1'b1),
-    .IS_IGNORE0_INVERTED(1'b1),
-    .IS_IGNORE1_INVERTED(1'b1),
-    .IS_S1_INVERTED(1'b1)
-    ) bufg_i (
+    BUFGCTRL bufg_i (
         .I0(clk_i),
         .CE0(1'b1),
-        .CE1(1'b1),
-        .IGNORE0(1'b1),
-        .IGNORE1(1'b1),
+        .CE1(1'b0),
+        .IGNORE0(1'b0),
+        .IGNORE1(1'b0),
         .S0(1'b1),
-        .S1(1'b1),
+        .S1(1'b0),
         .O(clk)
     );
 //`define BLINKY
