@@ -1395,7 +1395,8 @@ class HeAPPlacer
             if (pivot >= int(cut_cells.size())) {
                 pivot = int(cut_cells.size()) - 1;
             }
-            //log_info("orig pivot %d/%d lc %d rc %d\n", pivot, int(cut_cells.size()), pivot_cells, total_cells - pivot_cells);
+            // log_info("orig pivot %d/%d lc %d rc %d\n", pivot, int(cut_cells.size()), pivot_cells, total_cells -
+            // pivot_cells);
 
             // Find the clearance required either side of the pivot
             int clearance_l = 0, clearance_r = 0;
@@ -1450,9 +1451,11 @@ class HeAPPlacer
             std::vector<int> left_cells_v(beltype.size(), 0), right_cells_v(beltype.size(), 0);
             std::vector<int> left_bels_v(beltype.size(), 0), right_bels_v(r.bels);
             for (int i = 0; i <= pivot; i++)
-                left_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.count(cut_cells.at(i)->name) ? p->chain_size.at(cut_cells.at(i)->name) : 1;
+                left_cells_v.at(type_index.at(cut_cells.at(i)->type)) +=
+                        p->chain_size.count(cut_cells.at(i)->name) ? p->chain_size.at(cut_cells.at(i)->name) : 1;
             for (int i = pivot + 1; i < int(cut_cells.size()); i++)
-                right_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.count(cut_cells.at(i)->name) ? p->chain_size.at(cut_cells.at(i)->name) : 1;
+                right_cells_v.at(type_index.at(cut_cells.at(i)->type)) +=
+                        p->chain_size.count(cut_cells.at(i)->name) ? p->chain_size.at(cut_cells.at(i)->name) : 1;
 
             int best_tgt_cut = -1;
             double best_deltaU = std::numeric_limits<double>::max();
@@ -1474,7 +1477,8 @@ class HeAPPlacer
                     // Solution is potentially valid
                     double aU = 0;
                     for (size_t t = 0; t < beltype.size(); t++)
-                        aU += std::abs(double(left_cells_v.at(t)) / double(std::max(left_bels_v.at(t), 1)) -
+                        aU += (left_cells_v.at(t) + right_cells_v.at(t)) *
+                              std::abs(double(left_cells_v.at(t)) / double(std::max(left_bels_v.at(t), 1)) -
                                        double(right_cells_v.at(t)) / double(std::max(right_bels_v.at(t), 1)));
                     if (aU < best_deltaU) {
                         best_deltaU = aU;
@@ -1502,10 +1506,14 @@ class HeAPPlacer
                         right_bels_v.at(t) += bels_at(x, y, t);
                     }
                 }
-            if (std::accumulate(left_bels_v.begin(), left_bels_v.end(), 0) == 0 || std::accumulate(right_bels_v.begin(), right_bels_v.end(), 0) == 0)
+            if (std::accumulate(left_bels_v.begin(), left_bels_v.end(), 0) == 0 ||
+                std::accumulate(right_bels_v.begin(), right_bels_v.end(), 0) == 0)
                 return {};
-            //log_info("pivot %d target cut %d lc %d lb %d rc %d rb %d\n", pivot, best_tgt_cut, std::accumulate(left_cells_v.begin(), left_cells_v.end(), 0), std::accumulate(left_bels_v.begin(), left_bels_v.end(), 0),
-            //          std::accumulate(right_cells_v.begin(), right_cells_v.end(), 0), std::accumulate(right_bels_v.begin(), right_bels_v.end(), 0));
+            // log_info("pivot %d target cut %d lc %d lb %d rc %d rb %d\n", pivot, best_tgt_cut,
+            // std::accumulate(left_cells_v.begin(), left_cells_v.end(), 0), std::accumulate(left_bels_v.begin(),
+            // left_bels_v.end(), 0),
+            //          std::accumulate(right_cells_v.begin(), right_cells_v.end(), 0),
+            //          std::accumulate(right_bels_v.begin(), right_bels_v.end(), 0));
 
             // Peturb the source cut to eliminate overutilisation
             auto is_part_overutil = [&](bool r) {
