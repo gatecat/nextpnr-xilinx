@@ -123,7 +123,7 @@ template <typename T> struct EquationSystem
             vb[i] = rhs.at(i);
 
         ConjugateGradient<SparseMatrix<T>, Lower | Upper> solver;
-        solver.setTolerance(1e-5);
+        solver.setTolerance(0.6e-6);
         VectorXd xr = solver.compute(mat).solveWithGuess(vb, vx);
         for (int i = 0; i < int(x.size()); i++)
             x.at(i) = xr[i];
@@ -224,8 +224,16 @@ class HeAPPlacer
                 solved_hpwl = total_hpwl();
 
                 update_all_chains();
+
+                std::unordered_set<IdString> logic_types;
+                logic_types.insert(id_SLICE_LUTX);
+                logic_types.insert(id_SLICE_FFX);
+                logic_types.insert(id_CARRY8);
+                CutSpreader(this, logic_types).run();
+
                 for (auto type : sorted(run))
-                    CutSpreader(this, type).run();
+                    if (!logic_types.count(type))
+                        CutSpreader(this, {type}).run();
 
                 update_all_chains();
                 spread_hpwl = total_hpwl();
@@ -964,22 +972,33 @@ class HeAPPlacer
     {
         int id;
         int x0, y0, x1, y1;
-        int cells, bels;
+        std::vector<int> cells, bels;
         bool overused() const
         {
-            if (bels < 4)
-                return cells > bels;
-            else
-                return cells > beta * bels;
+            for (size_t t = 0; t < cells.size(); t++) {
+                if (bels.at(t) < 4) {
+                    if (cells.at(t) > bels.at(t))
+                        return true;
+                } else {
+                    if (cells.at(t) > beta * bels.at(t))
+                        return true;
+                }
+            }
+            return false;
         }
     };
 
     class CutSpreader
     {
       public:
-        CutSpreader(HeAPPlacer *p, IdString beltype)
-                : p(p), ctx(p->ctx), beltype(beltype), fb(p->fast_bels.at(std::get<0>(p->bel_types.at(beltype))))
+        CutSpreader(HeAPPlacer *p, const std::unordered_set<IdString> &beltype) : p(p), ctx(p->ctx), beltype(beltype)
         {
+            int idx = 0;
+            for (IdString type : sorted(beltype)) {
+                type_index[type] = idx;
+                fb.emplace_back(&(p->fast_bels.at(std::get<0>(p->bel_types.at(type)))));
+                ++idx;
+            }
         }
         static int seq;
         void run()
@@ -1006,9 +1025,12 @@ class HeAPPlacer
             for (auto &r : regions) {
                 if (merged_regions.count(r.id))
                     continue;
-#if 0
-                log_info("%s (%d, %d) |_> (%d, %d) %d/%d\n", beltype.c_str(ctx), r.x0, r.y0, r.x1, r.y1, r.cells,
-                         r.bels);
+#if 1
+                for (auto t : sorted(beltype)) {
+                    log_info("%s (%d, %d) |_> (%d, %d) %d/%d\n", t.c_str(ctx), r.x0, r.y0, r.x1, r.y1,
+                             r.cells.at(type_index.at(t)), r.bels.at(type_index.at(t)));
+                }
+
 #endif
                 workqueue.emplace(r.id, false);
                 // cut_region(r, false);
@@ -1017,7 +1039,7 @@ class HeAPPlacer
                 auto front = workqueue.front();
                 workqueue.pop();
                 auto &r = regions.at(front.first);
-                if (r.cells == 0)
+                if (std::all_of(r.cells.begin(), r.cells.end(), [](int x) { return x == 0; }))
                     continue;
                 auto res = cut_region(r, front.second);
                 if (res) {
@@ -1059,37 +1081,41 @@ class HeAPPlacer
       private:
         HeAPPlacer *p;
         Context *ctx;
-        IdString beltype;
-        std::vector<std::vector<int>> occupancy;
+        std::unordered_set<IdString> beltype;
+        std::unordered_map<IdString, int> type_index;
+        std::vector<std::vector<std::vector<int>>> occupancy;
         std::vector<std::vector<int>> groups;
         std::vector<std::vector<ChainExtent>> chaines;
         std::map<IdString, ChainExtent> cell_extents;
 
-        std::vector<std::vector<std::vector<BelId>>> &fb;
+        std::vector<std::vector<std::vector<std::vector<BelId>>> *> fb;
 
         std::vector<SpreaderRegion> regions;
         std::unordered_set<int> merged_regions;
         // Cells at a location, sorted by real (not integer) x and y
         std::vector<std::vector<std::vector<CellInfo *>>> cells_at_location;
 
-        int occ_at(int x, int y) { return occupancy.at(x).at(y); }
+        int occ_at(int x, int y, int type) { return occupancy.at(x).at(y).at(type); }
 
-        int bels_at(int x, int y)
+        int bels_at(int x, int y, int type)
         {
-            if (x >= int(fb.size()) || y >= int(fb.at(x).size()))
+            if (x >= int(fb.at(type)->size()) || y >= int(fb.at(type)->at(x).size()))
                 return 0;
-            return int(fb.at(x).at(y).size());
+            return int(fb.at(type)->at(x).at(y).size());
         }
 
         void init()
         {
-            occupancy.resize(p->max_x + 1, std::vector<int>(p->max_y + 1, 0));
-            groups.resize(p->max_x + 1, std::vector<int>(p->max_y + 1, -1));
+            occupancy.resize(p->max_x + 1,
+                             std::vector<std::vector<int>>(p->max_y + 1, std::vector<int>(beltype.size(), 0)));
+            groups.resize(p->max_x + 1, std::vector<int>(p->max_y + 1 - 1));
             chaines.resize(p->max_x + 1, std::vector<ChainExtent>(p->max_y + 1));
             cells_at_location.resize(p->max_x + 1, std::vector<std::vector<CellInfo *>>(p->max_y + 1));
             for (int x = 0; x <= p->max_x; x++)
                 for (int y = 0; y <= p->max_y; y++) {
-                    occupancy.at(x).at(y) = 0;
+                    for (int t = 0; t < int(beltype.size()); t++) {
+                        occupancy.at(x).at(y).at(t) = 0;
+                    }
                     groups.at(x).at(y) = -1;
                     chaines.at(x).at(y) = {x, y, x, y};
                 }
@@ -1106,11 +1132,11 @@ class HeAPPlacer
             };
 
             for (auto &cell : p->cell_locs) {
-                if (ctx->cells.at(cell.first)->type != beltype)
+                if (!beltype.count(ctx->cells.at(cell.first)->type))
                     continue;
                 if (ctx->cells.at(cell.first)->belStrength > STRENGTH_STRONG)
                     continue;
-                occupancy.at(cell.second.x).at(cell.second.y)++;
+                occupancy.at(cell.second.x).at(cell.second.y).at(type_index.at(ctx->cells.at(cell.first)->type))++;
                 // Compute ultimate extent of each chain root
                 if (p->chain_root.count(cell.first)) {
                     set_chain_ext(p->chain_root.at(cell.first)->name, cell.second.x, cell.second.y);
@@ -1119,7 +1145,7 @@ class HeAPPlacer
                 }
             }
             for (auto &cell : p->cell_locs) {
-                if (ctx->cells.at(cell.first)->type != beltype)
+                if (!beltype.count(ctx->cells.at(cell.first)->type))
                     continue;
                 // Transfer chain extents to the actual chaines structure
                 ChainExtent *ce = nullptr;
@@ -1136,7 +1162,7 @@ class HeAPPlacer
                 }
             }
             for (auto cell : p->solve_cells) {
-                if (cell->type != beltype)
+                if (!beltype.count(cell->type))
                     continue;
                 cells_at_location.at(p->cell_locs.at(cell->name).x).at(p->cell_locs.at(cell->name).y).push_back(cell);
             }
@@ -1149,8 +1175,10 @@ class HeAPPlacer
                     // log_info("%d %d\n", groups.at(x).at(y), mergee.id);
                     NPNR_ASSERT(groups.at(x).at(y) == mergee.id);
                     groups.at(x).at(y) = merged.id;
-                    merged.cells += occ_at(x, y);
-                    merged.bels += bels_at(x, y);
+                    for (size_t t = 0; t < beltype.size(); t++) {
+                        merged.cells.at(t) += occ_at(x, y, t);
+                        merged.bels.at(t) += bels_at(x, y, t);
+                    }
                 }
             merged_regions.insert(mergee.id);
             grow_region(merged, mergee.x0, mergee.y0, mergee.x1, mergee.y1);
@@ -1170,8 +1198,10 @@ class HeAPPlacer
             auto process_location = [&](int x, int y) {
                 // Merge with any overlapping regions
                 if (groups.at(x).at(y) == -1) {
-                    r.bels += bels_at(x, y);
-                    r.cells += occ_at(x, y);
+                    for (int t = 0; t < beltype.size(); t++) {
+                        r.bels.at(t) += bels_at(x, y, t);
+                        r.cells.at(t) += occ_at(x, y, t);
+                    }
                 }
                 if (groups.at(x).at(y) != -1 && groups.at(x).at(y) != r.id)
                     merge_regions(r, regions.at(groups.at(x).at(y)));
@@ -1199,7 +1229,16 @@ class HeAPPlacer
             for (int x = 0; x <= p->max_x; x++)
                 for (int y = 0; y <= p->max_y; y++) {
                     // Either already in a group, or not overutilised. Ignore
-                    if (groups.at(x).at(y) != -1 || (occ_at(x, y) <= bels_at(x, y)))
+                    if (groups.at(x).at(y) != -1)
+                        continue;
+                    bool overutilised = false;
+                    for (size_t t = 0; t < beltype.size(); t++) {
+                        if (occ_at(x, y, t) > bels_at(x, y, t)) {
+                            overutilised = true;
+                            break;
+                        }
+                    }
+                    if (!overutilised)
                         continue;
                     // log_info("%d %d %d\n", x, y, occ_at(x, y));
                     int id = int(regions.size());
@@ -1208,8 +1247,10 @@ class HeAPPlacer
                     reg.id = id;
                     reg.x0 = reg.x1 = x;
                     reg.y0 = reg.y1 = y;
-                    reg.bels = bels_at(x, y);
-                    reg.cells = occ_at(x, y);
+                    for (size_t t = 0; t < beltype.size(); t++) {
+                        reg.bels.push_back(bels_at(x, y, t));
+                        reg.cells.push_back(occ_at(x, y, t));
+                    }
                     // Make sure we cover carries, etc
                     grow_region(reg, reg.x0, reg.y0, reg.x1, reg.y1, true);
 
@@ -1223,11 +1264,13 @@ class HeAPPlacer
                         if (reg.x1 < p->max_x) {
                             bool over_occ_x = false;
                             for (int y1 = reg.y0; y1 <= reg.y1; y1++) {
-                                if (occ_at(reg.x1 + 1, y1) > bels_at(reg.x1 + 1, y1)) {
-                                    // log_info("(%d, %d) occ %d bels %d\n", reg.x1+ 1, y1, occ_at(reg.x1 + 1, y1),
-                                    // bels_at(reg.x1 + 1, y1));
-                                    over_occ_x = true;
-                                    break;
+                                for (size_t t = 0; t < beltype.size(); t++) {
+                                    if (occ_at(reg.x1 + 1, y1, t) > bels_at(reg.x1 + 1, y1, t)) {
+                                        // log_info("(%d, %d) occ %d bels %d\n", reg.x1+ 1, y1, occ_at(reg.x1 + 1, y1),
+                                        // bels_at(reg.x1 + 1, y1));
+                                        over_occ_x = true;
+                                        break;
+                                    }
                                 }
                             }
                             if (over_occ_x) {
@@ -1239,11 +1282,13 @@ class HeAPPlacer
                         if (reg.y1 < p->max_y) {
                             bool over_occ_y = false;
                             for (int x1 = reg.x0; x1 <= reg.x1; x1++) {
-                                if (occ_at(x1, reg.y1 + 1) > bels_at(x1, reg.y1 + 1)) {
-                                    // log_info("(%d, %d) occ %d bels %d\n", x1, reg.y1 + 1, occ_at(x1, reg.y1 + 1),
-                                    // bels_at(x1, reg.y1 + 1));
-                                    over_occ_y = true;
-                                    break;
+                                for (size_t t = 0; t < beltype.size(); t++) {
+                                    if (occ_at(x1, reg.y1 + 1, t) > bels_at(x1, reg.y1 + 1, t)) {
+                                        // log_info("(%d, %d) occ %d bels %d\n", x1, reg.y1 + 1, occ_at(x1, reg.y1 + 1),
+                                        // bels_at(x1, reg.y1 + 1));
+                                        over_occ_y = true;
+                                        break;
+                                    }
                                 }
                             }
                             if (over_occ_y) {
@@ -1299,11 +1344,12 @@ class HeAPPlacer
                             break;
                     }
                     if (!changed) {
-                        if (reg.cells > reg.bels)
-                            log_error("Failed to expand region (%d, %d) |_> (%d, %d) of %d %ss\n", reg.x0, reg.y0,
-                                      reg.x1, reg.y1, reg.cells, beltype.c_str(ctx));
-                        else
-                            break;
+                        for (auto bt : sorted(beltype)) {
+                            if (reg.cells > reg.bels)
+                                log_error("Failed to expand region (%d, %d) |_> (%d, %d) of %d %ss\n", reg.x0, reg.y0,
+                                          reg.x1, reg.y1, reg.cells.at(type_index.at(bt)), bt.c_str(ctx));
+                        }
+                        break;
                     }
                 }
             }
@@ -1322,7 +1368,8 @@ class HeAPPlacer
             for (int x = r.x0; x <= r.x1; x++) {
                 for (int y = r.y0; y <= r.y1; y++) {
                     std::copy(cal.at(x).at(y).begin(), cal.at(x).at(y).end(), std::back_inserter(cut_cells));
-                    total_bels += bels_at(x, y);
+                    for (size_t t = 0; t < beltype.size(); t++)
+                        total_bels += bels_at(x, y, t);
                 }
             }
             for (auto &cell : cut_cells) {
@@ -1372,10 +1419,11 @@ class HeAPPlacer
             while (trimmed_l < (dir ? r.y1 : r.x1)) {
                 bool have_bels = false;
                 for (int i = dir ? r.x0 : r.y0; i <= (dir ? r.x1 : r.y1); i++)
-                    if (bels_at(dir ? i : trimmed_l, dir ? trimmed_l : i) > 0) {
-                        have_bels = true;
-                        break;
-                    }
+                    for (size_t t = 0; t < beltype.size(); t++)
+                        if (bels_at(dir ? i : trimmed_l, dir ? trimmed_l : i, t) > 0) {
+                            have_bels = true;
+                            break;
+                        }
                 if (have_bels)
                     break;
                 trimmed_l++;
@@ -1383,10 +1431,11 @@ class HeAPPlacer
             while (trimmed_r > (dir ? r.y0 : r.x0)) {
                 bool have_bels = false;
                 for (int i = dir ? r.x0 : r.y0; i <= (dir ? r.x1 : r.y1); i++)
-                    if (bels_at(dir ? i : trimmed_r, dir ? trimmed_r : i) > 0) {
-                        have_bels = true;
-                        break;
-                    }
+                    for (size_t t = 0; t < beltype.size(); t++)
+                        if (bels_at(dir ? i : trimmed_r, dir ? trimmed_r : i, t) > 0) {
+                            have_bels = true;
+                            break;
+                        }
                 if (have_bels)
                     break;
                 trimmed_r--;
@@ -1396,50 +1445,85 @@ class HeAPPlacer
                 return {};
             // Now find the initial target cut that minimises utilisation imbalance, whilst
             // meeting the clearance requirements for any large macros
-            int left_cells = pivot_cells, right_cells = total_cells - pivot_cells;
-            int left_bels = 0, right_bels = total_bels;
+            std::vector<int> left_cells_v(beltype.size(), 0), right_cells_v(beltype.size(), 0);
+            std::vector<int> left_bels_v(beltype.size(), 0), right_bels_v(r.bels);
+            for (int i = 0; i <= pivot; i++)
+                left_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.at(cut_cells.at(i)->name);
+            for (int i = pivot + 1; i <= int(cut_cells.size()); i++)
+                right_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.at(cut_cells.at(i)->name);
+
             int best_tgt_cut = -1;
             double best_deltaU = std::numeric_limits<double>::max();
-            std::pair<int, int> target_cut_bels;
+            // std::pair<int, int> target_cut_bels;
+            std::vector<int> slither_bels(beltype.size(), 0);
             for (int i = trimmed_l; i <= trimmed_r; i++) {
-                int slither_bels = 0;
+                for (size_t t = 0; t < beltype.size(); t++)
+                    slither_bels.at(t) = 0;
                 for (int j = dir ? r.x0 : r.y0; j <= (dir ? r.x1 : r.y1); j++) {
-                    slither_bels += dir ? bels_at(j, i) : bels_at(i, j);
+                    for (size_t t = 0; t < beltype.size(); t++)
+                        slither_bels.at(t) += dir ? bels_at(j, i, t) : bels_at(i, j, t);
                 }
-                left_bels += slither_bels;
-                right_bels -= slither_bels;
+                for (size_t t = 0; t < beltype.size(); t++) {
+                    left_bels_v.at(t) += slither_bels.at(t);
+                    right_bels_v.at(t) -= slither_bels.at(t);
+                }
+
                 if (((i - trimmed_l) + 1) >= clearance_l && ((trimmed_r - i) + 1) >= clearance_r) {
                     // Solution is potentially valid
-                    double aU =
-                            std::abs(double(left_cells) / double(left_bels) - double(right_cells) / double(right_bels));
+                    double aU = 0;
+                    for (size_t t = 0; t < beltype.size(); t++)
+                        aU += std::abs(double(left_cells_v.at(t)) / double(std::max(left_bels_v.at(t), 1)) -
+                                       double(right_cells_v.at(t)) / double(std::max(right_bels_v.at(t), 1)));
                     if (aU < best_deltaU) {
                         best_deltaU = aU;
                         best_tgt_cut = i;
-                        target_cut_bels = std::make_pair(left_bels, right_bels);
                     }
                 }
             }
             if (best_tgt_cut == -1)
                 return {};
-            left_bels = target_cut_bels.first;
-            right_bels = target_cut_bels.second;
+            // left_bels = target_cut_bels.first;
+            // right_bels = target_cut_bels.second;
+            for (size_t t = 0; t < beltype.size(); t++) {
+                left_bels_v.at(t) = 0;
+                right_bels_v.at(t) = 0;
+            }
+            for (int x = r.x0; x <= dir ? r.x1 : best_tgt_cut; x++)
+                for (int y = r.y0; y <= dir ? best_tgt_cut : r.y1; y++) {
+                    for (size_t t = 0; t < beltype.size(); t++) {
+                        left_bels_v.at(t) += bels_at(x, y, t);
+                    }
+                }
+            for (int x = dir ? r.x0 : (best_tgt_cut + 1); x <= r.x1; x++)
+                for (int y = dir ? (best_tgt_cut + 1) : r.y0; y <= r.y1; y++) {
+                    for (size_t t = 0; t < beltype.size(); t++) {
+                        right_bels_v.at(t) += bels_at(x, y, t);
+                    }
+                }
             // log_info("pivot %d target cut %d lc %d lb %d rc %d rb %d\n", pivot, best_tgt_cut, left_cells, left_bels,
             // right_cells, right_bels);
 
             // Peturb the source cut to eliminate overutilisation
-            while (pivot > 0 && (double(left_cells) / double(left_bels) > double(right_cells) / double(right_bels))) {
+            auto is_part_overutil = [&](bool r) {
+                double delta = 0;
+                for (size_t t = 0; t < left_cells_v.size(); t++) {
+                    delta += double(left_cells_v.at(t)) / double(std::max(left_bels_v.at(t), 1)) -
+                             double(right_cells_v.at(t)) / double(std::max(right_bels_v.at(t), 1));
+                }
+                return r ? delta < 0 : delta > 0;
+            };
+            while (pivot > 0 && is_part_overutil(false)) {
                 auto &move_cell = cut_cells.at(pivot);
                 int size = p->chain_size.count(move_cell->name) ? p->chain_size.at(move_cell->name) : 1;
-                left_cells -= size;
-                right_cells += size;
+                left_cells_v.at(type_index.at(cut_cells.at(pivot)->type)) -= size;
+                right_cells_v.at(type_index.at(cut_cells.at(pivot)->type)) += size;
                 pivot--;
             }
-            while (pivot < int(cut_cells.size()) - 1 &&
-                   (double(left_cells) / double(left_bels) < double(right_cells) / double(right_bels))) {
+            while (pivot < int(cut_cells.size()) - 1 && is_part_overutil(true)) {
                 auto &move_cell = cut_cells.at(pivot + 1);
                 int size = p->chain_size.count(move_cell->name) ? p->chain_size.at(move_cell->name) : 1;
-                left_cells += size;
-                right_cells -= size;
+                left_cells_v.at(type_index.at(cut_cells.at(pivot)->type)) += size;
+                right_cells_v.at(type_index.at(cut_cells.at(pivot)->type)) -= size;
                 pivot++;
             }
             // log_info("peturbed pivot %d lc %d lb %d rc %d rb %d\n", pivot, left_cells, left_bels, right_cells,
@@ -1499,15 +1583,15 @@ class HeAPPlacer
             rl.y0 = r.y0;
             rl.x1 = dir ? r.x1 : best_tgt_cut;
             rl.y1 = dir ? best_tgt_cut : r.y1;
-            rl.cells = left_cells;
-            rl.bels = left_bels;
+            rl.cells = left_cells_v;
+            rl.bels = left_bels_v;
             rr.id = int(regions.size()) + 1;
             rr.x0 = dir ? r.x0 : (best_tgt_cut + 1);
             rr.y0 = dir ? (best_tgt_cut + 1) : r.y0;
             rr.x1 = r.x1;
             rr.y1 = r.y1;
-            rr.cells = right_cells;
-            rr.bels = right_bels;
+            rr.cells = right_cells_v;
+            rr.bels = right_bels_v;
             regions.push_back(rl);
             regions.push_back(rr);
             for (int x = rl.x0; x <= rl.x1; x++)
@@ -1528,7 +1612,7 @@ bool placer_heap(Context *ctx, PlacerHeapCfg cfg) { return HeAPPlacer(ctx, cfg).
 
 PlacerHeapCfg::PlacerHeapCfg(Context *ctx) : Settings(ctx)
 {
-    alpha = get<float>("placerHeap/alpha", 0.08);
+    alpha = get<float>("placerHeap/alpha", 0.04);
     criticalityExponent = get<int>("placerHeap/criticalityExponent", 2);
     timingWeight = get<int>("placerHeap/timingWeight", 10);
 }
