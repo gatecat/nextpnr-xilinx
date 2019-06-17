@@ -15,13 +15,14 @@
  *  ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  *  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
-*/
+ */
 
- #include "nextpnr.h"
+#include "nextpnr.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
-void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins) {
+void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins)
+{
     // See scripts/invertible_pins.py
     invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("CE0"));
     invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("CE1"));
@@ -209,7 +210,8 @@ void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unorder
     invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("RST_B"));
 }
 
-void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map<IdString, bool>> &tied_pins) {
+void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map<IdString, bool>> &tied_pins)
+{
     // List of pins that are tied to a fixed value when unused.
     // This doesn't include the PS8, due to the large number of tied-zero pins that are implied by the
     // list of Bel pins and dealt with as a special case in arch_place.cc
@@ -238,6 +240,31 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
 
         tied_pins[ram][ctx->id("INJECTSBITERR")] = false;
         tied_pins[ram][ctx->id("INJECTDBITERR")] = false;
+    }
+
+    // BUFGCTRL (by experiment)
+    for (int i = 0; i < 2; i++) {
+        tied_pins[ctx->id("BUFGCTRL")][ctx->id("S" + std::to_string(i))] = false;
+        tied_pins[ctx->id("BUFGCTRL")][ctx->id("IGNORE" + std::to_string(i))] = false;
+        tied_pins[ctx->id("BUFGCTRL")][ctx->id("CE" + std::to_string(i))] = false;
+    }
+
+    // URAM288 (by experiment)
+    for (IdString uram : {ctx->id("URAM288"), ctx->id("URAM288_BASE")}) {
+        for (char port : {'A', 'B'}) {
+            tied_pins[uram][ctx->id(std::string("RST_") + port)] = false;
+            tied_pins[uram][ctx->id(std::string("RDB_WR_") + port)] = false;
+            tied_pins[uram][ctx->id(std::string("OREG_CE_") + port)] = true;
+            tied_pins[uram][ctx->id(std::string("OREG_ECC_CE_") + port)] = true;
+            tied_pins[uram][ctx->id(std::string("EN_") + port)] = true;
+
+            tied_pins[uram][ctx->id(std::string("INJECT_SBITERR_") + port)] = false;
+            tied_pins[uram][ctx->id(std::string("INJECT_SBITERR_") + port)] = false;
+
+            for (int i = 0; i < 9; i++)
+                tied_pins[uram][ctx->id(std::string("BWE_") + port + std::to_string(i))] = true;
+        }
+        tied_pins[uram][ctx->id("SLEEP")] = false;
     }
 }
 

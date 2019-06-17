@@ -26,6 +26,7 @@
 #include "design_utils.h"
 #include "log.h"
 #include "nextpnr.h"
+#include "pins.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
@@ -541,11 +542,15 @@ struct USPacker
         flush_cells();
     }
 
+    std::unordered_map<IdString, std::unordered_map<IdString, bool>> tied_pins;
     std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
 
     void pack_constants()
     {
         log_info("Packing constants..\n");
+
+        get_tied_pins(ctx, tied_pins);
+        get_invertible_pins(ctx, invertible_pins);
 
         std::unique_ptr<CellInfo> gnd_cell{new CellInfo};
         gnd_cell->name = ctx->id("$PACKER_GND_DRV");
@@ -571,36 +576,66 @@ struct USPacker
 
         std::vector<IdString> dead_nets;
 
+        std::vector<std::tuple<CellInfo *, IdString, bool>> const_ports;
+
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (!tied_pins.count(ci->type))
+                continue;
+            auto &tp = tied_pins.at(ci->type);
+            for (auto port : tp) {
+                if (cell.second->ports.count(port.first) && cell.second->ports.at(port.first).net != nullptr &&
+                    cell.second->ports.at(port.first).net->driver.cell != nullptr)
+                    continue;
+                const_ports.emplace_back(ci, port.first, port.second);
+            }
+        }
+
         for (auto net : sorted(ctx->nets)) {
             NetInfo *ni = net.second;
             if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("GND")) {
                 IdString drv_cell = ni->driver.cell->name;
                 for (auto &usr : ni->users) {
-
-                    // Tie FF CE and SR high and invert, instead of connecting to GND as this is cheaper
-                    if ((usr.cell->type == ctx->id("FDRE") || usr.cell->type == ctx->id("FDCE") ||
-                         usr.cell->type == ctx->id("FDPE") || usr.cell->type == ctx->id("FDSE")) &&
-                        (usr.port == id_CE || usr.port == ctx->id("S") || usr.port == ctx->id("R") ||
-                         usr.port == ctx->id("PRE") || usr.port == ctx->id("CLR"))) {
-                        usr.cell->params[ctx->id("IS_" + usr.port.str(ctx) + "_INVERTED")] = "1";
-                        usr.cell->ports.at(usr.port).net = vcc_net.get();
-                        vcc_net->users.push_back(usr);
-                    } else {
-                        usr.cell->ports.at(usr.port).net = gnd_net.get();
-                        gnd_net->users.push_back(usr);
-                    }
+                    const_ports.emplace_back(usr.cell, usr.port, false);
+                    usr.cell->ports.at(usr.port).net = nullptr;
                 }
                 dead_nets.push_back(net.first);
                 ctx->cells.erase(drv_cell);
             } else if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("VCC")) {
                 IdString drv_cell = ni->driver.cell->name;
                 for (auto &usr : ni->users) {
-                    usr.cell->ports.at(usr.port).net = vcc_net.get();
-                    vcc_net->users.push_back(usr);
+                    const_ports.emplace_back(usr.cell, usr.port, true);
+                    usr.cell->ports.at(usr.port).net = nullptr;
                 }
                 dead_nets.push_back(net.first);
                 ctx->cells.erase(drv_cell);
             }
+        }
+
+        for (auto port : const_ports) {
+            CellInfo *ci;
+            IdString pname;
+            bool cval;
+            std::tie(ci, pname, cval) = port;
+
+            if (!ci->ports.count(pname)) {
+                ci->ports[pname].name = pname;
+                ci->ports[pname].type = PORT_IN;
+            }
+            if (ci->ports.at(pname).net != nullptr) {
+                // Case where a port with a default tie value is previously connected to an undriven net
+                NPNR_ASSERT(ci->ports.at(pname).net->driver.cell == nullptr);
+                disconnect_port(ctx, ci, pname);
+            }
+
+            if (!cval && invertible_pins.count(ci->type) && invertible_pins.at(ci->type).count(pname)) {
+                // Invertible pins connected to zero are optimised to a connection to Vcc (which is easier to route)
+                // and an inversion
+                ci->params[ctx->id("IS_" + pname.str(ctx) + "_INVERTED")] = Property(1);
+                cval = true;
+            }
+
+            connect_port(ctx, cval ? vcc_net.get() : gnd_net.get(), ci, pname);
         }
 
         ctx->cells[gnd_cell->name] = std::move(gnd_cell);

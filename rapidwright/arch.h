@@ -714,8 +714,8 @@ struct Arch : BaseCtx
 
     bool usp_bel_hard_unavail(BelId bel) const
     {
-        if (chip_info->height > 600 && (bel.tile / chip_info->width) < 752) // constrain to SLR0
-            return true;
+        // if (chip_info->height > 600 && (bel.tile / chip_info->width) < 752) // constrain to SLR0
+        //    return true;
         if ((getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC) &&
             ((bel.tile % chip_info->width) != 0))
             return true; // PSEUDO drivers must be at x=0 to have access to the global pseudo-network
