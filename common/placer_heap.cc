@@ -558,7 +558,8 @@ class HeAPPlacer
     {
         const auto &base = cell_locs[cell->name];
         for (auto child : cell->constr_children) {
-            chain_size[root->name]++;
+            if (root->type != id_CARRY8 || child->type != id_SLICE_LUTX)
+                chain_size[root->name]++;
             if (child->constr_x != child->UNCONSTR)
                 cell_locs[child->name].x = std::max(0, std::min(max_x, base.x + child->constr_x));
             else
@@ -961,7 +962,7 @@ class HeAPPlacer
         sl_time += std::chrono::duration<float>(endt - startt).count();
     }
     // Implementation of the cut-based spreading as described in the HeAP/SimPL papers
-    static constexpr float beta = 0.47;
+    static constexpr float beta = 0.6;
 
     struct ChainExtent
     {
@@ -1025,7 +1026,7 @@ class HeAPPlacer
             for (auto &r : regions) {
                 if (merged_regions.count(r.id))
                     continue;
-#if 1
+#if 0
                 for (auto t : sorted(beltype)) {
                     log_info("%s (%d, %d) |_> (%d, %d) %d/%d\n", t.c_str(ctx), r.x0, r.y0, r.x1, r.y1,
                              r.cells.at(type_index.at(t)), r.bels.at(type_index.at(t)));
@@ -1108,7 +1109,7 @@ class HeAPPlacer
         {
             occupancy.resize(p->max_x + 1,
                              std::vector<std::vector<int>>(p->max_y + 1, std::vector<int>(beltype.size(), 0)));
-            groups.resize(p->max_x + 1, std::vector<int>(p->max_y + 1 - 1));
+            groups.resize(p->max_x + 1, std::vector<int>(p->max_y + 1, -1));
             chaines.resize(p->max_x + 1, std::vector<ChainExtent>(p->max_y + 1));
             cells_at_location.resize(p->max_x + 1, std::vector<std::vector<CellInfo *>>(p->max_y + 1));
             for (int x = 0; x <= p->max_x; x++)
@@ -1198,7 +1199,7 @@ class HeAPPlacer
             auto process_location = [&](int x, int y) {
                 // Merge with any overlapping regions
                 if (groups.at(x).at(y) == -1) {
-                    for (int t = 0; t < beltype.size(); t++) {
+                    for (int t = 0; t < int(beltype.size()); t++) {
                         r.bels.at(t) += bels_at(x, y, t);
                         r.cells.at(t) += occ_at(x, y, t);
                     }
@@ -1391,9 +1392,10 @@ class HeAPPlacer
                     break;
                 pivot++;
             }
-            if (pivot == int(cut_cells.size()))
+            if (pivot >= int(cut_cells.size())) {
                 pivot = int(cut_cells.size()) - 1;
-            // log_info("orig pivot %d lc %d rc %d\n", pivot, pivot_cells, r.cells - pivot_cells);
+            }
+            //log_info("orig pivot %d/%d lc %d rc %d\n", pivot, int(cut_cells.size()), pivot_cells, total_cells - pivot_cells);
 
             // Find the clearance required either side of the pivot
             int clearance_l = 0, clearance_r = 0;
@@ -1448,9 +1450,9 @@ class HeAPPlacer
             std::vector<int> left_cells_v(beltype.size(), 0), right_cells_v(beltype.size(), 0);
             std::vector<int> left_bels_v(beltype.size(), 0), right_bels_v(r.bels);
             for (int i = 0; i <= pivot; i++)
-                left_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.at(cut_cells.at(i)->name);
-            for (int i = pivot + 1; i <= int(cut_cells.size()); i++)
-                right_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.at(cut_cells.at(i)->name);
+                left_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.count(cut_cells.at(i)->name) ? p->chain_size.at(cut_cells.at(i)->name) : 1;
+            for (int i = pivot + 1; i < int(cut_cells.size()); i++)
+                right_cells_v.at(type_index.at(cut_cells.at(i)->type)) += p->chain_size.count(cut_cells.at(i)->name) ? p->chain_size.at(cut_cells.at(i)->name) : 1;
 
             int best_tgt_cut = -1;
             double best_deltaU = std::numeric_limits<double>::max();
@@ -1488,8 +1490,8 @@ class HeAPPlacer
                 left_bels_v.at(t) = 0;
                 right_bels_v.at(t) = 0;
             }
-            for (int x = r.x0; x <= dir ? r.x1 : best_tgt_cut; x++)
-                for (int y = r.y0; y <= dir ? best_tgt_cut : r.y1; y++) {
+            for (int x = r.x0; x <= (dir ? r.x1 : best_tgt_cut); x++)
+                for (int y = r.y0; y <= (dir ? best_tgt_cut : r.y1); y++) {
                     for (size_t t = 0; t < beltype.size(); t++) {
                         left_bels_v.at(t) += bels_at(x, y, t);
                     }
@@ -1500,8 +1502,10 @@ class HeAPPlacer
                         right_bels_v.at(t) += bels_at(x, y, t);
                     }
                 }
-            // log_info("pivot %d target cut %d lc %d lb %d rc %d rb %d\n", pivot, best_tgt_cut, left_cells, left_bels,
-            // right_cells, right_bels);
+            if (std::accumulate(left_bels_v.begin(), left_bels_v.end(), 0) == 0 || std::accumulate(right_bels_v.begin(), right_bels_v.end(), 0) == 0)
+                return {};
+            //log_info("pivot %d target cut %d lc %d lb %d rc %d rb %d\n", pivot, best_tgt_cut, std::accumulate(left_cells_v.begin(), left_cells_v.end(), 0), std::accumulate(left_bels_v.begin(), left_bels_v.end(), 0),
+            //          std::accumulate(right_cells_v.begin(), right_cells_v.end(), 0), std::accumulate(right_bels_v.begin(), right_bels_v.end(), 0));
 
             // Peturb the source cut to eliminate overutilisation
             auto is_part_overutil = [&](bool r) {
@@ -1612,7 +1616,7 @@ bool placer_heap(Context *ctx, PlacerHeapCfg cfg) { return HeAPPlacer(ctx, cfg).
 
 PlacerHeapCfg::PlacerHeapCfg(Context *ctx) : Settings(ctx)
 {
-    alpha = get<float>("placerHeap/alpha", 0.04);
+    alpha = get<float>("placerHeap/alpha", 0.08);
     criticalityExponent = get<int>("placerHeap/criticalityExponent", 2);
     timingWeight = get<int>("placerHeap/timingWeight", 10);
 }

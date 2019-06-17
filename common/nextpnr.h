@@ -339,6 +339,7 @@ struct Property
     {
         is_string = false;
         num = other;
+        str = std::to_string(other);
     }
 };
 
