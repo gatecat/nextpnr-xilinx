@@ -32,3 +32,4 @@ install_manifest.txt
 *-coverage.info
 *.jar
 *.mf
+*.bba
