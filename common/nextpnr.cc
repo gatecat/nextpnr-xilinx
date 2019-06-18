@@ -402,9 +402,11 @@ void Context::check() const
                 if (port.second.type == PORT_OUT) {
                     NPNR_ASSERT(net->driver.cell == c.second.get() && net->driver.port == port.first);
                 } else if (port.second.type == PORT_IN) {
+#if 0
                     NPNR_ASSERT(std::count_if(net->users.begin(), net->users.end(), [&](const PortRef &pr) {
                                     return pr.cell == c.second.get() && pr.port == port.first;
                                 }) == 1);
+#endif
                 }
             }
         }
