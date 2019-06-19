@@ -1025,6 +1025,31 @@ struct USPacker
 
         generic_xform(io_rules, true);
     }
+
+    void pack_bram()
+    {
+        log_info("Packing BRAM..\n");
+        std::unordered_map<IdString, XFormRule> bram_rules;
+        bram_rules[ctx->id("RAMB18E2")].new_type = ctx->id("RAMB18E2_U_RAMB18E2");
+        bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMBFIFO36E2_RAMBFIFO36E2;
+
+        generic_xform(bram_rules, true);
+
+        // These pins have no logical mapping, so must be tied after transformation
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == ctx->id("RAMB18E2_U_RAMB18E2")) {
+                for (int i = 2; i < 4; i++) {
+                    IdString port = ctx->id("WEA" + std::to_string(i));
+                    if (!ci->ports.count(port)) {
+                        ci->ports[port].name = port;
+                        ci->ports[port].type = PORT_IN;
+                        connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
+                    }
+                }
+            }
+        }
+    }
 };
 
 bool Arch::pack()
@@ -1036,6 +1061,7 @@ bool Arch::pack()
     packer.pack_carries();
     packer.pack_luts();
     packer.pack_dram();
+    packer.pack_bram();
     packer.pack_ffs();
     packer.pack_lutffs();
     assignArchInfo();

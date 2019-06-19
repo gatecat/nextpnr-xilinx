@@ -194,10 +194,9 @@ public class json2dcp {
         return name.replace("\\", "__").replace("/", "_");
     }
 
-    public static String fixup_init(String orig, int K) {
+    public static String fixup_init(String orig, int bits) {
         // Vivado seems *very* fussy here
         String hex = orig.split("'h")[1];
-        int bits = (1 << K);
         int digits = Math.max(bits / 4, 1);
         while (hex.length() < digits)
             hex = "0" + hex;
@@ -284,22 +283,22 @@ public class json2dcp {
                     if (param.getKey().equals("INIT")) {
                         switch(unitype) {
                             case LUT1:
-                                value = fixup_init(value, 1);
+                                value = fixup_init(value, 1<<1);
                                 break;
                             case LUT2:
-                                value = fixup_init(value, 2);
+                                value = fixup_init(value, 1<<2);
                                 break;
                             case LUT3:
-                                value = fixup_init(value, 3);
+                                value = fixup_init(value, 1<<3);
                                 break;
                             case LUT4:
-                                value = fixup_init(value, 4);
+                                value = fixup_init(value, 1<<4);
                                 break;
                             case LUT5:
-                                value = fixup_init(value, 5);
+                                value = fixup_init(value, 1<<5);
                                 break;
                             case LUT6:
-                                value = fixup_init(value, 6);
+                                value = fixup_init(value, 1<<6);
                                 break;
                             case FDRE:
                             case FDSE:
@@ -307,6 +306,12 @@ public class json2dcp {
                             case FDPE:
                                 value = "1'b" + value.substring(value.length() - 1);
                                 break;
+                        }
+                    } else if (unitype == Unisim.RAMB18E2 || unitype == Unisim.RAMB36E2) {
+                        if (param.getKey().equals("INIT_A") || param.getKey().equals("INIT_B") || param.getKey().startsWith("SRVAL_")) {
+                            value = fixup_init(value, unitype == Unisim.RAMB36E2 ? 36 : 18);
+                        } else if (param.getKey().startsWith("INIT_") || param.getKey().startsWith("INITP_")) {
+                            value = fixup_init(value, 256);
                         }
                     }
                     nc.rwCell.addProperty(param.getKey(), value);

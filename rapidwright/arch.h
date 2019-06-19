@@ -98,6 +98,13 @@ enum LogicBelTypeZ
     BEL_HARD0
 };
 
+enum BRAMBelTypeZ
+{
+    BEL_RAM36 = 0,
+    BEL_RAM18_L = 1,
+    BEL_RAM18_H = 2
+};
+
 NPNR_PACKED_STRUCT(struct BelInfoPOD {
     int32_t name;    // bel name (in site) constid
     int32_t type;    // compatible type name constid
@@ -590,15 +597,23 @@ struct Arch : BaseCtx
         } halfs[8];
     };
 
+    struct BRAMTileStatus
+    {
+        CellInfo *cells[3];
+    };
+
     struct TileStatus
     {
         LogicTileStatus *lts = nullptr;
+        BRAMTileStatus *bts = nullptr;
         std::vector<CellInfo *> boundcells;
 
         ~TileStatus()
         {
             if (lts != nullptr)
                 delete lts;
+            if (bts != nullptr)
+                delete bts;
         }
     };
 
@@ -685,6 +700,18 @@ struct Arch : BaseCtx
         }
     }
 
+    void updateBramBel(BelId bel, CellInfo *cell)
+    {
+        if (cell->type != id_RAMBFIFO18E2_RAMBFIFO18E2 && cell->type != id_RAMBFIFO36E2_RAMBFIFO36E2)
+            return;
+        auto &tts = tileStatus[bel.tile];
+        if (tts.bts == nullptr)
+            tts.bts = new BRAMTileStatus();
+        int z = locInfo(bel).bel_data[bel.index].z;
+        NPNR_ASSERT(z < 3);
+        tts.bts->cells[z] = cell;
+    }
+
     void bindBel(BelId bel, CellInfo *cell, PlaceStrength strength)
     {
         NPNR_ASSERT(bel != BelId());
@@ -719,6 +746,8 @@ struct Arch : BaseCtx
         if ((getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC) &&
             ((bel.tile % chip_info->width) != 0))
             return true; // PSEUDO drivers must be at x=0 to have access to the global pseudo-network
+        // if (getBelTileType(bel) == id_BRAM && locInfo(bel).bel_data[bel.index].site_variant != 0)
+        //    return true; // Only using site variant 0 for BRAM
         return false;
     }
 
@@ -1010,7 +1039,11 @@ struct Arch : BaseCtx
             const CellInfo *lut5 = lts->cells[(eight << 4) | BEL_5LUT];
             if (lut5 != nullptr)
                 return true;
-        }
+        } /*else if (chip_info->tile_types[chip_info->tile_insts[pip.tile].type].type == ID_BRAM) {
+            auto &pd = locInfo(pip).pip_data[pip.index];
+            if (pd.site != -1 && pd.site_variant != 0)
+                return true;
+        }*/
         return false;
     }
 

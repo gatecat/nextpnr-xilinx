@@ -147,7 +147,7 @@ public class bbaexport {
             if (b.getBELClass() == BELClass.PORT)
                 return null;
             NextpnrBel nb = new NextpnrBel(b.getName(),
-                    bels.size(), getBelTypeOverride(b.getBELType()), b.getBELType(), s.getSite().getSiteIndexInTile(), siteVariant, getBelZoverride(s.getTile(), b),
+                    bels.size(), getBelTypeOverride(b.getBELType()), b.getBELType(), s.getSite().getSiteIndexInTile(), siteVariant, getBelZoverride(s.getTile(), s.getSite(), b),
                     (b.getBELClass() == BELClass.RBEL) ? 1 : 0);
             bels.add(nb);
             belsInTile.put(s.getTile(), belsInTile.getOrDefault(s.getTile(), 0) + 1);
@@ -412,7 +412,12 @@ public class bbaexport {
         return constIds.size() - 1;
     }
 
-    private static int getBelZoverride(Tile t, BEL b) {
+    private static int getBelZoverride(Tile t, Site s, BEL b) {
+        if (b.getSiteTypeEnum() == SiteTypeEnum.RAMBFIFO36E1 && b.getBELType().equals("RAMBFIFO36E2_RAMBFIFO36E2"))
+            return 0;
+        if (b.getSiteTypeEnum() == SiteTypeEnum.RAMBFIFO18 && b.getBELType().equals("RAMBFIFO18E2_RAMBFIFO18E2"))
+            return 1 + (s.getInstanceY() % 2);
+
         if (b.getSiteTypeEnum() != SiteTypeEnum.SLICEL && b.getSiteTypeEnum() != SiteTypeEnum.SLICEM)
             return belsInTile.getOrDefault(t, 0);
 

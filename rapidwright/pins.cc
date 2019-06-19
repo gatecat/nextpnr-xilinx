@@ -224,7 +224,16 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
             tied_pins[ram][ctx->id(std::string("CASDOMUX") + port)] = false;
             tied_pins[ram][ctx->id(std::string("CASDOMUXEN_") + port)] = true;
             tied_pins[ram][ctx->id(std::string("CASOREGIMUXEN_") + port)] = true;
+            tied_pins[ram][ctx->id(std::string("CASOREGIMUX") + port)] = false;
         }
+
+        int we_width = (ram == ctx->id("RAMB18E2") ? 4 : 8);
+        for (int i = 0; i < we_width; i++) {
+            if (i < we_width / 2)
+                tied_pins[ram][ctx->id(std::string("WEA[") + std::to_string(i) + "]")] = true;
+            tied_pins[ram][ctx->id(std::string("WEBWE[") + std::to_string(i) + "]")] = true;
+        }
+
         tied_pins[ram][ctx->id("CLKARDCLK")] = false;
         tied_pins[ram][ctx->id("CLKBWRCLK")] = false;
         tied_pins[ram][ctx->id("ENARDEN")] = false;
@@ -238,8 +247,8 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         tied_pins[ram][ctx->id("RSTREGB")] = false;
         tied_pins[ram][ctx->id("SLEEP")] = false;
 
-        tied_pins[ram][ctx->id("INJECTSBITERR")] = false;
-        tied_pins[ram][ctx->id("INJECTDBITERR")] = false;
+        // tied_pins[ram][ctx->id("INJECTSBITERR")] = false;
+        // tied_pins[ram][ctx->id("INJECTDBITERR")] = false;
     }
 
     // BUFGCTRL (by experiment)
@@ -262,7 +271,7 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
             tied_pins[uram][ctx->id(std::string("INJECT_SBITERR_") + port)] = false;
 
             for (int i = 0; i < 9; i++)
-                tied_pins[uram][ctx->id(std::string("BWE_") + port + std::to_string(i))] = true;
+                tied_pins[uram][ctx->id(std::string("BWE_") + port + "[" + std::to_string(i) + "]")] = true;
         }
         tied_pins[uram][ctx->id("SLEEP")] = false;
     }

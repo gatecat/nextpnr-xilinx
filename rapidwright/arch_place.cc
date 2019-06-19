@@ -258,6 +258,12 @@ bool Arch::isBelLocationValid(BelId bel) const
                 return false;
             }
         }
+    } else if (belTileType == id_BRAM) {
+        if (!tileStatus[bel.tile].bts)
+            return true;
+        BRAMTileStatus *bts = tileStatus[bel.tile].bts;
+        if (bts->cells[0] && (bts->cells[1] || bts->cells[2]))
+            return false; // 36-bit RAM conflicts with both 18-bit RAMS
     } else {
         for (auto bel : getBelsByTile(bel.tile % chip_info->width, bel.tile / chip_info->width))
             if (getBoundBelCell(bel) != nullptr && usp_bel_hard_unavail(bel))
