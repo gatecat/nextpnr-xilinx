@@ -6,4 +6,5 @@
 *.log
 *.vcd
 *.jou
+*.bit
 .Xil
