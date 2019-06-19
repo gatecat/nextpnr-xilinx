@@ -1081,6 +1081,31 @@ struct USPacker
                     .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
         }
 
+        for (int i = 0; i < 4; i++) {
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                    .clear();
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                    .clear();
+            // Connects to two WEBWE bel pins
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                    .push_back(ctx->id("WEBWEL" + std::to_string(i)));
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                    .push_back(ctx->id("WEBWEU" + std::to_string(i)));
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                    .push_back(ctx->id("WEAL" + std::to_string(i)));
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                    .push_back(ctx->id("WEAU" + std::to_string(i)));
+            // Not used in SDP mode
+            sdp_bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
+        }
+
         // 72-bit BRAMs: drop upper bits of WEB in TDP mode
         for (int i = 4; i < 8; i++)
             bram_rules[ctx->id("RAMB36E2")]
@@ -1089,8 +1114,10 @@ struct USPacker
         // Process SDP BRAM first
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
-            if (ci->type == ctx->id("RAMB18E2") &&
-                int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36)
+            if ((ci->type == ctx->id("RAMB18E2") &&
+                 int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36) ||
+                (ci->type == ctx->id("RAMB36E2") &&
+                 int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 72))
                 xform_cell(sdp_bram_rules, ci);
         }
 
@@ -1102,7 +1129,7 @@ struct USPacker
                     int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
                     int we_width;
                     if (ci->type == ctx->id("RAMB36E2"))
-                        we_width = (port == 'B') ? 8 : 4;
+                        we_width = 4;
                     else
                         we_width = (port == 'B') ? 4 : 2;
                     if (write_width >= (9 * we_width))
