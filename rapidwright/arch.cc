@@ -446,7 +446,10 @@ void Arch::routeVcc()
         std::queue<WireId> visit;
         std::unordered_map<WireId, PipId> backtrace;
         WireId dest = WireId();
-        visit.push(getCtx()->getNetinfoSinkWire(vcc, usr));
+        WireId sink = getCtx()->getNetinfoSinkWire(vcc, usr);
+        if (sink == WireId())
+            log_error("Pin '%s' of bel '%s' has no associated wire\n", usr.port.c_str(this), nameOfBel(usr.cell->bel));
+        visit.push(sink);
         while (!visit.empty()) {
             WireId curr = visit.front();
             visit.pop();

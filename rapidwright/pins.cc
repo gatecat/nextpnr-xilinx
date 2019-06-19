@@ -23,6 +23,7 @@ NEXTPNR_NAMESPACE_BEGIN
 
 void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins)
 {
+    // List of pins that have an IS_x_INVERTED attributed, so we can optimise tie-zero to tie-one for these pins
     // See scripts/invertible_pins.py
     invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("CE0"));
     invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("CE1"));
@@ -222,17 +223,21 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
             tied_pins[ram][ctx->id(std::string("ADDREN") + port)] = true;
             tied_pins[ram][ctx->id(std::string("CASDIMUX") + port)] = false;
             tied_pins[ram][ctx->id(std::string("CASDOMUX") + port)] = false;
-            tied_pins[ram][ctx->id(std::string("CASDOMUXEN_") + port)] = true;
-            tied_pins[ram][ctx->id(std::string("CASOREGIMUXEN_") + port)] = true;
+            if (ram == ctx->id("RAMB18E2")) {
+                tied_pins[ram][ctx->id(std::string("CASDOMUXEN_") + port)] = true;
+                tied_pins[ram][ctx->id(std::string("CASOREGIMUXEN_") + port)] = true;
+            }
+
             tied_pins[ram][ctx->id(std::string("CASOREGIMUX") + port)] = false;
         }
 
-        int we_width = (ram == ctx->id("RAMB18E2") ? 4 : 8);
-        for (int i = 0; i < we_width; i++) {
-            if (i < we_width / 2)
-                tied_pins[ram][ctx->id(std::string("WEA[") + std::to_string(i) + "]")] = true;
+        int wea_width = (ram == ctx->id("RAMB18E2") ? 2 : 4);
+        int web_width = 4;
+
+        for (int i = 0; i < wea_width; i++)
+            tied_pins[ram][ctx->id(std::string("WEA[") + std::to_string(i) + "]")] = true;
+        for (int i = 0; i < web_width; i++)
             tied_pins[ram][ctx->id(std::string("WEBWE[") + std::to_string(i) + "]")] = true;
-        }
 
         tied_pins[ram][ctx->id("CLKARDCLK")] = false;
         tied_pins[ram][ctx->id("CLKBWRCLK")] = false;
@@ -247,8 +252,11 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         tied_pins[ram][ctx->id("RSTREGB")] = false;
         tied_pins[ram][ctx->id("SLEEP")] = false;
 
-        // tied_pins[ram][ctx->id("INJECTSBITERR")] = false;
-        // tied_pins[ram][ctx->id("INJECTDBITERR")] = false;
+        if (ram == ctx->id("RAMB36E2")) {
+            tied_pins[ram][ctx->id("INJECTSBITERR")] = false;
+            tied_pins[ram][ctx->id("INJECTDBITERR")] = false;
+            tied_pins[ram][ctx->id("ECCPIPECE")] = true;
+        }
     }
 
     // BUFGCTRL (by experiment)
@@ -274,6 +282,41 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
                 tied_pins[uram][ctx->id(std::string("BWE_") + port + "[" + std::to_string(i) + "]")] = true;
         }
         tied_pins[uram][ctx->id("SLEEP")] = false;
+    }
+}
+
+// Get a list of logical pins that have both L and U bel pins that need
+// to be connected for a 36-bit BRAM
+void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vector<std::string>>> &ul_pins)
+{
+    BelId spec_bel;
+    for (auto bel : ctx->getBels()) {
+        if (ctx->getBelType(bel) == id_RAMB36E2_RAMB36E2) {
+            spec_bel = bel;
+            break;
+        }
+    }
+    NPNR_ASSERT(spec_bel != BelId());
+    std::set<std::string> belpins;
+    for (auto &bp : ctx->getBelPins(spec_bel))
+        if (ctx->getBelPinType(spec_bel, bp) == PORT_IN)
+            belpins.insert(bp.str(ctx));
+    for (auto &bp : belpins) {
+        std::string bus_suffix = "";
+        std::string root_name = bp;
+        if (std::isdigit(bp.back())) {
+            auto root_end = bp.find_last_not_of("0123456789");
+            bus_suffix = bp.substr(root_end + 1);
+            root_name = bp.substr(0, root_end + 1);
+        }
+        if (root_name.back() != 'L')
+            continue;
+        std::string base_name = root_name.substr(0, root_name.length() - 1);
+        std::string complement = base_name + "U" + bus_suffix;
+        if (!belpins.count(complement))
+            continue;
+        std::string logical_name = bus_suffix.empty() ? base_name : (base_name + "[" + bus_suffix + "]");
+        ul_pins.emplace_back(ctx->id(logical_name), std::vector<std::string>{bp, complement});
     }
 }
 

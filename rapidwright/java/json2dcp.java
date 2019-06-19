@@ -88,6 +88,7 @@ public class json2dcp {
         public HashMap<String, NextpnrCellPort> ports;
         public HashMap<String, String> params;
         public HashMap<String, String> attrs;
+
         public Cell rwCell;
     }
 
@@ -203,11 +204,23 @@ public class json2dcp {
         return bits + "'h" + hex;
     }
 
+    public static ArrayList<String> get_physical_pins(Cell cell, String logical_pin) {
+        // Like cell.getPhysicalPinMapping; but returns all pins
+        ArrayList<String> phys_pins = new ArrayList<>();
+        var p2l = cell.getPinMappingsP2L();
+        for (var entry : p2l.entrySet()) {
+            if (entry.getValue().equals(logical_pin))
+                phys_pins.add(entry.getKey());
+        }
+        return phys_pins;
+    }
+
     public static void connect_log_and_phys(Net net, Cell cell, String logical_pin) {
         // Similar to RapidWright's net.connect; but handles some special cases correctly
         if (cell.getType().equals("INBUF") || cell.getType().equals("IBUFCTRL"))
             net.connect(cell, logical_pin); // must use connect here
-        else if (cell.getPhysicalPinMapping(logical_pin) == null || cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]")) {
+        else if (cell.getPhysicalPinMapping(logical_pin) == null || cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]") ||
+                    cell.getType().equals("RAMB36E2")) {
             // Create logical connection only
             EDIFPortInst epi;
             if (logical_pin.endsWith("]")) {
@@ -222,11 +235,14 @@ public class json2dcp {
                 epi = net.getLogicalNet().createPortInst(logical_pin, cell.getEDIFCellInst());
             }
             // If there is a physical pin connect it too
-            if (cell.getPhysicalPinMapping(logical_pin) != null &&
-                    cell.getBEL().getPin(cell.getPhysicalPinMapping(epi.getName())).getConnectedSitePinName() != null) {
-                String pin = cell.getBEL().getPin(cell.getPhysicalPinMapping(epi.getName())).getConnectedSitePinName();
-                net.addPin(new SitePinInst(epi.getDirection() == EDIFDirection.OUTPUT, pin, cell.getSiteInst()));
+            var phys_pins = get_physical_pins(cell, logical_pin);
+            for (String belpin : phys_pins) {
+                if (cell.getBEL().getPin(belpin).getConnectedSitePinName() != null) {
+                    String pin = cell.getBEL().getPin(belpin).getConnectedSitePinName();
+                    net.addPin(new SitePinInst(epi.getDirection() == EDIFDirection.OUTPUT, pin, cell.getSiteInst()));
+                }
             }
+
         } else {
             net.connect(cell, logical_pin);
         }
@@ -272,8 +288,10 @@ public class json2dcp {
                         String[] orig_ports = nc.attrs.get("X_ORIG_PORT_" + p.name).split(" ");
 
                         for (String orig : orig_ports)
-                            if (!orig.trim().isEmpty())
+                            if (!orig.trim().isEmpty()) {
                                 nc.rwCell.addPinMapping(p.name, orig.trim());
+
+                            }
                     }
 
                 }

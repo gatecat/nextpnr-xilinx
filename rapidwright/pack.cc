@@ -85,6 +85,7 @@ struct USPacker
                     ci->ports[new_name].name = new_name;
                     ci->ports[new_name].type = old_port.type;
                     connect_port(ctx, old_port.net, ci, new_name);
+                    ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
                 }
             } else {
                 IdString new_name;
@@ -1042,14 +1043,22 @@ struct USPacker
     {
         log_info("Packing BRAM..\n");
 
-        // Special rules for SDP BRAM
-        std::unordered_map<IdString, XFormRule> sdp_bram_rules;
-        sdp_bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
-        sdp_bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
-        // Rules for SDP BRAM
+        // Rules for normal TDP BRAM
         std::unordered_map<IdString, XFormRule> bram_rules;
         bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
         bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
+
+        // Some ports have upper/lower bel pins in 36-bit mode
+        std::vector<std::pair<IdString, std::vector<std::string>>> ul_pins;
+        get_bram36_ul_pins(ctx, ul_pins);
+        for (auto &ul : ul_pins) {
+            for (auto &bp : ul.second)
+                bram_rules[ctx->id("RAMB36E2")].port_multixform[ul.first].push_back(ctx->id(bp));
+        }
+        bram_rules[ctx->id("RAMB36E2")].port_multixform[ctx->id("ECCPIPECE")] = {ctx->id("ECCPIPECEL")};
+
+        // Special rules for SDP rules, relating to WE connectivity
+        std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
         for (int i = 0; i < 2; i++) {
             // Connects to two WEBWE bel pins
             sdp_bram_rules[ctx->id("RAMB18E2")]
@@ -1072,7 +1081,12 @@ struct USPacker
                     .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
         }
 
-        // Process PDP BRAM first
+        // 72-bit BRAMs: drop upper bits of WEB in TDP mode
+        for (int i = 4; i < 8; i++)
+            bram_rules[ctx->id("RAMB36E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))] = {};
+
+        // Process SDP BRAM first
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
             if (ci->type == ctx->id("RAMB18E2") &&
