@@ -41,6 +41,7 @@ struct USPacker
     {
         IdString new_type;
         std::unordered_map<IdString, IdString> port_xform;
+        std::unordered_map<IdString, std::vector<IdString>> port_multixform;
         std::unordered_map<IdString, IdString> param_xform;
         std::vector<std::pair<IdString, std::string>> set_attrs;
         std::vector<std::pair<IdString, Property>> set_params;
@@ -76,20 +77,31 @@ struct USPacker
             orig_port_names.push_back(port.first);
 
         for (auto pname : orig_port_names) {
-            IdString new_name;
-            if (rule.port_xform.count(pname)) {
-                new_name = rule.port_xform.at(pname);
+            if (rule.port_multixform.count(pname)) {
+                auto old_port = ci->ports.at(pname);
+                disconnect_port(ctx, ci, pname);
+                ci->ports.erase(pname);
+                for (auto new_name : rule.port_multixform.at(pname)) {
+                    ci->ports[new_name].name = new_name;
+                    ci->ports[new_name].type = old_port.type;
+                    connect_port(ctx, old_port.net, ci, new_name);
+                }
             } else {
-                std::string stripped_name;
-                for (auto c : pname.str(ctx))
-                    if (c != '[' && c != ']')
-                        stripped_name += c;
-                new_name = ctx->id(stripped_name);
+                IdString new_name;
+                if (rule.port_xform.count(pname)) {
+                    new_name = rule.port_xform.at(pname);
+                } else {
+                    std::string stripped_name;
+                    for (auto c : pname.str(ctx))
+                        if (c != '[' && c != ']')
+                            stripped_name += c;
+                    new_name = ctx->id(stripped_name);
+                }
+                if (new_name != pname) {
+                    rename_port(ctx, ci, pname, new_name);
+                }
+                ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
             }
-            if (new_name != pname) {
-                rename_port(ctx, ci, pname, new_name);
-            }
-            ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
         }
 
         std::vector<IdString> xform_params;
@@ -1029,9 +1041,44 @@ struct USPacker
     void pack_bram()
     {
         log_info("Packing BRAM..\n");
+
+        // Special rules for SDP BRAM
+        std::unordered_map<IdString, XFormRule> sdp_bram_rules;
+        sdp_bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
+        sdp_bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
+        // Rules for SDP BRAM
         std::unordered_map<IdString, XFormRule> bram_rules;
-        bram_rules[ctx->id("RAMB18E2")].new_type = ctx->id("RAMB18E2_L_RAMB18E2");
-        bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMBFIFO36E2_RAMBFIFO36E2;
+        bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
+        bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
+        for (int i = 0; i < 2; i++) {
+            // Connects to two WEBWE bel pins
+            sdp_bram_rules[ctx->id("RAMB18E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                    .push_back(ctx->id("WEBWE" + std::to_string(i * 2)));
+            sdp_bram_rules[ctx->id("RAMB18E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                    .push_back(ctx->id("WEBWE" + std::to_string(i * 2 + 1)));
+            // Not used in SDP mode
+            sdp_bram_rules[ctx->id("RAMB18E2")]
+                    .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
+        }
+        for (int i = 0; i < 2; i++) {
+            // Connects to two WEA bel pins
+            sdp_bram_rules[ctx->id("RAMB18E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
+                    .push_back(ctx->id("WEA" + std::to_string(i * 2)));
+            sdp_bram_rules[ctx->id("RAMB18E2")]
+                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
+                    .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
+        }
+
+        // Process PDP BRAM first
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == ctx->id("RAMB18E2") &&
+                int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36)
+                xform_cell(sdp_bram_rules, ci);
+        }
 
         // Rewrite byte enables according to data width
         for (auto cell : sorted(ctx->cells)) {
@@ -1063,12 +1110,12 @@ struct USPacker
             }
         }
 
-        generic_xform(bram_rules, true);
+        generic_xform(bram_rules, false);
 
         // These pins have no logical mapping, so must be tied after transformation
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
-            if (ci->type == ctx->id("RAMB18E2_L_RAMB18E2")) {
+            if (ci->type == id_RAMB18E2_RAMB18E2) {
                 for (int i = 2; i < 4; i++) {
                     IdString port = ctx->id("WEA" + std::to_string(i));
                     if (!ci->ports.count(port)) {

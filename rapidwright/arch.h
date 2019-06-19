@@ -100,9 +100,15 @@ enum LogicBelTypeZ
 
 enum BRAMBelTypeZ
 {
-    BEL_RAM36 = 0,
-    BEL_RAM18_L = 1,
-    BEL_RAM18_H = 2
+    BEL_RAMFIFO36 = 0,
+    BEL_RAM36 = 1,
+    BEL_FIFO36 = 2,
+
+    BEL_RAM18_U = 5,
+
+    BEL_RAMFIFO18_L = 8,
+    BEL_RAM18_L = 9,
+    BEL_FIFO18_L = 10,
 };
 
 NPNR_PACKED_STRUCT(struct BelInfoPOD {
@@ -599,7 +605,7 @@ struct Arch : BaseCtx
 
     struct BRAMTileStatus
     {
-        CellInfo *cells[3];
+        CellInfo *cells[12];
     };
 
     struct TileStatus
@@ -702,13 +708,15 @@ struct Arch : BaseCtx
 
     void updateBramBel(BelId bel, CellInfo *cell)
     {
-        if (cell->type != id_RAMBFIFO18E2_RAMBFIFO18E2 && cell->type != id_RAMBFIFO36E2_RAMBFIFO36E2)
+        if (cell->type != id_RAMBFIFO18E2_RAMBFIFO18E2 && cell->type != id_RAMBFIFO36E2_RAMBFIFO36E2 &&
+            cell->type != id_RAMB18E2_RAMB18E2 && cell->type != id_FIFO18E2_FIFO18E2 &&
+            cell->type != id_RAMB36E2_RAMB36E2 && cell->type != id_FIFO36E2_FIFO36E2)
             return;
         auto &tts = tileStatus[bel.tile];
         if (tts.bts == nullptr)
             tts.bts = new BRAMTileStatus();
         int z = locInfo(bel).bel_data[bel.index].z;
-        NPNR_ASSERT(z < 3);
+        NPNR_ASSERT(z < 12);
         tts.bts->cells[z] = cell;
     }
 
@@ -746,8 +754,6 @@ struct Arch : BaseCtx
         if ((getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC) &&
             ((bel.tile % chip_info->width) != 0))
             return true; // PSEUDO drivers must be at x=0 to have access to the global pseudo-network
-        // if (getBelTileType(bel) == id_BRAM && locInfo(bel).bel_data[bel.index].site_variant != 0)
-        //    return true; // Only using site variant 0 for BRAM
         return false;
     }
 

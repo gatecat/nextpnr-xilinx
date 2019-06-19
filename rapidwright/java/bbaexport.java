@@ -398,6 +398,9 @@ public class bbaexport {
         if (type.equals("BUFGCTRL_BUFGCTRL"))
             return "BUFGCTRL";
 
+        if (type.equals("RAMB18E2_U_RAMB18E2") || type.equals("RAMB18E2_L_RAMB18E2"))
+            return "RAMB18E2_RAMB18E2";
+
         return type;
     }
 
@@ -413,10 +416,25 @@ public class bbaexport {
     }
 
     private static int getBelZoverride(Tile t, Site s, BEL b) {
-        if (b.getSiteTypeEnum() == SiteTypeEnum.RAMBFIFO36E1 && b.getBELType().equals("RAMBFIFO36E2_RAMBFIFO36E2"))
-            return 0;
-        if (b.getSiteTypeEnum() == SiteTypeEnum.RAMBFIFO18 && b.getBELType().equals("RAMBFIFO18E2_RAMBFIFO18E2"))
-            return 1 + (s.getInstanceY() % 2);
+
+        if (t.getTileTypeEnum() == TileTypeEnum.BRAM) {
+            switch(b.getBELType()) {
+                case "RAMBFIFO36E2_RAMBFIFO36E2":
+                    return 0;
+                case "RAMB36E2_RAMB36E2":
+                    return 1;
+                case "FIFO36E2_FIFO36E2":
+                    return 2;
+                case "RAMB18E2_U_RAMB18E2":
+                    return 5;
+                case "RAMBFIFO18E2_RAMBFIFO18E2":
+                    return 8;
+                case "RAMB18E2_L_RAMB18E2":
+                    return 9;
+                case "FIFO18E2_FIFO18E2":
+                    return 10;
+            }
+        }
 
         if (b.getSiteTypeEnum() != SiteTypeEnum.SLICEL && b.getSiteTypeEnum() != SiteTypeEnum.SLICEM)
             return belsInTile.getOrDefault(t, 0);
