@@ -7,4 +7,6 @@
 *.vcd
 *.jou
 *.bit
+*.html
+*.xml
 .Xil
