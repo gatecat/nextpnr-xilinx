@@ -1385,6 +1385,11 @@ struct Arch : BaseCtx
     void routeClock();
     void findSinkLocations();
     std::unordered_map<WireId, Loc> sink_locs;
+    // -------------------------------------------------
+
+    void parseXdc(std::istream &file);
+    mutable std::unordered_map<std::string, std::string> pin_to_site;
+    std::string getPackagePinSite(const std::string &pin) const;
 
     // -------------------------------------------------
 

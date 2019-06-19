@@ -635,6 +635,22 @@ bool Arch::route()
     return result;
 }
 
+std::string Arch::getPackagePinSite(const std::string &pin) const
+{
+    if (pin_to_site.empty()) {
+        for (int t = 0; t < chip_info->num_tiles; t++) {
+            auto &tile = chip_info->tile_insts[t];
+            for (int s = 0; s < tile.num_sites; s++) {
+                auto &site = tile.site_insts[s];
+                if (site.pin[0] != '\0' && site.pin[0] != '.')
+                    pin_to_site[site.pin.get()] = site.name.get();
+            }
+        }
+    }
+    auto site_iter = pin_to_site.find(pin);
+    return site_iter != pin_to_site.end() ? site_iter->second : "";
+}
+
 // -----------------------------------------------------------------------
 
 std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const

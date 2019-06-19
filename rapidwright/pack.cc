@@ -1018,6 +1018,15 @@ struct USPacker
         }
     }
 
+    void rename_net(IdString old, IdString newname)
+    {
+        std::unique_ptr<NetInfo> ni;
+        std::swap(ni, ctx->nets[old]);
+        ctx->nets.erase(old);
+        ni->name = newname;
+        ctx->nets[newname] = std::move(ni);
+    }
+
     void pack_io()
     {
         log_info("Inserting IO buffers..\n");
@@ -1037,6 +1046,32 @@ struct USPacker
         io_rules[ctx->id("BUFG_PS")].new_type = ctx->id("BUFCE_BUFG_PS");
 
         generic_xform(io_rules, true);
+
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == id_IOB_IBUFCTRL || ci->type == id_IOB_OUTBUF) {
+                if (ci->attrs.count(ctx->id("LOC"))) {
+                    std::string loc = ci->attrs.at(ctx->id("LOC"));
+                    std::string site = ctx->getPackagePinSite(loc);
+                    if (site.empty())
+                        log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n",
+                                  ci->name.c_str(ctx), loc.c_str());
+                    log_info("    Constraining '%s' to site '%s'\n", ci->name.c_str(ctx), site.c_str());
+                    std::string belname = (ci->type == id_IOB_IBUFCTRL) ? "IBUFCTRL" : "OUTBUF";
+                    ci->attrs[ctx->id("BEL")].setString(site + "/" + belname);
+                }
+            }
+
+            if (ci->type == id_IOB_OUTBUF) {
+                NetInfo *inet = get_net_or_empty(ci, ctx->id("I"));
+                if (inet)
+                    rename_net(inet->name, ctx->id(inet->name.str(ctx) + "$obuf_I$"));
+            } else if (ci->type == id_IOB_IBUFCTRL) {
+                NetInfo *onet = get_net_or_empty(ci, ctx->id("O"));
+                if (onet)
+                    rename_net(onet->name, ctx->id(onet->name.str(ctx) + "$ibuf_O$"));
+            }
+        }
     }
 
     void pack_bram()

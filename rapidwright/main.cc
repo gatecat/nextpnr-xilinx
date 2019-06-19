@@ -36,6 +36,7 @@ class UspCommandHandler : public CommandHandler
     std::unique_ptr<Context> createContext() override;
     void setupArchContext(Context *ctx) override{};
     void customBitstream(Context *ctx) override;
+    void customAfterLoad(Context *ctx) override;
 
   protected:
     po::options_description getArchOptions() override;
@@ -47,6 +48,7 @@ po::options_description UspCommandHandler::getArchOptions()
 {
     po::options_description specific("Architecture specific options");
     specific.add_options()("chipdb", po::value<std::string>(), "name of chip database binary");
+    specific.add_options()("xdc", po::value<std::vector<std::string>>(), "XDC-style constraints file");
     return specific;
 }
 
@@ -86,6 +88,19 @@ std::unique_ptr<Context> UspCommandHandler::createContext()
 {
     chipArgs.chipdb = vm["chipdb"].as<std::string>();
     return std::unique_ptr<Context>(new Context(chipArgs));
+}
+
+void UspCommandHandler::customAfterLoad(Context *ctx)
+{
+    if (vm.count("xdc")) {
+        std::vector<std::string> files = vm["xdc"].as<std::vector<std::string>>();
+        for (const auto &filename : files) {
+            std::ifstream in(filename);
+            if (!in)
+                log_error("failed to open XDC file '%s'\n", filename.c_str());
+            ctx->parseXdc(in);
+        }
+    }
 }
 
 int main(int argc, char *argv[])
