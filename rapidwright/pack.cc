@@ -1030,15 +1030,45 @@ struct USPacker
     {
         log_info("Packing BRAM..\n");
         std::unordered_map<IdString, XFormRule> bram_rules;
-        bram_rules[ctx->id("RAMB18E2")].new_type = ctx->id("RAMB18E2_U_RAMB18E2");
+        bram_rules[ctx->id("RAMB18E2")].new_type = ctx->id("RAMB18E2_L_RAMB18E2");
         bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMBFIFO36E2_RAMBFIFO36E2;
+
+        // Rewrite byte enables according to data width
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == ctx->id("RAMB18E2") || ci->type == ctx->id("RAMB36E2")) {
+                for (char port : {'A', 'B'}) {
+                    int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
+                    int we_width;
+                    if (ci->type == ctx->id("RAMB36E2"))
+                        we_width = (port == 'B') ? 8 : 4;
+                    else
+                        we_width = (port == 'B') ? 4 : 2;
+                    if (write_width >= (9 * we_width))
+                        continue;
+                    int used_we_width = std::max(write_width / 9, 1);
+                    for (int i = used_we_width; i < we_width; i++) {
+                        NetInfo *low_we = get_net_or_empty(ci, ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
+                                                                       std::to_string(i % used_we_width) + "]"));
+                        IdString curr_we =
+                                ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") + std::to_string(i) + "]");
+                        if (!ci->ports.count(curr_we)) {
+                            ci->ports[curr_we].type = PORT_IN;
+                            ci->ports[curr_we].name = curr_we;
+                        }
+                        disconnect_port(ctx, ci, curr_we);
+                        connect_port(ctx, low_we, ci, curr_we);
+                    }
+                }
+            }
+        }
 
         generic_xform(bram_rules, true);
 
         // These pins have no logical mapping, so must be tied after transformation
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
-            if (ci->type == ctx->id("RAMB18E2_U_RAMB18E2")) {
+            if (ci->type == ctx->id("RAMB18E2_L_RAMB18E2")) {
                 for (int i = 2; i < 4; i++) {
                     IdString port = ctx->id("WEA" + std::to_string(i));
                     if (!ci->ports.count(port)) {
