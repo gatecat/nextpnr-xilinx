@@ -26,6 +26,7 @@
 
 module attosoc (
 	input clk,
+	input reset,
 	output reg [7:0] led
 );
 
@@ -33,7 +34,10 @@ module attosoc (
 	wire resetn = &reset_cnt;
 
 	always @(posedge clk) begin
-		reset_cnt <= reset_cnt + !resetn;
+		if (reset)
+			reset_cnt <= 0;
+		else
+			reset_cnt <= reset_cnt + !resetn;
 	end
 
 	parameter integer MEM_WORDS = 256;

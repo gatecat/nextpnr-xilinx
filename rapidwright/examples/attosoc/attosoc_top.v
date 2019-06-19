@@ -45,6 +45,7 @@ module top;
 
 	attosoc soc_i(
 		.clk(clk),
+		.reset(1'b0),
 		.led(led)
 	);
 

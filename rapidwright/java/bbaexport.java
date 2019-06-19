@@ -325,7 +325,8 @@ public class bbaexport {
             TileTypeEnum tt = t.getTileTypeEnum();
             boolean isLogic = (tt == TileTypeEnum.CLEM || tt == TileTypeEnum.CLEM_R || tt == TileTypeEnum.CLEL_L || tt == TileTypeEnum.CLEL_R);
             for (PIP p : t.getPIPs()) {
-                // FIXME: route-thru PIPs (site pips will capture some of these anyway)
+                if (p.isRouteThru() && p.getStartWireName().endsWith("_CE_INT"))
+                    continue; // these route through pips seem to cause antenna issues
                 NextpnrPip np = addPIP(p, false);
                 if (p.isRouteThru() && isLogic) {
                     np.type = NextpnrPipType.LUT_ROUTETHRU;
@@ -715,7 +716,7 @@ public class bbaexport {
                         seenNodes.add(flatIndex);
 
                         String wn = n.getWireName();
-                        if (wn.startsWith("GND_WIRE")) {
+                        if (wn.startsWith("GND_WIRE") && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) {
                             gndNodes.add(n);
                             continue;
                         }

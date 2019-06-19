@@ -1,35 +1,17 @@
-module IBUFCTRL(
-    input I,
-    output O
-);
-endmodule
+module top (input reset, output [3:0] led);
 
-module top;
-    wire clk_i, clk;
-    // PMOD0, pin1
-    (* BEL="IOB_X3Y245/IBUFCTRL", keep *)
-    IBUFCTRL clk_ibuf (.O(clk_i));
+    // Use PS8 to get a 100MHz clock
+    wire [3:0] plclk;
+    PS8 ps_i(
+        .PLCLK(plclk)
+    );
 
-    wire [3:0] led;
-    (* BEL="IOB_X3Y295/OUTBUF", keep *)
-    OBUF led0_obuf (.I(led[0]));
-    (* BEL="IOB_X3Y294/OUTBUF", keep *)
-    OBUF led1_obuf (.I(led[1]));
-    (* BEL="IOB_X3Y293/OUTBUF", keep *)
-    OBUF led2_obuf (.I(led[2]));
-    (* BEL="IOB_X3Y292/OUTBUF", keep *)
-    OBUF led3_obuf (.I(led[3]));
-
-    BUFGCTRL bufg_i (
-        .I0(clk_i),
-        .CE0(1'b1),
-        .CE1(1'b0),
-        .IGNORE0(1'b0),
-        .IGNORE1(1'b0),
-        .S0(1'b1),
-        .S1(1'b0),
+    (* BEL="BUFG_PS_X0Y91/BUFG_PS" *)
+    BUFG_PS bfg_i(
+        .I(plclk[0]),
         .O(clk)
     );
+
 //`define BLINKY
 `ifdef BLINKY
     reg clkdiv;
@@ -49,6 +31,7 @@ module top;
 
     attosoc soc_i(
         .clk(clk),
+        .reset(reset),
         .led(soc_led)
     );
 
