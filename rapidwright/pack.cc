@@ -22,6 +22,7 @@
 #include <iterator>
 #include <queue>
 #include <unordered_set>
+#include "cells.h"
 #include "chain_utils.h"
 #include "design_utils.h"
 #include "log.h"
@@ -143,141 +144,13 @@ struct USPacker
         }
     }
 
-    std::unique_ptr<CellInfo> create_cell(IdString type, IdString name)
-    {
-        std::unique_ptr<CellInfo> cell{new CellInfo};
-        cell->type = type;
-        cell->name = name;
-        auto add_port = [&](const std::string &name, PortType dir) {
-            IdString id = ctx->id(name);
-            cell->ports[id].name = id;
-            cell->ports[id].type = dir;
-        };
-        if (type == id_SLICE_LUTX) {
-            for (int i = 1; i <= 6; i++)
-                add_port("A" + std::to_string(i), PORT_IN);
-            for (int i = 1; i <= 9; i++)
-                add_port("WA" + std::to_string(i), PORT_IN);
-            add_port("DI1", PORT_IN);
-            add_port("DI2", PORT_IN);
-            add_port("CLK", PORT_IN);
-            add_port("WE", PORT_IN);
-            add_port("SIN", PORT_IN);
-            add_port("O5", PORT_OUT);
-            add_port("O6", PORT_OUT);
-            add_port("MC31", PORT_OUT);
-        } else if (type == id_SLICE_FFX) {
-            add_port("D", PORT_IN);
-            add_port("SR", PORT_IN);
-            add_port("CE", PORT_IN);
-            add_port("CLK", PORT_IN);
-            add_port("Q", PORT_OUT);
-        } else if (type == ctx->id("RAMD64E")) {
-            for (int i = 0; i < 6; i++)
-                add_port("RADR" + std::to_string(i), PORT_IN);
-            for (int i = 0; i < 8; i++)
-                add_port("WADR" + std::to_string(i), PORT_IN);
-            add_port("CLK", PORT_IN);
-            add_port("I", PORT_IN);
-            add_port("WE", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("MUXF7") || type == ctx->id("MUXF8") || type == ctx->id("MUXF9")) {
-            add_port("I0", PORT_IN);
-            add_port("I1", PORT_IN);
-            add_port("S", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("CARRY8")) {
-            add_port("CI", PORT_IN);
-            add_port("CI_TOP", PORT_IN);
-
-            for (int i = 0; i < 8; i++) {
-                add_port("DI[" + std::to_string(i) + "]", PORT_IN);
-                add_port("S[" + std::to_string(i) + "]", PORT_IN);
-                add_port("CO[" + std::to_string(i) + "]", PORT_OUT);
-                add_port("O[" + std::to_string(i) + "]", PORT_OUT);
-            }
-        } else if (type == ctx->id("MUXCY")) {
-            add_port("CI", PORT_IN);
-            add_port("DI", PORT_IN);
-            add_port("S", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("XORCY")) {
-            add_port("CI", PORT_IN);
-            add_port("LI", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("PAD")) {
-            add_port("PAD", PORT_INOUT);
-        } else if (type == ctx->id("INBUF")) {
-            add_port("VREF", PORT_IN);
-            add_port("PAD", PORT_IN);
-            add_port("OSC_EN", PORT_IN);
-            for (int i = 0; i < 3; i++)
-                add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("IBUFCTRL")) {
-            add_port("I", PORT_IN);
-            add_port("IBUFDISABLE", PORT_IN);
-            add_port("T", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("OBUF")) {
-            add_port("I", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("OBUFT")) {
-            add_port("I", PORT_IN);
-            add_port("T", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("OBUFT_DCIEN")) {
-            add_port("I", PORT_IN);
-            add_port("T", PORT_IN);
-            add_port("DCITERMDISABLE", PORT_IN);
-            add_port("O", PORT_OUT);
-        } else if (type == ctx->id("DIFFINBUF")) {
-            add_port("DIFF_IN_P", PORT_IN);
-            add_port("DIFF_IN_N", PORT_IN);
-            add_port("OSC_EN[0]", PORT_IN);
-            add_port("OSC_EN[1]", PORT_IN);
-            for (int i = 0; i < 3; i++)
-                add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
-            add_port("VREF", PORT_IN);
-            add_port("O", PORT_OUT);
-            add_port("O_B", PORT_OUT);
-        } else if (type == ctx->id("HPIO_VREF")) {
-            for (int i = 0; i < 7; i++)
-                add_port("FABRIC_VREF_TUNE[" + std::to_string(i) + "]", PORT_IN);
-            add_port("VREF", PORT_OUT);
-        } else if (type == ctx->id("INV")) {
-            add_port("I", PORT_IN);
-            add_port("O", PORT_OUT);
-        }
-        return cell;
-    }
-
-    std::unique_ptr<CellInfo> create_lut(const std::string &name, const std::vector<NetInfo *> &inputs, NetInfo *output,
-                                         const Property &init)
-    {
-        std::unique_ptr<CellInfo> cell{new CellInfo};
-        cell->type = ctx->id("LUT" + std::to_string(inputs.size()));
-        cell->name = ctx->id(name);
-        for (size_t i = 0; i < inputs.size(); i++) {
-            IdString ip = ctx->id("I" + std::to_string(i));
-            cell->ports[ip].name = ip;
-            cell->ports[ip].type = PORT_IN;
-            connect_port(ctx, inputs.at(i), cell.get(), ip);
-        }
-        cell->ports[ctx->id("O")].name = ctx->id("O");
-        cell->ports[ctx->id("O")].type = PORT_OUT;
-        connect_port(ctx, output, cell.get(), ctx->id("O"));
-        cell->params[ctx->id("INIT")] = init;
-        return cell;
-    }
-
     int autoidx = 0;
 
     std::unique_ptr<CellInfo> feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users)
     {
         std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
         feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
-        std::unique_ptr<CellInfo> lut = create_lut(net->name.str(ctx) + "$LUT$" + std::to_string(++autoidx), {net},
+        std::unique_ptr<CellInfo> lut = create_lut(ctx, net->name.str(ctx) + "$LUT$" + std::to_string(++autoidx), {net},
                                                    feedthru_net.get(), Property(2));
 
         for (auto &usr : feed_users) {
@@ -403,7 +276,7 @@ struct USPacker
     CellInfo *create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
                               std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, int z)
     {
-        std::unique_ptr<CellInfo> dram_lut = create_cell(ctx->id("RAMD64E"), ctx->id(name));
+        std::unique_ptr<CellInfo> dram_lut = create_cell(ctx, ctx->id("RAMD64E"), ctx->id(name));
         for (int i = 0; i < int(address.size()); i++)
             connect_port(ctx, address[i], dram_lut.get(), ctx->id("RADR" + std::to_string(i)));
         connect_port(ctx, di, dram_lut.get(), ctx->id("I"));
@@ -811,7 +684,7 @@ struct USPacker
                     // Trailing XORCY at end, can pack into chain.
                     CellInfo *xorcy = mux_ci->users.at(0).cell;
                     std::unique_ptr<CellInfo> dummy_muxcy =
-                            create_cell(ctx->id("MUXCY"), ctx->id(xorcy->name.str(ctx) + "$legal_muxcy$"));
+                            create_cell(ctx, ctx->id("MUXCY"), ctx->id(xorcy->name.str(ctx) + "$legal_muxcy$"));
                     connect_port(ctx, mux_ci, dummy_muxcy.get(), ctx->id("CI"));
                     connect_port(ctx, get_net_or_empty(xorcy, ctx->id("LI")), dummy_muxcy.get(), ctx->id("S"));
                     group.muxcys.push_back(dummy_muxcy.get());
@@ -822,12 +695,12 @@ struct USPacker
                     // Feed out with a zero-driving LUT and a XORCY
                     // (creating a zero-driver using Vcc and an inverter for now...)
                     std::unique_ptr<CellInfo> zero_lut =
-                            create_lut(mux_ci->name.str(ctx) + "$feed$zero",
+                            create_lut(ctx, mux_ci->name.str(ctx) + "$feed$zero",
                                        {ctx->nets[ctx->id("$PACKER_VCC_NET")].get()}, nullptr, Property(1));
                     std::unique_ptr<CellInfo> feed_xorcy =
-                            create_cell(ctx->id("XORCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$xor"));
+                            create_cell(ctx, ctx->id("XORCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$xor"));
                     std::unique_ptr<CellInfo> dummy_muxcy =
-                            create_cell(ctx->id("MUXCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$muxcy"));
+                            create_cell(ctx, ctx->id("MUXCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$muxcy"));
 
                     CellInfo *last_muxcy = mux_ci->driver.cell;
 
@@ -868,7 +741,7 @@ struct USPacker
                 CellInfo *muxcy = grp.muxcys.at(i), *xorcy = grp.xorcys.at(i);
                 if (z == 0)
                     carry8s.push_back(
-                            create_cell(ctx->id("CARRY8"), ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY8$")));
+                            create_cell(ctx, ctx->id("CARRY8"), ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY8$")));
                 CellInfo *c8 = carry8s.back().get();
                 CellInfo *root = carry8s.front().get();
                 if (i == 0) {
@@ -1072,7 +945,7 @@ struct USPacker
 
     CellInfo *insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o)
     {
-        auto ibufc = create_cell(ctx->id("IBUFCTRL"), name);
+        auto ibufc = create_cell(ctx, ctx->id("IBUFCTRL"), name);
         connect_port(ctx, i, ibufc.get(), ctx->id("I"));
         connect_port(ctx, o, ibufc.get(), ctx->id("O"));
         CellInfo *ibufc_ptr = ibufc.get();
@@ -1082,7 +955,7 @@ struct USPacker
 
     CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o)
     {
-        auto inbuf = create_cell(ctx->id("INBUF"), name);
+        auto inbuf = create_cell(ctx, ctx->id("INBUF"), name);
         connect_port(ctx, pad, inbuf.get(), ctx->id("PAD"));
         connect_port(ctx, o, inbuf.get(), ctx->id("O"));
         CellInfo *inbuf_ptr = inbuf.get();
@@ -1092,7 +965,7 @@ struct USPacker
 
     CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr)
     {
-        auto obuf = create_cell(type, name);
+        auto obuf = create_cell(ctx, type, name);
         connect_port(ctx, i, obuf.get(), ctx->id("I"));
         connect_port(ctx, tri, obuf.get(), ctx->id("TRI"));
         connect_port(ctx, o, obuf.get(), ctx->id("O"));
@@ -1103,7 +976,7 @@ struct USPacker
 
     CellInfo *insert_diffinbuf(IdString name, NetInfo *i[2], NetInfo *o)
     {
-        auto dibuf = create_cell(ctx->id("DIFFINBUF"), name);
+        auto dibuf = create_cell(ctx, ctx->id("DIFFINBUF"), name);
         connect_port(ctx, i[0], dibuf.get(), ctx->id("DIFF_IN_P"));
         connect_port(ctx, i[1], dibuf.get(), ctx->id("DIFF_IN_N"));
         connect_port(ctx, o, dibuf.get(), ctx->id("O"));

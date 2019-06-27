@@ -17,16 +17,16 @@
  *
  */
 
-#ifndef RAPIDWRIGHT_PINS_H
-#define RAPIDWRIGHT_PINS_H
+#ifndef RAPIDWRIGHT_CELLS_H
+#define RAPIDWRIGHT_CELLS_H
 
 #include "nextpnr.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
-void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins);
-void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map<IdString, bool>> &tied_pins);
-void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vector<std::string>>> &ul_pins);
+std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name);
+std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, const std::vector<NetInfo *> &inputs,
+                                     NetInfo *output, const Property &init);
 
 NEXTPNR_NAMESPACE_END
 
