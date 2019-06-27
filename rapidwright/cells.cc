@@ -79,7 +79,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("IBUFDISABLE", PORT_IN);
         add_port("T", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("OBUF")) {
+    } else if (type == ctx->id("OBUF") || type == ctx->id("IBUF")) {
         add_port("I", PORT_IN);
         add_port("O", PORT_OUT);
     } else if (type == ctx->id("OBUFT")) {

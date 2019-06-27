@@ -320,4 +320,45 @@ void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vecto
     }
 }
 
+// Gets a list of pins that are to be directly connected to a top level IO pin (only)
+void get_top_level_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &toplevel_pins)
+{
+    toplevel_pins[ctx->id("IBUF")] = {ctx->id("I")};
+    toplevel_pins[ctx->id("IBUF_ANALOG")] = {ctx->id("I")};
+    toplevel_pins[ctx->id("IBUF_IBUFDISABLE")] = {ctx->id("I")};
+    toplevel_pins[ctx->id("IBUF_INTERMDISABLE")] = {ctx->id("I")};
+    toplevel_pins[ctx->id("IBUFE3")] = {ctx->id("I")};
+
+    toplevel_pins[ctx->id("IBUFDS")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDS_DIFF_OUT")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDS_DIFF_OUT_IBUFDISABLE")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDS_DIFF_OUT_INTERMDISABLE")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDS_GTE3")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDS_GTE4")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDS_INTERMDISABLE")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[ctx->id("IBUFDSE3")] = {ctx->id("I"), ctx->id("IB")};
+
+    toplevel_pins[ctx->id("IOBUF")] = {ctx->id("IO")};
+    toplevel_pins[ctx->id("IOBUF_DCIEN")] = {ctx->id("IO")};
+    toplevel_pins[ctx->id("IOBUF_INTERMDISABLE")] = {ctx->id("IO")};
+    toplevel_pins[ctx->id("IOBUFE3")] = {ctx->id("IO")};
+
+    toplevel_pins[ctx->id("IOBUFDS")] = {ctx->id("IO"), ctx->id("IOB")};
+    toplevel_pins[ctx->id("IOBUFDS_DCIEN")] = {ctx->id("IO"), ctx->id("IOB")};
+    toplevel_pins[ctx->id("IOBUFDS_DIFF_OUT")] = {ctx->id("IO"), ctx->id("IOB")};
+    toplevel_pins[ctx->id("IOBUFDS_DIFF_OUT_DCIEN")] = {ctx->id("IO"), ctx->id("IOB")};
+    toplevel_pins[ctx->id("IOBUFDS_DIFF_OUT_INTERMDISABLE")] = {ctx->id("IO"), ctx->id("IOB")};
+    toplevel_pins[ctx->id("IOBUFDSE3")] = {ctx->id("IO"), ctx->id("IOB")};
+
+    toplevel_pins[ctx->id("OBUF")] = {ctx->id("O")};
+    toplevel_pins[ctx->id("OBUFT")] = {ctx->id("O")};
+
+    toplevel_pins[ctx->id("OBUFDS")] = {ctx->id("O"), ctx->id("OB")};
+    toplevel_pins[ctx->id("OBUFDS_GTE3")] = {ctx->id("O"), ctx->id("OB")};
+    toplevel_pins[ctx->id("OBUFDS_GTE3_ADV")] = {ctx->id("O"), ctx->id("OB")};
+    toplevel_pins[ctx->id("OBUFDS_GTE4")] = {ctx->id("O"), ctx->id("OB")};
+    toplevel_pins[ctx->id("OBUFDS_GTE4_ADV")] = {ctx->id("O"), ctx->id("OB")};
+    toplevel_pins[ctx->id("OBUFTDS")] = {ctx->id("O"), ctx->id("OB")};
+}
+
 NEXTPNR_NAMESPACE_END

@@ -985,6 +985,54 @@ struct USPacker
         return dibuf_ptr;
     }
 
+    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
+
+    std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io)
+    {
+        // Given a nextpnr IO buffer, create a PAD instance and insert an IO buffer if one isn't already present
+        std::pair<CellInfo *, PortRef> result;
+        auto pad_cell = create_cell(ctx, ctx->id("PAD"), npnr_io->name);
+        // Copy IO attributes to pad
+        for (auto &attr : npnr_io->attrs)
+            pad_cell->attrs[attr.first] = attr.second;
+        NetInfo *ionet = nullptr;
+        PortRef iobuf;
+        iobuf.cell = nullptr;
+        if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
+            ionet = get_net_or_empty(npnr_io, ctx->id("O"));
+            if (ionet != nullptr)
+                for (auto &usr : ionet->users)
+                    if (toplevel_ports.count(usr.cell->type) && toplevel_ports.at(usr.cell->type).count(usr.port)) {
+                        if (ionet->users.size() > 1)
+                            log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
+                                      usr.cell->name.c_str(ctx));
+                        iobuf = usr;
+                    }
+        }
+        if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
+            ionet = get_net_or_empty(npnr_io, ctx->id("I"));
+            if (ionet != nullptr && ionet->driver.cell != nullptr)
+                if (toplevel_ports.count(ionet->driver.cell->type) &&
+                    toplevel_ports.at(ionet->driver.cell->type).count(ionet->driver.port)) {
+                    if (ionet->users.size() > 1)
+                        log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
+                                  ionet->driver.cell->name.c_str(ctx));
+                    iobuf = ionet->driver;
+                }
+        }
+        if (!iobuf.cell) {
+            // No IO buffer, need to create one
+        }
+
+        result.first = pad_cell.get();
+        result.second = iobuf;
+        packed_cells.insert(npnr_io->name);
+        new_cells.push_back(std::move(pad_cell));
+        return result;
+    }
+
+    std::vector<CellInfo *> decompose_iob(CellInfo *xil_iob) {}
+
     void pack_io()
     {
         log_info("Inserting IO buffers..\n");
