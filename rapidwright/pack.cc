@@ -205,6 +205,49 @@ struct USPacker
             add_port("CI", PORT_IN);
             add_port("LI", PORT_IN);
             add_port("O", PORT_OUT);
+        } else if (type == ctx->id("PAD")) {
+            add_port("PAD", PORT_INOUT);
+        } else if (type == ctx->id("INBUF")) {
+            add_port("VREF", PORT_IN);
+            add_port("PAD", PORT_IN);
+            add_port("OSC_EN", PORT_IN);
+            for (int i = 0; i < 3; i++)
+                add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
+            add_port("O", PORT_OUT);
+        } else if (type == ctx->id("IBUFCTRL")) {
+            add_port("I", PORT_IN);
+            add_port("IBUFDISABLE", PORT_IN);
+            add_port("T", PORT_IN);
+            add_port("O", PORT_OUT);
+        } else if (type == ctx->id("OBUF")) {
+            add_port("I", PORT_IN);
+            add_port("O", PORT_OUT);
+        } else if (type == ctx->id("OBUFT")) {
+            add_port("I", PORT_IN);
+            add_port("T", PORT_IN);
+            add_port("O", PORT_OUT);
+        } else if (type == ctx->id("OBUFT_DCIEN")) {
+            add_port("I", PORT_IN);
+            add_port("T", PORT_IN);
+            add_port("DCITERMDISABLE", PORT_IN);
+            add_port("O", PORT_OUT);
+        } else if (type == ctx->id("DIFFINBUF")) {
+            add_port("DIFF_IN_P", PORT_IN);
+            add_port("DIFF_IN_N", PORT_IN);
+            add_port("OSC_EN[0]", PORT_IN);
+            add_port("OSC_EN[1]", PORT_IN);
+            for (int i = 0; i < 3; i++)
+                add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
+            add_port("VREF", PORT_IN);
+            add_port("O", PORT_OUT);
+            add_port("O_B", PORT_OUT);
+        } else if (type == ctx->id("HPIO_VREF")) {
+            for (int i = 0; i < 7; i++)
+                add_port("FABRIC_VREF_TUNE[" + std::to_string(i) + "]", PORT_IN);
+            add_port("VREF", PORT_OUT);
+        } else if (type == ctx->id("INV")) {
+            add_port("I", PORT_IN);
+            add_port("O", PORT_OUT);
         }
         return cell;
     }
@@ -1025,6 +1068,48 @@ struct USPacker
         ctx->nets.erase(old);
         ni->name = newname;
         ctx->nets[newname] = std::move(ni);
+    }
+
+    CellInfo *insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o)
+    {
+        auto ibufc = create_cell(ctx->id("IBUFCTRL"), name);
+        connect_port(ctx, i, ibufc.get(), ctx->id("I"));
+        connect_port(ctx, o, ibufc.get(), ctx->id("O"));
+        CellInfo *ibufc_ptr = ibufc.get();
+        new_cells.push_back(std::move(ibufc));
+        return ibufc_ptr;
+    }
+
+    CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o)
+    {
+        auto inbuf = create_cell(ctx->id("INBUF"), name);
+        connect_port(ctx, pad, inbuf.get(), ctx->id("PAD"));
+        connect_port(ctx, o, inbuf.get(), ctx->id("O"));
+        CellInfo *inbuf_ptr = inbuf.get();
+        new_cells.push_back(std::move(inbuf));
+        return inbuf_ptr;
+    }
+
+    CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr)
+    {
+        auto obuf = create_cell(type, name);
+        connect_port(ctx, i, obuf.get(), ctx->id("I"));
+        connect_port(ctx, tri, obuf.get(), ctx->id("TRI"));
+        connect_port(ctx, o, obuf.get(), ctx->id("O"));
+        CellInfo *obuf_ptr = obuf.get();
+        new_cells.push_back(std::move(obuf));
+        return obuf_ptr;
+    }
+
+    CellInfo *insert_diffinbuf(IdString name, NetInfo *i[2], NetInfo *o)
+    {
+        auto dibuf = create_cell(ctx->id("DIFFINBUF"), name);
+        connect_port(ctx, i[0], dibuf.get(), ctx->id("DIFF_IN_P"));
+        connect_port(ctx, i[1], dibuf.get(), ctx->id("DIFF_IN_N"));
+        connect_port(ctx, o, dibuf.get(), ctx->id("O"));
+        CellInfo *dibuf_ptr = dibuf.get();
+        new_cells.push_back(std::move(dibuf));
+        return dibuf_ptr;
     }
 
     void pack_io()
