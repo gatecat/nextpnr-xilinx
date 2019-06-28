@@ -17,6 +17,7 @@
  *
  */
 
+#include "pack.h"
 #include <algorithm>
 #include <boost/optional.hpp>
 #include <iterator>
@@ -31,1185 +32,424 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-struct USPacker
+// Process the contents of packed_cells and new_cells
+void USPacker::flush_cells()
 {
-    Context *ctx;
-
-    // Generic cell transformation
-    // Given cell name map and port map
-    // If port name is not found in port map; it will be copied as-is but stripping []
-    struct XFormRule
-    {
-        IdString new_type;
-        std::unordered_map<IdString, IdString> port_xform;
-        std::unordered_map<IdString, std::vector<IdString>> port_multixform;
-        std::unordered_map<IdString, IdString> param_xform;
-        std::vector<std::pair<IdString, std::string>> set_attrs;
-        std::vector<std::pair<IdString, Property>> set_params;
-    };
-
-    std::unordered_set<IdString> packed_cells;
-    std::vector<std::unique_ptr<CellInfo>> new_cells;
-
-    // Process the contents of packed_cells and new_cells
-    void flush_cells()
-    {
-        for (auto pcell : packed_cells) {
-            for (auto &port : ctx->cells[pcell]->ports) {
-                disconnect_port(ctx, ctx->cells[pcell].get(), port.first);
-            }
-            ctx->cells.erase(pcell);
+    for (auto pcell : packed_cells) {
+        for (auto &port : ctx->cells[pcell]->ports) {
+            disconnect_port(ctx, ctx->cells[pcell].get(), port.first);
         }
-        for (auto &ncell : new_cells) {
-            NPNR_ASSERT(!ctx->cells.count(ncell->name));
-            ctx->cells[ncell->name] = std::move(ncell);
-        }
-        packed_cells.clear();
-        new_cells.clear();
+        ctx->cells.erase(pcell);
     }
+    for (auto &ncell : new_cells) {
+        NPNR_ASSERT(!ctx->cells.count(ncell->name));
+        ctx->cells[ncell->name] = std::move(ncell);
+    }
+    packed_cells.clear();
+    new_cells.clear();
+}
 
-    void xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci)
-    {
-        auto &rule = rules.at(ci->type);
-        ci->attrs[ctx->id("X_ORIG_TYPE")] = ci->type.c_str(ctx);
-        ci->type = rule.new_type;
-        std::vector<IdString> orig_port_names;
-        for (auto &port : ci->ports)
-            orig_port_names.push_back(port.first);
+void USPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci)
+{
+    auto &rule = rules.at(ci->type);
+    ci->attrs[ctx->id("X_ORIG_TYPE")] = ci->type.c_str(ctx);
+    ci->type = rule.new_type;
+    std::vector<IdString> orig_port_names;
+    for (auto &port : ci->ports)
+        orig_port_names.push_back(port.first);
 
-        for (auto pname : orig_port_names) {
-            if (rule.port_multixform.count(pname)) {
-                auto old_port = ci->ports.at(pname);
-                disconnect_port(ctx, ci, pname);
-                ci->ports.erase(pname);
-                for (auto new_name : rule.port_multixform.at(pname)) {
-                    ci->ports[new_name].name = new_name;
-                    ci->ports[new_name].type = old_port.type;
-                    connect_port(ctx, old_port.net, ci, new_name);
-                    ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
-                }
-            } else {
-                IdString new_name;
-                if (rule.port_xform.count(pname)) {
-                    new_name = rule.port_xform.at(pname);
-                } else {
-                    std::string stripped_name;
-                    for (auto c : pname.str(ctx))
-                        if (c != '[' && c != ']')
-                            stripped_name += c;
-                    new_name = ctx->id(stripped_name);
-                }
-                if (new_name != pname) {
-                    rename_port(ctx, ci, pname, new_name);
-                }
+    for (auto pname : orig_port_names) {
+        if (rule.port_multixform.count(pname)) {
+            auto old_port = ci->ports.at(pname);
+            disconnect_port(ctx, ci, pname);
+            ci->ports.erase(pname);
+            for (auto new_name : rule.port_multixform.at(pname)) {
+                ci->ports[new_name].name = new_name;
+                ci->ports[new_name].type = old_port.type;
+                connect_port(ctx, old_port.net, ci, new_name);
                 ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
             }
-        }
-
-        std::vector<IdString> xform_params;
-        for (auto &param : ci->params)
-            if (rule.param_xform.count(param.first))
-                xform_params.push_back(param.first);
-        for (auto param : xform_params)
-            ci->params[rule.param_xform.at(param)] = ci->params[param];
-
-        for (auto &attr : rule.set_attrs)
-            ci->attrs[attr.first] = attr.second;
-
-        for (auto &param : rule.set_params)
-            ci->params[param.first] = param.second;
-    }
-
-    void generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary = false)
-    {
-        std::map<std::string, int> cell_count;
-        std::map<std::string, int> new_types;
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (rules.count(ci->type)) {
-                cell_count[ci->type.str(ctx)]++;
-                xform_cell(rules, ci);
-                new_types[ci->type.str(ctx)]++;
-            }
-        }
-        if (print_summary) {
-            for (auto &nt : new_types) {
-                log_info("    Created %d %s cells from:\n", nt.second, nt.first.c_str());
-                for (auto &cc : cell_count) {
-                    if (rules.at(ctx->id(cc.first)).new_type != ctx->id(nt.first))
-                        continue;
-                    log_info("        %6dx %s\n", cc.second, cc.first.c_str());
-                }
-            }
-        }
-    }
-
-    int autoidx = 0;
-
-    std::unique_ptr<CellInfo> feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users)
-    {
-        std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
-        feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
-        std::unique_ptr<CellInfo> lut = create_lut(ctx, net->name.str(ctx) + "$LUT$" + std::to_string(++autoidx), {net},
-                                                   feedthru_net.get(), Property(2));
-
-        for (auto &usr : feed_users) {
-            disconnect_port(ctx, usr.cell, usr.port);
-            connect_port(ctx, feedthru_net.get(), usr.cell, usr.port);
-        }
-
-        IdString netname = feedthru_net->name;
-        ctx->nets[netname] = std::move(feedthru_net);
-        return lut;
-    }
-
-    void pack_luts()
-    {
-        log_info("Packing LUTs..\n");
-
-        std::unordered_map<IdString, XFormRule> lut_rules;
-        for (int k = 1; k <= 6; k++) {
-            IdString lut = ctx->id("LUT" + std::to_string(k));
-            lut_rules[lut].new_type = id_SLICE_LUTX;
-            for (int i = 0; i < k; i++)
-                lut_rules[lut].port_xform[ctx->id("I" + std::to_string(i))] = ctx->id("A" + std::to_string(i + 1));
-            lut_rules[lut].port_xform[ctx->id("O")] = ctx->id("O6");
-        }
-        lut_rules[ctx->id("LUT6_2")] = lut_rules[ctx->id("LUT6")];
-        generic_xform(lut_rules, true);
-    }
-
-    void pack_ffs()
-    {
-        log_info("Packing flipflops..\n");
-
-        std::unordered_map<IdString, XFormRule> ff_rules;
-        ff_rules[ctx->id("FDCE")].new_type = id_SLICE_FFX;
-        ff_rules[ctx->id("FDCE")].port_xform[ctx->id("C")] = id_CLK;
-        ff_rules[ctx->id("FDCE")].port_xform[ctx->id("CLR")] = id_SR;
-        // ff_rules[ctx->id("FDCE")].param_xform[ctx->id("IS_CLR_INVERTED")] = ctx->id("IS_SR_INVERTED");
-
-        ff_rules[ctx->id("FDPE")].new_type = id_SLICE_FFX;
-        ff_rules[ctx->id("FDPE")].port_xform[ctx->id("C")] = id_CLK;
-        ff_rules[ctx->id("FDPE")].port_xform[ctx->id("PRE")] = id_SR;
-        // ff_rules[ctx->id("FDPE")].param_xform[ctx->id("IS_PRE_INVERTED")] = ctx->id("IS_SR_INVERTED");
-
-        ff_rules[ctx->id("FDRE")].new_type = id_SLICE_FFX;
-        ff_rules[ctx->id("FDRE")].port_xform[ctx->id("C")] = id_CLK;
-        ff_rules[ctx->id("FDRE")].port_xform[ctx->id("R")] = id_SR;
-        // ff_rules[ctx->id("FDRE")].param_xform[ctx->id("IS_R_INVERTED")] = ctx->id("IS_SR_INVERTED");
-
-        ff_rules[ctx->id("FDSE")].new_type = id_SLICE_FFX;
-        ff_rules[ctx->id("FDSE")].port_xform[ctx->id("C")] = id_CLK;
-        ff_rules[ctx->id("FDSE")].port_xform[ctx->id("S")] = id_SR;
-        // ff_rules[ctx->id("FDSE")].param_xform[ctx->id("IS_S_INVERTED")] = ctx->id("IS_SR_INVERTED");
-
-        generic_xform(ff_rules, true);
-    }
-
-    void pack_lutffs()
-    {
-        int pairs = 0;
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->constr_parent != nullptr || !ci->constr_children.empty())
-                continue;
-            if (ci->type != id_SLICE_FFX)
-                continue;
-            NetInfo *d = get_net_or_empty(ci, id_D);
-            if (d->driver.cell == nullptr || d->driver.cell->type != id_SLICE_LUTX || d->driver.port != id_O6)
-                continue;
-            CellInfo *lut = d->driver.cell;
-            if (lut->constr_parent != nullptr || !lut->constr_children.empty())
-                continue;
-            lut->constr_children.push_back(ci);
-            ci->constr_parent = lut;
-            ci->constr_x = 0;
-            ci->constr_y = 0;
-            ci->constr_z = (BEL_FF - BEL_6LUT);
-            ++pairs;
-        }
-        log_info("Constrained %d LUTFF pairs.\n", pairs);
-    }
-
-    // Distributed RAM control set
-    struct DRAMControlSet
-    {
-        std::vector<NetInfo *> wa;
-        NetInfo *wclk, *we;
-        bool wclk_inv;
-
-        bool operator==(const DRAMControlSet &other) const
-        {
-            return wa == other.wa && wclk == other.wclk && we == other.we && wclk_inv == other.wclk_inv;
-        }
-        bool operator!=(const DRAMControlSet &other) const
-        {
-            return wa != other.wa && wclk != other.wclk && we != other.we && wclk_inv != other.wclk_inv;
-        }
-    };
-
-    struct DRAMControlSetHash
-    {
-        size_t operator()(const DRAMControlSet &dcs) const
-        {
-            std::size_t seed = 0;
-            boost::hash_combine(seed, std::hash<size_t>()(dcs.wa.size()));
-            for (auto abit : dcs.wa)
-                boost::hash_combine(seed, std::hash<IdString>()(abit == nullptr ? IdString() : abit->name));
-            boost::hash_combine(seed, std::hash<IdString>()(dcs.wclk == nullptr ? IdString() : dcs.wclk->name));
-            boost::hash_combine(seed, std::hash<IdString>()(dcs.we == nullptr ? IdString() : dcs.we->name));
-            boost::hash_combine(seed, std::hash<bool>()(dcs.wclk_inv));
-            return seed;
-        }
-    };
-
-    struct DRAMType
-    {
-        int abits;
-        int dbits;
-        int rports;
-    };
-
-    std::unordered_map<IdString, XFormRule> dram_rules;
-
-    CellInfo *create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
-                              std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, int z)
-    {
-        std::unique_ptr<CellInfo> dram_lut = create_cell(ctx, ctx->id("RAMD64E"), ctx->id(name));
-        for (int i = 0; i < int(address.size()); i++)
-            connect_port(ctx, address[i], dram_lut.get(), ctx->id("RADR" + std::to_string(i)));
-        connect_port(ctx, di, dram_lut.get(), ctx->id("I"));
-        connect_port(ctx, dout, dram_lut.get(), ctx->id("O"));
-        connect_port(ctx, ctrlset.wclk, dram_lut.get(), ctx->id("CLK"));
-        connect_port(ctx, ctrlset.we, dram_lut.get(), ctx->id("WE"));
-        for (int i = 0; i < int(ctrlset.wa.size()); i++)
-            connect_port(ctx, ctrlset.wa[i], dram_lut.get(), ctx->id("WADR" + std::to_string(i)));
-        dram_lut->params[ctx->id("IS_WCLK_INVERTED")] = ctrlset.wclk_inv ? "1" : "0";
-
-        xform_cell(dram_rules, dram_lut.get());
-
-        dram_lut->constr_abs_z = true;
-        dram_lut->constr_z = (z << 4) | BEL_6LUT;
-        if (base != nullptr) {
-            dram_lut->constr_parent = base;
-            dram_lut->constr_x = 0;
-            dram_lut->constr_y = 0;
-            base->constr_children.push_back(dram_lut.get());
-        }
-        // log_info("%s: z = %d (%d) -> %s\n", name.c_str(), z, dram_lut->constr_z, dram_lut->constr_parent ?
-        // dram_lut->constr_parent->name.c_str(ctx) : "*");
-        CellInfo *dl = dram_lut.get();
-        new_cells.push_back(std::move(dram_lut));
-        return dl;
-    }
-
-    void pack_dram()
-    {
-
-        log_info("Packing DRAM..\n");
-
-        std::unordered_map<DRAMControlSet, std::vector<CellInfo *>, DRAMControlSetHash> dram_groups;
-        std::unordered_map<IdString, DRAMType> dram_types;
-
-        dram_types[ctx->id("RAM32X1S")] = {5, 1, 0};
-        dram_types[ctx->id("RAM32X1D")] = {5, 1, 1};
-        dram_types[ctx->id("RAM64X1S")] = {6, 1, 0};
-        dram_types[ctx->id("RAM64X1D")] = {6, 1, 1};
-        dram_types[ctx->id("RAM128X1S")] = {7, 1, 0};
-        dram_types[ctx->id("RAM128X1D")] = {7, 1, 1};
-        dram_types[ctx->id("RAM256X1S")] = {8, 1, 0};
-        dram_types[ctx->id("RAM256X1D")] = {8, 1, 1};
-        dram_types[ctx->id("RAM512X1S")] = {9, 1, 0};
-        dram_types[ctx->id("RAM512X1D")] = {9, 1, 1};
-
-        dram_types[ctx->id("RAM32X1M")] = {5, 2, 3};
-        dram_types[ctx->id("RAM32X1M16")] = {5, 2, 7};
-
-        // Transform from RAMD64E UNISIM to SLICE_LUTX bel
-        dram_rules[ctx->id("RAMD64E")].new_type = id_SLICE_LUTX;
-        dram_rules[ctx->id("RAMD64E")].param_xform[ctx->id("IS_CLK_INVERTED")] = ctx->id("IS_WCLK_INVERTED");
-        dram_rules[ctx->id("RAMD64E")].set_attrs.emplace_back(ctx->id("X_LUT_AS_DRAM"), "1");
-        for (int i = 0; i < 6; i++)
-            dram_rules[ctx->id("RAMD64E")].port_xform[ctx->id("RADR" + std::to_string(i))] =
-                    ctx->id("A" + std::to_string(i + 1));
-        for (int i = 0; i < 8; i++)
-            dram_rules[ctx->id("RAMD64E")].port_xform[ctx->id("WADR" + std::to_string(i))] =
-                    ctx->id("WA" + std::to_string(i + 1));
-        dram_rules[ctx->id("RAMD64E")].port_xform[ctx->id("I")] = id_DI1;
-        dram_rules[ctx->id("RAMD64E")].port_xform[ctx->id("O")] = id_O6;
-
-        // Optimise DRAM with tied-low inputs, to more efficiently routeable tied-high inputs
-        int inverted_ports = 0;
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            auto dt_iter = dram_types.find(ci->type);
-            if (dt_iter == dram_types.end())
-                continue;
-            auto &dt = dt_iter->second;
-            for (int i = 0; i < std::min(dt.abits, 6); i++) {
-                IdString aport = ctx->id(dt.abits <= 6 ? ("A" + std::to_string(i)) : ("A[" + std::to_string(i) + "]"));
-                if (!ci->ports.count(aport))
-                    continue;
-                NetInfo *anet = get_net_or_empty(ci, aport);
-                if (anet == nullptr || anet->name != ctx->id("$PACKER_GND_NET"))
-                    continue;
-                IdString raport;
-                if (dt.rports >= 1) {
-                    NPNR_ASSERT(dt.rports == 1); // FIXME
-                    raport =
-                            ctx->id(dt.abits <= 6 ? ("DPRA" + std::to_string(i)) : ("DPRA[" + std::to_string(i) + "]"));
-                    NetInfo *ranet = get_net_or_empty(ci, raport);
-                    if (ranet == nullptr || ranet->name != ctx->id("$PACKER_GND_NET"))
-                        continue;
-                }
-                disconnect_port(ctx, ci, aport);
-                if (raport != IdString())
-                    disconnect_port(ctx, ci, raport);
-                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, aport);
-                if (raport != IdString())
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, raport);
-                ++inverted_ports;
-                if (ci->params.count(ctx->id("INIT"))) {
-                    Property &init = ci->params[ctx->id("INIT")];
-                    if (init.isString()) {
-                        // Binary init value
-                        for (int j = 0; j < int(init.str.size()); j++) {
-                            if (j & (1 << i))
-                                init.str[j] = init.str[j & ~(1 << i)];
-                        }
-                    } else {
-                        uint32_t int_init = init.num;
-                        for (int j = 0; j < 32; j++) {
-                            if (int_init & (1 << j)) {
-                                if ((j & (1 << i)) && (int_init & (1 << (j & ~(1 << i))))) {
-                                    int_init |= 1 << j;
-                                }
-                            }
-                        }
-                        init.num = int_init;
-                    }
-                }
-            }
-        }
-        log_info("   Transformed %d tied-low DRAM address inputs to be tied-high\n", inverted_ports);
-
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            auto dt_iter = dram_types.find(ci->type);
-            if (dt_iter == dram_types.end())
-                continue;
-            auto &dt = dt_iter->second;
-            DRAMControlSet dcs;
-            for (int i = 0; i < dt.abits; i++)
-                dcs.wa.push_back(get_net_or_empty(
-                        ci, ctx->id(dt.abits <= 6 ? ("A" + std::to_string(i)) : ("A[" + std::to_string(i) + "]"))));
-            dcs.wclk = get_net_or_empty(ci, ctx->id("WCLK"));
-            dcs.we = get_net_or_empty(ci, ctx->id("WE"));
-            dcs.wclk_inv = bool_or_default(ci->params, ctx->id("IS_WCLK_INVERTED"));
-            dram_groups[dcs].push_back(ci);
-        }
-
-        for (auto &group : dram_groups) {
-            int z = 7;
-            CellInfo *base = nullptr;
-            auto &cs = group.first;
-            for (auto cell : group.second) {
-                NPNR_ASSERT(cell->type == ctx->id("RAM64X1D")); // FIXME
-
-                int z_size = 0;
-                if (get_net_or_empty(cell, ctx->id("SPO")) != nullptr)
-                    z_size++;
-                if (get_net_or_empty(cell, ctx->id("DPO")) != nullptr)
-                    z_size++;
-
-                if (z == 7 || (z - z_size + 1) < 0) {
-                    z = 7;
-                    // Topmost cell is the write address input
-                    std::vector<NetInfo *> address(cs.wa.begin(), cs.wa.begin() + std::min<size_t>(cs.wa.size(), 6));
-                    base = create_dram_lut(cell->name.str(ctx) + "/ADDR", nullptr, cs, address, nullptr, nullptr, z);
-                    z--;
-                }
-
-                NetInfo *dpo = get_net_or_empty(cell, ctx->id("DPO"));
-                NetInfo *spo = get_net_or_empty(cell, ctx->id("SPO"));
-                disconnect_port(ctx, cell, ctx->id("DPO"));
-                disconnect_port(ctx, cell, ctx->id("SPO"));
-
-                NetInfo *di = get_net_or_empty(cell, ctx->id("D"));
-                if (spo != nullptr) {
-                    if (z == 6) {
-                        // Can fold DPO into address buffer
-                        connect_port(ctx, spo, base, ctx->id("O"));
-                        connect_port(ctx, di, base, ctx->id("I"));
-                        if (cell->params.count(ctx->id("INIT")))
-                            base->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
-                    } else {
-                        std::vector<NetInfo *> address(cs.wa.begin(),
-                                                       cs.wa.begin() + std::min<size_t>(cs.wa.size(), 6));
-                        CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/SP", base, cs, address, di, spo, z);
-                        if (cell->params.count(ctx->id("INIT")))
-                            dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
-                        z--;
-                    }
-                }
-
-                if (dpo != nullptr) {
-                    std::vector<NetInfo *> address;
-                    for (int i = 0; i < 6; i++)
-                        address.push_back(get_net_or_empty(cell, ctx->id("DPRA" + std::to_string(i))));
-                    CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/DP", base, cs, address, di, dpo, z);
-                    if (cell->params.count(ctx->id("INIT")))
-                        dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
-                    z--;
-                }
-
-                packed_cells.insert(cell->name);
-            }
-        }
-
-        flush_cells();
-    }
-
-    std::unordered_map<IdString, std::unordered_map<IdString, bool>> tied_pins;
-    std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
-
-    void pack_constants()
-    {
-        log_info("Packing constants..\n");
-
-        get_tied_pins(ctx, tied_pins);
-        get_invertible_pins(ctx, invertible_pins);
-
-        std::unique_ptr<CellInfo> gnd_cell{new CellInfo};
-        gnd_cell->name = ctx->id("$PACKER_GND_DRV");
-        gnd_cell->type = id_PSEUDO_GND;
-        gnd_cell->ports[id_Y].name = id_Y;
-        gnd_cell->ports[id_Y].type = PORT_OUT;
-        std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
-        gnd_net->name = ctx->id("$PACKER_GND_NET");
-        gnd_net->driver.cell = gnd_cell.get();
-        gnd_net->driver.port = id_Y;
-        gnd_cell->ports.at(id_Y).net = gnd_net.get();
-
-        std::unique_ptr<CellInfo> vcc_cell{new CellInfo};
-        vcc_cell->name = ctx->id("$PACKER_VCC_DRV");
-        vcc_cell->type = id_PSEUDO_VCC;
-        vcc_cell->ports[id_Y].name = id_Y;
-        vcc_cell->ports[id_Y].type = PORT_OUT;
-        std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
-        vcc_net->name = ctx->id("$PACKER_VCC_NET");
-        vcc_net->driver.cell = vcc_cell.get();
-        vcc_net->driver.port = id_Y;
-        vcc_cell->ports.at(id_Y).net = vcc_net.get();
-
-        std::vector<IdString> dead_nets;
-
-        std::vector<std::tuple<CellInfo *, IdString, bool>> const_ports;
-
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (!tied_pins.count(ci->type))
-                continue;
-            auto &tp = tied_pins.at(ci->type);
-            for (auto port : tp) {
-                if (cell.second->ports.count(port.first) && cell.second->ports.at(port.first).net != nullptr &&
-                    cell.second->ports.at(port.first).net->driver.cell != nullptr)
-                    continue;
-                const_ports.emplace_back(ci, port.first, port.second);
-            }
-        }
-
-        for (auto net : sorted(ctx->nets)) {
-            NetInfo *ni = net.second;
-            if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("GND")) {
-                IdString drv_cell = ni->driver.cell->name;
-                for (auto &usr : ni->users) {
-                    const_ports.emplace_back(usr.cell, usr.port, false);
-                    usr.cell->ports.at(usr.port).net = nullptr;
-                }
-                dead_nets.push_back(net.first);
-                ctx->cells.erase(drv_cell);
-            } else if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("VCC")) {
-                IdString drv_cell = ni->driver.cell->name;
-                for (auto &usr : ni->users) {
-                    const_ports.emplace_back(usr.cell, usr.port, true);
-                    usr.cell->ports.at(usr.port).net = nullptr;
-                }
-                dead_nets.push_back(net.first);
-                ctx->cells.erase(drv_cell);
-            }
-        }
-
-        for (auto port : const_ports) {
-            CellInfo *ci;
-            IdString pname;
-            bool cval;
-            std::tie(ci, pname, cval) = port;
-
-            if (!ci->ports.count(pname)) {
-                ci->ports[pname].name = pname;
-                ci->ports[pname].type = PORT_IN;
-            }
-            if (ci->ports.at(pname).net != nullptr) {
-                // Case where a port with a default tie value is previously connected to an undriven net
-                NPNR_ASSERT(ci->ports.at(pname).net->driver.cell == nullptr);
-                disconnect_port(ctx, ci, pname);
-            }
-
-            if (!cval && invertible_pins.count(ci->type) && invertible_pins.at(ci->type).count(pname)) {
-                // Invertible pins connected to zero are optimised to a connection to Vcc (which is easier to route)
-                // and an inversion
-                ci->params[ctx->id("IS_" + pname.str(ctx) + "_INVERTED")] = Property(1);
-                cval = true;
-            }
-
-            connect_port(ctx, cval ? vcc_net.get() : gnd_net.get(), ci, pname);
-        }
-
-        ctx->cells[gnd_cell->name] = std::move(gnd_cell);
-        ctx->nets[gnd_net->name] = std::move(gnd_net);
-        ctx->cells[vcc_cell->name] = std::move(vcc_cell);
-        ctx->nets[vcc_net->name] = std::move(vcc_net);
-
-        for (auto dn : dead_nets) {
-            ctx->nets.erase(dn);
-        }
-    }
-
-    struct CarryGroup
-    {
-        std::vector<CellInfo *> muxcys;
-        std::vector<CellInfo *> xorcys;
-    };
-
-    bool has_illegal_fanout(NetInfo *carry)
-    {
-        // FIXME: sometimes we can feed out of the chain
-        if (carry->users.size() > 2)
-            return true;
-        CellInfo *muxcy = nullptr, *xorcy = nullptr;
-        for (auto &usr : carry->users) {
-            if (usr.cell->type == ctx->id("MUXCY")) {
-                if (muxcy != nullptr)
-                    return true;
-                else if (usr.port != ctx->id("CI"))
-                    return true;
-                else
-                    muxcy = usr.cell;
-            } else if (usr.cell->type == ctx->id("XORCY")) {
-                if (xorcy != nullptr)
-                    return true;
-                else if (usr.port != ctx->id("CI"))
-                    return true;
-                else
-                    xorcy = usr.cell;
+        } else {
+            IdString new_name;
+            if (rule.port_xform.count(pname)) {
+                new_name = rule.port_xform.at(pname);
             } else {
-                return true;
+                std::string stripped_name;
+                for (auto c : pname.str(ctx))
+                    if (c != '[' && c != ']')
+                        stripped_name += c;
+                new_name = ctx->id(stripped_name);
             }
+            if (new_name != pname) {
+                rename_port(ctx, ci, pname, new_name);
+            }
+            ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
         }
-        if (muxcy && xorcy) {
-            NetInfo *muxcy_s = get_net_or_empty(muxcy, ctx->id("S"));
-            NetInfo *xorcy_li = get_net_or_empty(xorcy, ctx->id("LI"));
-            if (muxcy_s != xorcy_li)
-                return true;
-        }
-        return false;
     }
 
-    void pack_carries()
-    {
-        log_info("Packing carries..\n");
-        std::vector<CellInfo *> root_muxcys;
-        // Find MUXCYs
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->type != ctx->id("MUXCY"))
+    std::vector<IdString> xform_params;
+    for (auto &param : ci->params)
+        if (rule.param_xform.count(param.first))
+            xform_params.push_back(param.first);
+    for (auto param : xform_params)
+        ci->params[rule.param_xform.at(param)] = ci->params[param];
+
+    for (auto &attr : rule.set_attrs)
+        ci->attrs[attr.first] = attr.second;
+
+    for (auto &param : rule.set_params)
+        ci->params[param.first] = param.second;
+}
+
+void USPacker::generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary)
+{
+    std::map<std::string, int> cell_count;
+    std::map<std::string, int> new_types;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (rules.count(ci->type)) {
+            cell_count[ci->type.str(ctx)]++;
+            xform_cell(rules, ci);
+            new_types[ci->type.str(ctx)]++;
+        }
+    }
+    if (print_summary) {
+        for (auto &nt : new_types) {
+            log_info("    Created %d %s cells from:\n", nt.second, nt.first.c_str());
+            for (auto &cc : cell_count) {
+                if (rules.at(ctx->id(cc.first)).new_type != ctx->id(nt.first))
+                    continue;
+                log_info("        %6dx %s\n", cc.second, cc.first.c_str());
+            }
+        }
+    }
+}
+
+std::unique_ptr<CellInfo> USPacker::feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users)
+{
+    std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
+    feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
+    std::unique_ptr<CellInfo> lut = create_lut(ctx, net->name.str(ctx) + "$LUT$" + std::to_string(++autoidx), {net},
+                                               feedthru_net.get(), Property(2));
+
+    for (auto &usr : feed_users) {
+        disconnect_port(ctx, usr.cell, usr.port);
+        connect_port(ctx, feedthru_net.get(), usr.cell, usr.port);
+    }
+
+    IdString netname = feedthru_net->name;
+    ctx->nets[netname] = std::move(feedthru_net);
+    return lut;
+}
+
+void USPacker::pack_luts()
+{
+    log_info("Packing LUTs..\n");
+
+    std::unordered_map<IdString, XFormRule> lut_rules;
+    for (int k = 1; k <= 6; k++) {
+        IdString lut = ctx->id("LUT" + std::to_string(k));
+        lut_rules[lut].new_type = id_SLICE_LUTX;
+        for (int i = 0; i < k; i++)
+            lut_rules[lut].port_xform[ctx->id("I" + std::to_string(i))] = ctx->id("A" + std::to_string(i + 1));
+        lut_rules[lut].port_xform[ctx->id("O")] = ctx->id("O6");
+    }
+    lut_rules[ctx->id("LUT6_2")] = lut_rules[ctx->id("LUT6")];
+    generic_xform(lut_rules, true);
+}
+
+void USPacker::pack_ffs()
+{
+    log_info("Packing flipflops..\n");
+
+    std::unordered_map<IdString, XFormRule> ff_rules;
+    ff_rules[ctx->id("FDCE")].new_type = id_SLICE_FFX;
+    ff_rules[ctx->id("FDCE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDCE")].port_xform[ctx->id("CLR")] = id_SR;
+    // ff_rules[ctx->id("FDCE")].param_xform[ctx->id("IS_CLR_INVERTED")] = ctx->id("IS_SR_INVERTED");
+
+    ff_rules[ctx->id("FDPE")].new_type = id_SLICE_FFX;
+    ff_rules[ctx->id("FDPE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDPE")].port_xform[ctx->id("PRE")] = id_SR;
+    // ff_rules[ctx->id("FDPE")].param_xform[ctx->id("IS_PRE_INVERTED")] = ctx->id("IS_SR_INVERTED");
+
+    ff_rules[ctx->id("FDRE")].new_type = id_SLICE_FFX;
+    ff_rules[ctx->id("FDRE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDRE")].port_xform[ctx->id("R")] = id_SR;
+    // ff_rules[ctx->id("FDRE")].param_xform[ctx->id("IS_R_INVERTED")] = ctx->id("IS_SR_INVERTED");
+
+    ff_rules[ctx->id("FDSE")].new_type = id_SLICE_FFX;
+    ff_rules[ctx->id("FDSE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDSE")].port_xform[ctx->id("S")] = id_SR;
+    // ff_rules[ctx->id("FDSE")].param_xform[ctx->id("IS_S_INVERTED")] = ctx->id("IS_SR_INVERTED");
+
+    generic_xform(ff_rules, true);
+}
+
+void USPacker::pack_lutffs()
+{
+    int pairs = 0;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->constr_parent != nullptr || !ci->constr_children.empty())
+            continue;
+        if (ci->type != id_SLICE_FFX)
+            continue;
+        NetInfo *d = get_net_or_empty(ci, id_D);
+        if (d->driver.cell == nullptr || d->driver.cell->type != id_SLICE_LUTX || d->driver.port != id_O6)
+            continue;
+        CellInfo *lut = d->driver.cell;
+        if (lut->constr_parent != nullptr || !lut->constr_children.empty())
+            continue;
+        lut->constr_children.push_back(ci);
+        ci->constr_parent = lut;
+        ci->constr_x = 0;
+        ci->constr_y = 0;
+        ci->constr_z = (BEL_FF - BEL_6LUT);
+        ++pairs;
+    }
+    log_info("Constrained %d LUTFF pairs.\n", pairs);
+}
+
+void USPacker::pack_constants()
+{
+    log_info("Packing constants..\n");
+
+    get_tied_pins(ctx, tied_pins);
+    get_invertible_pins(ctx, invertible_pins);
+
+    std::unique_ptr<CellInfo> gnd_cell{new CellInfo};
+    gnd_cell->name = ctx->id("$PACKER_GND_DRV");
+    gnd_cell->type = id_PSEUDO_GND;
+    gnd_cell->ports[id_Y].name = id_Y;
+    gnd_cell->ports[id_Y].type = PORT_OUT;
+    std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
+    gnd_net->name = ctx->id("$PACKER_GND_NET");
+    gnd_net->driver.cell = gnd_cell.get();
+    gnd_net->driver.port = id_Y;
+    gnd_cell->ports.at(id_Y).net = gnd_net.get();
+
+    std::unique_ptr<CellInfo> vcc_cell{new CellInfo};
+    vcc_cell->name = ctx->id("$PACKER_VCC_DRV");
+    vcc_cell->type = id_PSEUDO_VCC;
+    vcc_cell->ports[id_Y].name = id_Y;
+    vcc_cell->ports[id_Y].type = PORT_OUT;
+    std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
+    vcc_net->name = ctx->id("$PACKER_VCC_NET");
+    vcc_net->driver.cell = vcc_cell.get();
+    vcc_net->driver.port = id_Y;
+    vcc_cell->ports.at(id_Y).net = vcc_net.get();
+
+    std::vector<IdString> dead_nets;
+
+    std::vector<std::tuple<CellInfo *, IdString, bool>> const_ports;
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (!tied_pins.count(ci->type))
+            continue;
+        auto &tp = tied_pins.at(ci->type);
+        for (auto port : tp) {
+            if (cell.second->ports.count(port.first) && cell.second->ports.at(port.first).net != nullptr &&
+                cell.second->ports.at(port.first).net->driver.cell != nullptr)
                 continue;
-            NetInfo *ci_net = get_net_or_empty(ci, ctx->id("CI"));
-            if (ci_net == nullptr || ci_net->driver.cell == nullptr || ci_net->driver.cell->type != ctx->id("MUXCY") ||
-                has_illegal_fanout(ci_net)) {
-                root_muxcys.push_back(ci);
+            const_ports.emplace_back(ci, port.first, port.second);
+        }
+    }
+
+    for (auto net : sorted(ctx->nets)) {
+        NetInfo *ni = net.second;
+        if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("GND")) {
+            IdString drv_cell = ni->driver.cell->name;
+            for (auto &usr : ni->users) {
+                const_ports.emplace_back(usr.cell, usr.port, false);
+                usr.cell->ports.at(usr.port).net = nullptr;
             }
+            dead_nets.push_back(net.first);
+            ctx->cells.erase(drv_cell);
+        } else if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("VCC")) {
+            IdString drv_cell = ni->driver.cell->name;
+            for (auto &usr : ni->users) {
+                const_ports.emplace_back(usr.cell, usr.port, true);
+                usr.cell->ports.at(usr.port).net = nullptr;
+            }
+            dead_nets.push_back(net.first);
+            ctx->cells.erase(drv_cell);
+        }
+    }
+
+    for (auto port : const_ports) {
+        CellInfo *ci;
+        IdString pname;
+        bool cval;
+        std::tie(ci, pname, cval) = port;
+
+        if (!ci->ports.count(pname)) {
+            ci->ports[pname].name = pname;
+            ci->ports[pname].type = PORT_IN;
+        }
+        if (ci->ports.at(pname).net != nullptr) {
+            // Case where a port with a default tie value is previously connected to an undriven net
+            NPNR_ASSERT(ci->ports.at(pname).net->driver.cell == nullptr);
+            disconnect_port(ctx, ci, pname);
         }
 
-        // Create chains from root MUXCYs
-        std::unordered_set<IdString> processed_muxcys;
-        std::vector<CarryGroup> groups;
-        int muxcy_count = 0, xorcy_count = 0;
-        for (auto root : root_muxcys) {
-            CarryGroup group;
+        if (!cval && invertible_pins.count(ci->type) && invertible_pins.at(ci->type).count(pname)) {
+            // Invertible pins connected to zero are optimised to a connection to Vcc (which is easier to route)
+            // and an inversion
+            ci->params[ctx->id("IS_" + pname.str(ctx) + "_INVERTED")] = Property(1);
+            cval = true;
+        }
 
-            CellInfo *muxcy = root;
-            NetInfo *mux_ci = nullptr;
-            while (true) {
+        connect_port(ctx, cval ? vcc_net.get() : gnd_net.get(), ci, pname);
+    }
 
-                group.muxcys.push_back(muxcy);
-                ++muxcy_count;
-                mux_ci = get_net_or_empty(muxcy, ctx->id("CI"));
-                NetInfo *mux_s = get_net_or_empty(muxcy, ctx->id("S"));
-                group.xorcys.push_back(nullptr);
-                if (mux_s != nullptr) {
-                    for (auto &user : mux_s->users) {
-                        if (user.cell->type == ctx->id("XORCY") && user.port == ctx->id("LI")) {
-                            CellInfo *xorcy = user.cell;
-                            NetInfo *xor_ci = get_net_or_empty(xorcy, ctx->id("CI"));
-                            if (xor_ci == mux_ci) {
-                                group.xorcys.back() = xorcy;
-                                ++xorcy_count;
-                                break;
-                            }
-                        }
+    ctx->cells[gnd_cell->name] = std::move(gnd_cell);
+    ctx->nets[gnd_net->name] = std::move(gnd_net);
+    ctx->cells[vcc_cell->name] = std::move(vcc_cell);
+    ctx->nets[vcc_net->name] = std::move(vcc_net);
+
+    for (auto dn : dead_nets) {
+        ctx->nets.erase(dn);
+    }
+}
+
+void USPacker::rename_net(IdString old, IdString newname)
+{
+    std::unique_ptr<NetInfo> ni;
+    std::swap(ni, ctx->nets[old]);
+    ctx->nets.erase(old);
+    ni->name = newname;
+    ctx->nets[newname] = std::move(ni);
+}
+
+void USPacker::pack_bram()
+{
+    log_info("Packing BRAM..\n");
+
+    // Rules for normal TDP BRAM
+    std::unordered_map<IdString, XFormRule> bram_rules;
+    bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
+    bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
+
+    // Some ports have upper/lower bel pins in 36-bit mode
+    std::vector<std::pair<IdString, std::vector<std::string>>> ul_pins;
+    get_bram36_ul_pins(ctx, ul_pins);
+    for (auto &ul : ul_pins) {
+        for (auto &bp : ul.second)
+            bram_rules[ctx->id("RAMB36E2")].port_multixform[ul.first].push_back(ctx->id(bp));
+    }
+    bram_rules[ctx->id("RAMB36E2")].port_multixform[ctx->id("ECCPIPECE")] = {ctx->id("ECCPIPECEL")};
+
+    // Special rules for SDP rules, relating to WE connectivity
+    std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
+    for (int i = 0; i < 2; i++) {
+        // Connects to two WEBWE bel pins
+        sdp_bram_rules[ctx->id("RAMB18E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWE" + std::to_string(i * 2)));
+        sdp_bram_rules[ctx->id("RAMB18E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWE" + std::to_string(i * 2 + 1)));
+        // Not used in SDP mode
+        sdp_bram_rules[ctx->id("RAMB18E2")]
+                .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
+    }
+    for (int i = 0; i < 2; i++) {
+        // Connects to two WEA bel pins
+        sdp_bram_rules[ctx->id("RAMB18E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
+                .push_back(ctx->id("WEA" + std::to_string(i * 2)));
+        sdp_bram_rules[ctx->id("RAMB18E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
+                .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
+    }
+
+    for (int i = 0; i < 4; i++) {
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .clear();
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                .clear();
+        // Connects to two WEBWE bel pins
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWEL" + std::to_string(i)));
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWEU" + std::to_string(i)));
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                .push_back(ctx->id("WEAL" + std::to_string(i)));
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                .push_back(ctx->id("WEAU" + std::to_string(i)));
+        // Not used in SDP mode
+        sdp_bram_rules[ctx->id("RAMB36E2")]
+                .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
+    }
+
+    // 72-bit BRAMs: drop upper bits of WEB in TDP mode
+    for (int i = 4; i < 8; i++)
+        bram_rules[ctx->id("RAMB36E2")].port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))] = {};
+
+    // Process SDP BRAM first
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if ((ci->type == ctx->id("RAMB18E2") &&
+             int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36) ||
+            (ci->type == ctx->id("RAMB36E2") &&
+             int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 72))
+            xform_cell(sdp_bram_rules, ci);
+    }
+
+    // Rewrite byte enables according to data width
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("RAMB18E2") || ci->type == ctx->id("RAMB36E2")) {
+            for (char port : {'A', 'B'}) {
+                int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
+                int we_width;
+                if (ci->type == ctx->id("RAMB36E2"))
+                    we_width = 4;
+                else
+                    we_width = (port == 'B') ? 4 : 2;
+                if (write_width >= (9 * we_width))
+                    continue;
+                int used_we_width = std::max(write_width / 9, 1);
+                for (int i = used_we_width; i < we_width; i++) {
+                    NetInfo *low_we = get_net_or_empty(ci, ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
+                                                                   std::to_string(i % used_we_width) + "]"));
+                    IdString curr_we = ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") + std::to_string(i) + "]");
+                    if (!ci->ports.count(curr_we)) {
+                        ci->ports[curr_we].type = PORT_IN;
+                        ci->ports[curr_we].name = curr_we;
                     }
-                }
-
-                mux_ci = get_net_or_empty(muxcy, ctx->id("O"));
-                if (mux_ci == nullptr)
-                    break;
-                if (has_illegal_fanout(mux_ci))
-                    break;
-                muxcy = nullptr;
-                for (auto &user : mux_ci->users) {
-                    if (user.cell->type == ctx->id("MUXCY")) {
-                        muxcy = user.cell;
-                        break;
-                    }
-                }
-                if (muxcy == nullptr)
-                    break;
-            }
-            if (mux_ci != nullptr) {
-                if (mux_ci->users.size() == 1 && mux_ci->users.at(0).cell->type == ctx->id("XORCY") &&
-                    mux_ci->users.at(0).port == ctx->id("CI")) {
-                    // Trailing XORCY at end, can pack into chain.
-                    CellInfo *xorcy = mux_ci->users.at(0).cell;
-                    std::unique_ptr<CellInfo> dummy_muxcy =
-                            create_cell(ctx, ctx->id("MUXCY"), ctx->id(xorcy->name.str(ctx) + "$legal_muxcy$"));
-                    connect_port(ctx, mux_ci, dummy_muxcy.get(), ctx->id("CI"));
-                    connect_port(ctx, get_net_or_empty(xorcy, ctx->id("LI")), dummy_muxcy.get(), ctx->id("S"));
-                    group.muxcys.push_back(dummy_muxcy.get());
-                    group.xorcys.push_back(xorcy);
-                    new_cells.push_back(std::move(dummy_muxcy));
-                } else if (mux_ci->users.size() > 0) {
-                    // Users other than a MUXCY
-                    // Feed out with a zero-driving LUT and a XORCY
-                    // (creating a zero-driver using Vcc and an inverter for now...)
-                    std::unique_ptr<CellInfo> zero_lut =
-                            create_lut(ctx, mux_ci->name.str(ctx) + "$feed$zero",
-                                       {ctx->nets[ctx->id("$PACKER_VCC_NET")].get()}, nullptr, Property(1));
-                    std::unique_ptr<CellInfo> feed_xorcy =
-                            create_cell(ctx, ctx->id("XORCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$xor"));
-                    std::unique_ptr<CellInfo> dummy_muxcy =
-                            create_cell(ctx, ctx->id("MUXCY"), ctx->id(mux_ci->name.str(ctx) + "$feed$muxcy"));
-
-                    CellInfo *last_muxcy = mux_ci->driver.cell;
-
-                    disconnect_port(ctx, last_muxcy, ctx->id("O"));
-
-                    connect_ports(ctx, zero_lut.get(), ctx->id("O"), feed_xorcy.get(), ctx->id("LI"));
-                    connect_ports(ctx, zero_lut.get(), ctx->id("O"), dummy_muxcy.get(), ctx->id("S"));
-                    connect_ports(ctx, last_muxcy, ctx->id("O"), feed_xorcy.get(), ctx->id("CI"));
-                    connect_ports(ctx, last_muxcy, ctx->id("O"), dummy_muxcy.get(), ctx->id("CI"));
-
-                    connect_port(ctx, mux_ci, feed_xorcy.get(), ctx->id("O"));
-
-                    group.muxcys.push_back(dummy_muxcy.get());
-                    group.xorcys.push_back(feed_xorcy.get());
-                    new_cells.push_back(std::move(zero_lut));
-                    new_cells.push_back(std::move(feed_xorcy));
-                    new_cells.push_back(std::move(dummy_muxcy));
-                }
-            }
-
-            groups.push_back(group);
-        }
-        flush_cells();
-
-        log_info("   Grouped %d MUXCYs and %d XORCYs into %d chains.\n", muxcy_count, xorcy_count,
-                 int(root_muxcys.size()));
-
-        // N.B. LUT6 is not a valid type here, as CARRY requires dual outputs
-        std::unordered_set<IdString> lut_types{ctx->id("LUT1"), ctx->id("LUT2"), ctx->id("LUT3"), ctx->id("LUT4"),
-                                               ctx->id("LUT5")};
-
-        std::unordered_set<IdString> folded_nets;
-
-        for (auto &grp : groups) {
-            std::vector<std::unique_ptr<CellInfo>> carry8s;
-            for (int i = 0; i < int(grp.muxcys.size()); i++) {
-                int z = i % 8;
-                CellInfo *muxcy = grp.muxcys.at(i), *xorcy = grp.xorcys.at(i);
-                if (z == 0)
-                    carry8s.push_back(
-                            create_cell(ctx, ctx->id("CARRY8"), ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY8$")));
-                CellInfo *c8 = carry8s.back().get();
-                CellInfo *root = carry8s.front().get();
-                if (i == 0) {
-                    // Constrain initial CARRY8, forcing it to the CARRY8 of a logic tile
-                    c8->constr_abs_z = true;
-                    c8->constr_z = BEL_CARRY8;
-                } else if (z == 0) {
-                    // Constrain relative to the root carry8
-                    c8->constr_parent = root;
-                    root->constr_children.push_back(c8);
-                    c8->constr_x = 0;
-                    c8->constr_y = -i / 8;
-                    c8->constr_abs_z = true;
-                    c8->constr_z = BEL_CARRY8;
-                }
-                // Fold CI->CO connections into the CARRY8, except for those external ones every 8 units
-                if (z == 0) {
-                    replace_port(muxcy, ctx->id("CI"), c8, ctx->id("CI"));
-                } else {
-                    NetInfo *muxcy_ci = get_net_or_empty(muxcy, ctx->id("CI"));
-                    if (muxcy_ci)
-                        folded_nets.insert(muxcy_ci->name);
-                    disconnect_port(ctx, muxcy, ctx->id("CI"));
-                }
-                if (z == 7) {
-                    replace_port(muxcy, ctx->id("O"), c8, ctx->id("CO[7]"));
-                } else {
-                    NetInfo *muxcy_o = get_net_or_empty(muxcy, ctx->id("O"));
-                    if (muxcy_o)
-                        folded_nets.insert(muxcy_o->name);
-                    disconnect_port(ctx, muxcy, ctx->id("O"));
-                }
-                // Replace connections into the MUXCY with external CARRY8 ports
-                replace_port(muxcy, ctx->id("S"), c8, ctx->id("S[" + std::to_string(z) + "]"));
-                replace_port(muxcy, ctx->id("DI"), c8, ctx->id("DI[" + std::to_string(z) + "]"));
-                packed_cells.insert(muxcy->name);
-                // Fold MUXCY->XORCY into the CARRY8, if there is a XORCY
-                if (xorcy) {
-                    // Replace XORCY output with external CARRY8 output
-                    replace_port(xorcy, ctx->id("O"), c8, ctx->id("O[" + std::to_string(z) + "]"));
-                    // Disconnect internal XORCY connectivity
-                    disconnect_port(ctx, xorcy, ctx->id("LI"));
-                    disconnect_port(ctx, xorcy, ctx->id("DI"));
-                    packed_cells.insert(xorcy->name);
-                }
-                // Check legality of LUTs driving CARRY8, making them legal if they aren't already
-                NetInfo *c8_s = get_net_or_empty(c8, ctx->id("S[" + std::to_string(z) + "]"));
-                NetInfo *c8_di = get_net_or_empty(c8, ctx->id("DI[" + std::to_string(z) + "]"));
-                // Keep track of the total LUT input count; cannot exceed five or the LUTs cannot be packed together
-                std::unordered_set<IdString> unique_lut_inputs;
-                int s_inputs = 0, d_inputs = 0;
-                // Check that S and DI are validy and unqiuely driven by LUTs
-                // FIXME: in multiple fanout cases, cell duplication will probably be cheaper
-                // than feed-throughs
-                CellInfo *s_lut = nullptr, *di_lut = nullptr;
-                if (c8_s) {
-                    if (c8_s->users.size() == 1 && c8_s->driver.cell != nullptr &&
-                        lut_types.count(c8_s->driver.cell->type)) {
-                        s_lut = c8_s->driver.cell;
-                        for (int j = 0; j < 5; j++) {
-                            NetInfo *ix = get_net_or_empty(s_lut, ctx->id("I[" + std::to_string(i) + "]"));
-                            if (ix) {
-                                unique_lut_inputs.insert(ix->name);
-                                s_inputs++;
-                            }
-                        }
-                    }
-                }
-                if (c8_di) {
-                    if (c8_di->users.size() == 1 && c8_di->driver.cell != nullptr &&
-                        lut_types.count(c8_di->driver.cell->type)) {
-                        di_lut = c8_di->driver.cell;
-                        for (int j = 0; j < 5; j++) {
-                            NetInfo *ix = get_net_or_empty(di_lut, ctx->id("I[" + std::to_string(i) + "]"));
-                            if (ix) {
-                                unique_lut_inputs.insert(ix->name);
-                                d_inputs++;
-                            }
-                        }
-                    }
-                }
-                int lut_inp_count = int(unique_lut_inputs.size());
-                if (!s_lut)
-                    ++lut_inp_count; // for feedthrough
-                if (!di_lut)
-                    ++lut_inp_count; // for feedthrough
-                if (lut_inp_count > 5) {
-                    // Must use feedthrough for at least one LUT
-                    di_lut = nullptr;
-                    if (s_inputs > 4)
-                        s_lut = nullptr;
-                }
-                // If LUTs are nullptr, that means we need a feedthrough lut
-                if (!s_lut && c8_s) {
-                    PortRef pr;
-                    pr.cell = c8;
-                    pr.port = ctx->id("S[" + std::to_string(z) + "]");
-                    auto s_feed = feed_through_lut(c8_s, {pr});
-                    s_lut = s_feed.get();
-                    new_cells.push_back(std::move(s_feed));
-                }
-                if (!di_lut && c8_di) {
-                    PortRef pr;
-                    pr.cell = c8;
-                    pr.port = ctx->id("DI[" + std::to_string(z) + "]");
-                    auto di_feed = feed_through_lut(c8_di, {pr});
-                    di_lut = di_feed.get();
-                    new_cells.push_back(std::move(di_feed));
-                }
-                // Constrain LUTs relative to root CARRY8
-                if (s_lut) {
-                    root->constr_children.push_back(s_lut);
-                    s_lut->constr_parent = root;
-                    s_lut->constr_x = 0;
-                    s_lut->constr_y = -i / 8;
-                    s_lut->constr_abs_z = true;
-                    s_lut->constr_z = (z << 4 | BEL_6LUT);
-                }
-                if (di_lut) {
-                    root->constr_children.push_back(di_lut);
-                    di_lut->constr_parent = root;
-                    di_lut->constr_x = 0;
-                    di_lut->constr_y = -i / 8;
-                    di_lut->constr_abs_z = true;
-                    di_lut->constr_z = (z << 4 | BEL_5LUT);
-                }
-            }
-            for (auto &c8 : carry8s)
-                new_cells.push_back(std::move(c8));
-        }
-        flush_cells();
-
-        for (auto net : folded_nets)
-            ctx->nets.erase(net);
-
-        // XORCYs and MUXCYs not part of any chain (and therefore not packed into a CARRY8) must now be blasted
-        // to boring soft logic (LUT2 or LUT3 - these will become SLICE_LUTXs later in the flow.)
-        int remaining_muxcy = 0, remaining_xorcy = 0;
-        for (auto &cell : ctx->cells) {
-            if (cell.second->type == ctx->id("MUXCY"))
-                ++remaining_muxcy;
-            else if (cell.second->type == ctx->id("XORCY"))
-                ++remaining_xorcy;
-        }
-        std::unordered_map<IdString, XFormRule> softlogic_rules;
-        softlogic_rules[ctx->id("MUXCY")].new_type = ctx->id("LUT3");
-        softlogic_rules[ctx->id("MUXCY")].port_xform[ctx->id("DI")] = ctx->id("I0");
-        softlogic_rules[ctx->id("MUXCY")].port_xform[ctx->id("CI")] = ctx->id("I1");
-        softlogic_rules[ctx->id("MUXCY")].port_xform[ctx->id("S")] = ctx->id("I2");
-        // DI 1010 1010
-        // CI 1100 1100
-        //  S 1111 0000
-        //  O 1100 1010
-        softlogic_rules[ctx->id("MUXCY")].set_params.emplace_back(ctx->id("INIT"), Property(0xCA));
-
-        softlogic_rules[ctx->id("XORCY")].new_type = ctx->id("LUT2");
-        softlogic_rules[ctx->id("XORCY")].port_xform[ctx->id("CI")] = ctx->id("I0");
-        softlogic_rules[ctx->id("XORCY")].port_xform[ctx->id("LI")] = ctx->id("I1");
-        // CI 1100
-        // LI 1010
-        //  O 0110
-        softlogic_rules[ctx->id("XORCY")].set_params.emplace_back(ctx->id("INIT"), Property(0x6));
-
-        generic_xform(softlogic_rules, false);
-        log_info("   Blasted %d non-chain MUXCYs and %d non-chain XORCYs to soft logic\n", remaining_muxcy,
-                 remaining_xorcy);
-
-        // Finally, use generic_xform to remove the [] from bus ports; and set up the logical-physical mapping for
-        // RapidWright
-        std::unordered_map<IdString, XFormRule> c8_chained_rules;
-        c8_chained_rules[ctx->id("CARRY8")].new_type = ctx->id("CARRY8");
-        c8_chained_rules[ctx->id("CARRY8")].port_xform[ctx->id("CI")] = ctx->id("CIN");
-        c8_chained_rules[ctx->id("CARRY8")].set_params.emplace_back(ctx->id("CARRY_TYPE"), Property("SINGLE_CY8"));
-        std::unordered_map<IdString, XFormRule> c8_init_rules;
-        c8_init_rules[ctx->id("CARRY8")].new_type = ctx->id("CARRY8");
-        c8_init_rules[ctx->id("CARRY8")].port_xform[ctx->id("CI")] = ctx->id("AX");
-        c8_init_rules[ctx->id("CARRY8")].set_params.emplace_back(ctx->id("CARRY_TYPE"), Property("SINGLE_CY8"));
-
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->type != ctx->id("CARRY8"))
-                continue;
-            if (ci->constr_parent == nullptr)
-                xform_cell(c8_init_rules, ci);
-            else
-                xform_cell(c8_chained_rules, ci);
-            ci->ports[ctx->id("EX")].name = ctx->id("EX");
-            ci->ports[ctx->id("EX")].type = PORT_IN;
-            connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("EX"));
-        }
-    }
-
-    void rename_net(IdString old, IdString newname)
-    {
-        std::unique_ptr<NetInfo> ni;
-        std::swap(ni, ctx->nets[old]);
-        ctx->nets.erase(old);
-        ni->name = newname;
-        ctx->nets[newname] = std::move(ni);
-    }
-
-    CellInfo *insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o)
-    {
-        auto ibufc = create_cell(ctx, ctx->id("IBUFCTRL"), name);
-        connect_port(ctx, i, ibufc.get(), ctx->id("I"));
-        connect_port(ctx, o, ibufc.get(), ctx->id("O"));
-        CellInfo *ibufc_ptr = ibufc.get();
-        new_cells.push_back(std::move(ibufc));
-        return ibufc_ptr;
-    }
-
-    CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o)
-    {
-        auto inbuf = create_cell(ctx, ctx->id("INBUF"), name);
-        connect_port(ctx, pad, inbuf.get(), ctx->id("PAD"));
-        connect_port(ctx, o, inbuf.get(), ctx->id("O"));
-        CellInfo *inbuf_ptr = inbuf.get();
-        new_cells.push_back(std::move(inbuf));
-        return inbuf_ptr;
-    }
-
-    CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr)
-    {
-        auto obuf = create_cell(ctx, type, name);
-        connect_port(ctx, i, obuf.get(), ctx->id("I"));
-        connect_port(ctx, tri, obuf.get(), ctx->id("TRI"));
-        connect_port(ctx, o, obuf.get(), ctx->id("O"));
-        CellInfo *obuf_ptr = obuf.get();
-        new_cells.push_back(std::move(obuf));
-        return obuf_ptr;
-    }
-
-    CellInfo *insert_diffinbuf(IdString name, NetInfo *i[2], NetInfo *o)
-    {
-        auto dibuf = create_cell(ctx, ctx->id("DIFFINBUF"), name);
-        connect_port(ctx, i[0], dibuf.get(), ctx->id("DIFF_IN_P"));
-        connect_port(ctx, i[1], dibuf.get(), ctx->id("DIFF_IN_N"));
-        connect_port(ctx, o, dibuf.get(), ctx->id("O"));
-        CellInfo *dibuf_ptr = dibuf.get();
-        new_cells.push_back(std::move(dibuf));
-        return dibuf_ptr;
-    }
-
-    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
-
-    std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io)
-    {
-        // Given a nextpnr IO buffer, create a PAD instance and insert an IO buffer if one isn't already present
-        std::pair<CellInfo *, PortRef> result;
-        auto pad_cell = create_cell(ctx, ctx->id("PAD"), npnr_io->name);
-        // Copy IO attributes to pad
-        for (auto &attr : npnr_io->attrs)
-            pad_cell->attrs[attr.first] = attr.second;
-        NetInfo *ionet = nullptr;
-        PortRef iobuf;
-        iobuf.cell = nullptr;
-        if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
-            ionet = get_net_or_empty(npnr_io, ctx->id("O"));
-            if (ionet != nullptr)
-                for (auto &usr : ionet->users)
-                    if (toplevel_ports.count(usr.cell->type) && toplevel_ports.at(usr.cell->type).count(usr.port)) {
-                        if (ionet->users.size() > 1)
-                            log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
-                                      usr.cell->name.c_str(ctx));
-                        iobuf = usr;
-                    }
-        }
-        if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
-            ionet = get_net_or_empty(npnr_io, ctx->id("I"));
-            if (ionet != nullptr && ionet->driver.cell != nullptr)
-                if (toplevel_ports.count(ionet->driver.cell->type) &&
-                    toplevel_ports.at(ionet->driver.cell->type).count(ionet->driver.port)) {
-                    if (ionet->users.size() > 1)
-                        log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
-                                  ionet->driver.cell->name.c_str(ctx));
-                    iobuf = ionet->driver;
-                }
-        }
-        if (!iobuf.cell) {
-            // No IO buffer, need to create one
-        }
-
-        result.first = pad_cell.get();
-        result.second = iobuf;
-        packed_cells.insert(npnr_io->name);
-        new_cells.push_back(std::move(pad_cell));
-        return result;
-    }
-
-    std::vector<CellInfo *> decompose_iob(CellInfo *xil_iob) {}
-
-    void pack_io()
-    {
-        log_info("Inserting IO buffers..\n");
-        std::unordered_map<IdString, XFormRule> io_rules;
-        io_rules[ctx->id("$nextpnr_ibuf")].new_type = ctx->id("IOB_IBUFCTRL");
-        io_rules[ctx->id("$nextpnr_ibuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "IBUFCTRL");
-
-        io_rules[ctx->id("$nextpnr_obuf")].new_type = ctx->id("IOB_OUTBUF");
-        io_rules[ctx->id("$nextpnr_obuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "OBUF");
-
-        io_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
-        io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
-        io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
-        io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
-
-        io_rules[ctx->id("PS8")].new_type = ctx->id("PSS_ALTO_CORE");
-        io_rules[ctx->id("BUFG_PS")].new_type = ctx->id("BUFCE_BUFG_PS");
-
-        generic_xform(io_rules, true);
-
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->type == id_IOB_IBUFCTRL || ci->type == id_IOB_OUTBUF) {
-                if (ci->attrs.count(ctx->id("LOC"))) {
-                    std::string loc = ci->attrs.at(ctx->id("LOC"));
-                    std::string site = ctx->getPackagePinSite(loc);
-                    if (site.empty())
-                        log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n",
-                                  ci->name.c_str(ctx), loc.c_str());
-                    log_info("    Constraining '%s' to site '%s'\n", ci->name.c_str(ctx), site.c_str());
-                    std::string belname = (ci->type == id_IOB_IBUFCTRL) ? "IBUFCTRL" : "OUTBUF";
-                    ci->attrs[ctx->id("BEL")].setString(site + "/" + belname);
-                }
-            }
-
-            if (ci->type == id_IOB_OUTBUF) {
-                NetInfo *inet = get_net_or_empty(ci, ctx->id("I"));
-                if (inet)
-                    rename_net(inet->name, ctx->id(inet->name.str(ctx) + "$obuf_I$"));
-            } else if (ci->type == id_IOB_IBUFCTRL) {
-                NetInfo *onet = get_net_or_empty(ci, ctx->id("O"));
-                if (onet)
-                    rename_net(onet->name, ctx->id(onet->name.str(ctx) + "$ibuf_O$"));
-            }
-        }
-    }
-
-    void pack_bram()
-    {
-        log_info("Packing BRAM..\n");
-
-        // Rules for normal TDP BRAM
-        std::unordered_map<IdString, XFormRule> bram_rules;
-        bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
-        bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
-
-        // Some ports have upper/lower bel pins in 36-bit mode
-        std::vector<std::pair<IdString, std::vector<std::string>>> ul_pins;
-        get_bram36_ul_pins(ctx, ul_pins);
-        for (auto &ul : ul_pins) {
-            for (auto &bp : ul.second)
-                bram_rules[ctx->id("RAMB36E2")].port_multixform[ul.first].push_back(ctx->id(bp));
-        }
-        bram_rules[ctx->id("RAMB36E2")].port_multixform[ctx->id("ECCPIPECE")] = {ctx->id("ECCPIPECEL")};
-
-        // Special rules for SDP rules, relating to WE connectivity
-        std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
-        for (int i = 0; i < 2; i++) {
-            // Connects to two WEBWE bel pins
-            sdp_bram_rules[ctx->id("RAMB18E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
-                    .push_back(ctx->id("WEBWE" + std::to_string(i * 2)));
-            sdp_bram_rules[ctx->id("RAMB18E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
-                    .push_back(ctx->id("WEBWE" + std::to_string(i * 2 + 1)));
-            // Not used in SDP mode
-            sdp_bram_rules[ctx->id("RAMB18E2")]
-                    .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
-        }
-        for (int i = 0; i < 2; i++) {
-            // Connects to two WEA bel pins
-            sdp_bram_rules[ctx->id("RAMB18E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
-                    .push_back(ctx->id("WEA" + std::to_string(i * 2)));
-            sdp_bram_rules[ctx->id("RAMB18E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
-                    .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
-        }
-
-        for (int i = 0; i < 4; i++) {
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
-                    .clear();
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
-                    .clear();
-            // Connects to two WEBWE bel pins
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
-                    .push_back(ctx->id("WEBWEL" + std::to_string(i)));
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
-                    .push_back(ctx->id("WEBWEU" + std::to_string(i)));
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
-                    .push_back(ctx->id("WEAL" + std::to_string(i)));
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
-                    .push_back(ctx->id("WEAU" + std::to_string(i)));
-            // Not used in SDP mode
-            sdp_bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
-        }
-
-        // 72-bit BRAMs: drop upper bits of WEB in TDP mode
-        for (int i = 4; i < 8; i++)
-            bram_rules[ctx->id("RAMB36E2")]
-                    .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))] = {};
-
-        // Process SDP BRAM first
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if ((ci->type == ctx->id("RAMB18E2") &&
-                 int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36) ||
-                (ci->type == ctx->id("RAMB36E2") &&
-                 int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 72))
-                xform_cell(sdp_bram_rules, ci);
-        }
-
-        // Rewrite byte enables according to data width
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->type == ctx->id("RAMB18E2") || ci->type == ctx->id("RAMB36E2")) {
-                for (char port : {'A', 'B'}) {
-                    int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
-                    int we_width;
-                    if (ci->type == ctx->id("RAMB36E2"))
-                        we_width = 4;
-                    else
-                        we_width = (port == 'B') ? 4 : 2;
-                    if (write_width >= (9 * we_width))
-                        continue;
-                    int used_we_width = std::max(write_width / 9, 1);
-                    for (int i = used_we_width; i < we_width; i++) {
-                        NetInfo *low_we = get_net_or_empty(ci, ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
-                                                                       std::to_string(i % used_we_width) + "]"));
-                        IdString curr_we =
-                                ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") + std::to_string(i) + "]");
-                        if (!ci->ports.count(curr_we)) {
-                            ci->ports[curr_we].type = PORT_IN;
-                            ci->ports[curr_we].name = curr_we;
-                        }
-                        disconnect_port(ctx, ci, curr_we);
-                        connect_port(ctx, low_we, ci, curr_we);
-                    }
-                }
-            }
-        }
-
-        generic_xform(bram_rules, false);
-
-        // These pins have no logical mapping, so must be tied after transformation
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->type == id_RAMB18E2_RAMB18E2) {
-                for (int i = 2; i < 4; i++) {
-                    IdString port = ctx->id("WEA" + std::to_string(i));
-                    if (!ci->ports.count(port)) {
-                        ci->ports[port].name = port;
-                        ci->ports[port].type = PORT_IN;
-                        connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
-                    }
+                    disconnect_port(ctx, ci, curr_we);
+                    connect_port(ctx, low_we, ci, curr_we);
                 }
             }
         }
     }
-};
+
+    generic_xform(bram_rules, false);
+
+    // These pins have no logical mapping, so must be tied after transformation
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == id_RAMB18E2_RAMB18E2) {
+            for (int i = 2; i < 4; i++) {
+                IdString port = ctx->id("WEA" + std::to_string(i));
+                if (!ci->ports.count(port)) {
+                    ci->ports[port].name = port;
+                    ci->ports[port].type = PORT_IN;
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
+                }
+            }
+        }
+    }
+}
 
 bool Arch::pack()
 {
