@@ -74,16 +74,41 @@ CellInfo *USPacker::insert_diffinbuf(IdString name, NetInfo *i[2], NetInfo *o)
     return dibuf_ptr;
 }
 
+NetInfo *USPacker::invert_net(NetInfo *toinv)
+{
+    if (toinv == nullptr)
+        return nullptr;
+    // If net is driven by an inverter, don't double-invert, which could cause problems with timing
+    // and IOLOGIC packing
+    if (toinv->driver.cell != nullptr && toinv->driver.cell->type == ctx->id("LUT1") &&
+        int_or_default(toinv->driver.cell->params, ctx->id("INIT"), 0) == 1) {
+        NetInfo *preinv = get_net_or_empty(toinv->driver.cell, ctx->id("I0"));
+        // If only one user, also sweep the inversion LUT to avoid packing issues
+        if (toinv->users.size() == 1) {
+            disconnect_port(ctx, toinv->driver.cell, ctx->id("I0"));
+            disconnect_port(ctx, toinv->driver.cell, ctx->id("O"));
+            packed_cells.insert(toinv->driver.cell->name);
+        }
+        return preinv;
+    } else {
+        std::unique_ptr<NetInfo> inv{new NetInfo};
+        IdString inv_name = ctx->id(toinv->name.str(ctx) + "$inverted$" + std::to_string(autoidx++));
+        auto lut = create_lut(ctx, inv_name.str(ctx) + "$lut", {toinv}, inv.get(), Property(1));
+        NetInfo *inv_ptr = inv.get();
+        ctx->nets[inv_name] = std::move(inv);
+        return inv_ptr;
+    }
+}
+
 CellInfo *USPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
 {
     std::unique_ptr<CellInfo> cell;
+    CellInfo *tbuf = nullptr;
     if (npnr_io->type == ctx->id("$nextpnr_ibuf")) {
         cell = create_cell(ctx, ctx->id("IBUF"), ctx->id(npnr_io->name.str(ctx) + "$ibuf$"));
         replace_port(npnr_io, ctx->id("O"), cell.get(), ctx->id("O"));
         top_port = ctx->id("I");
-    }
-    CellInfo *tbuf = nullptr;
-    if (npnr_io->type == ctx->id("$nextpnr_obuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
+    } else if (npnr_io->type == ctx->id("$nextpnr_obuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
         NetInfo *donet = npnr_io->ports.at(ctx->id("I")).net;
         tbuf = net_driven_by(
                 ctx, donet, [](const Context *ctx, const CellInfo *cell) { return cell->type == ctx->id("$_TBUF_"); },
@@ -97,8 +122,31 @@ CellInfo *USPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
             cell = create_cell(ctx, ctx->id("IOBUF"), ctx->id(npnr_io->name.str(ctx) + "$iobuf$"));
             replace_port(npnr_io, ctx->id("O"), cell.get(), ctx->id("O"));
             top_port = ctx->id("IO");
+            if (!tbuf) {
+                if (get_net_or_empty(npnr_io, ctx->id("I")) == nullptr)
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), cell.get(), ctx->id("T"));
+                else
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), cell.get(), ctx->id("T"));
+            }
         }
+        if (tbuf) {
+            replace_port(tbuf, ctx->id("A"), cell.get(), ctx->id("I"));
+            NetInfo *inv_en = invert_net(get_net_or_empty(tbuf, ctx->id("E")));
+            connect_port(ctx, inv_en, cell.get(), ctx->id("T"));
+        } else {
+            replace_port(npnr_io, ctx->id("I"), cell.get(), ctx->id("I"));
+        }
+    } else {
+        NPNR_ASSERT_FALSE("bad IO buffer type");
     }
+    // Rename nets to avoid collisions
+    NetInfo *i_net = get_net_or_empty(cell.get(), ctx->id("I"));
+    if (i_net)
+        rename_net(i_net->name, ctx->id(i_net->name.str(ctx) + "$auto$IOBUF_I$"));
+    NetInfo *o_net = get_net_or_empty(cell.get(), ctx->id("O"));
+    if (o_net)
+        rename_net(o_net->name, ctx->id(o_net->name.str(ctx) + "$auto$IOBUF_O$"));
+
     CellInfo *iob_ptr = cell.get();
     new_cells.push_back(std::move(cell));
     return iob_ptr;
@@ -140,9 +188,20 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
 
     if (!iobuf.cell) {
         // No IO buffer, need to create one
-        if (npnr_io->type == ctx->id("$nextpnr_ibuf")) {
-        }
+        iobuf.cell = create_iobuf(npnr_io, iobuf.port);
+        std::unique_ptr<NetInfo> pad_ionet{new NetInfo};
+        pad_ionet->name = npnr_io->name;
+        NPNR_ASSERT(!ctx->nets.count(pad_ionet->name));
+        ionet = pad_ionet.get();
+        ctx->nets[npnr_io->name] = std::move(pad_ionet);
     }
+
+    NPNR_ASSERT(ionet != nullptr);
+
+    for (auto &port : npnr_io->ports)
+        disconnect_port(ctx, npnr_io, port.first);
+
+    connect_port(ctx, ionet, pad_cell.get(), ctx->id("PAD"));
 
     result.first = pad_cell.get();
     result.second = iobuf;

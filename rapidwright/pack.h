@@ -126,6 +126,7 @@ struct USPacker
     void pack_carries();
 
     // IO
+    NetInfo *invert_net(NetInfo *toinv);
     CellInfo *insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o);
     CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o);
     CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr);
