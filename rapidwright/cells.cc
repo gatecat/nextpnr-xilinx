@@ -71,7 +71,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("VREF", PORT_IN);
         add_port("PAD", PORT_IN);
         add_port("OSC_EN", PORT_IN);
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 4; i++)
             add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
         add_port("O", PORT_OUT);
     } else if (type == ctx->id("IBUFCTRL")) {
@@ -96,7 +96,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("DIFF_IN_N", PORT_IN);
         add_port("OSC_EN[0]", PORT_IN);
         add_port("OSC_EN[1]", PORT_IN);
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 4; i++)
             add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
         add_port("VREF", PORT_IN);
         add_port("O", PORT_OUT);

@@ -56,7 +56,7 @@ CellInfo *USPacker::insert_obuf(IdString name, IdString type, NetInfo *i, NetInf
 {
     auto obuf = create_cell(ctx, type, name);
     connect_port(ctx, i, obuf.get(), ctx->id("I"));
-    connect_port(ctx, tri, obuf.get(), ctx->id("TRI"));
+    connect_port(ctx, tri, obuf.get(), ctx->id("T"));
     connect_port(ctx, o, obuf.get(), ctx->id("O"));
     CellInfo *obuf_ptr = obuf.get();
     new_cells.push_back(std::move(obuf));
@@ -97,6 +97,44 @@ NetInfo *USPacker::invert_net(NetInfo *toinv)
         NetInfo *inv_ptr = inv.get();
         ctx->nets[inv_name] = std::move(inv);
         return inv_ptr;
+    }
+}
+
+std::vector<CellInfo *> USPacker::decompose_iob(CellInfo *xil_iob)
+{
+    bool is_se_ibuf = xil_iob->type == ctx->id("IBUF") || xil_iob->type == ctx->id("IBUF_IBUFDISABLE") ||
+                      xil_iob->type == ctx->id("IBUF_INTERMDISABLE") || xil_iob->type == ctx->id("IBUFE3");
+    bool is_se_iobuf = xil_iob->type == ctx->id("IOBUF") || xil_iob->type == ctx->id("IOBUF_DCIEN") ||
+                       xil_iob->type == ctx->id("IOBUF_INTERMDISABLE") || xil_iob->type == ctx->id("IOBUFE3");
+    bool is_se_obuf = xil_iob->type == ctx->id("OBUF") || xil_iob->type == ctx->id("OBUFT");
+    if (is_se_ibuf || is_se_iobuf) {
+        NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("I"));
+        if (!is_se_iobuf)
+            disconnect_port(ctx, xil_iob, ctx->id("I"));
+        NetInfo *inb_out = create_internal_net(xil_iob->name, "INBUF_OUT");
+        CellInfo *inbuf = insert_inbuf(int_name(xil_iob->name, "IBUF"), pad_net, inb_out);
+        // Don't need to check cell type here, as replace_port is a no-op if port doesn't exist
+        replace_port(xil_iob, ctx->id("VREF"), inbuf, ctx->id("VREF"));
+        replace_port(xil_iob, ctx->id("OSC_EN"), inbuf, ctx->id("OSC_EN"));
+        for (int i = 0; i < 3; i++)
+            replace_port(xil_iob, ctx->id("OSC[" + std::to_string(i) + "]"), inbuf,
+                         ctx->id("OSC[" + std::to_string(i) + "]"));
+
+        NetInfo *top_out = get_net_or_empty(xil_iob, ctx->id("O"));
+        CellInfo *ibufctrl = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL"), inb_out, top_out);
+        replace_port(xil_iob, ctx->id("IBUFDISABLE"), ibufctrl, ctx->id("IBUFDISABLE"));
+        if (is_se_iobuf)
+            connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("T")), ibufctrl, ctx->id("T"));
+    }
+    if (is_se_obuf || is_se_iobuf) {
+        NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
+        disconnect_port(ctx, xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
+        bool has_dci = xil_iob->type == ctx->id("IOBUF_DCIEN") || xil_iob->type == ctx->id("IOBUFE3");
+        CellInfo *obuf =
+                insert_obuf(int_name(xil_iob->name, "OBUF"),
+                            is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
+                            get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
+        replace_port(xil_iob, ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
     }
 }
 
