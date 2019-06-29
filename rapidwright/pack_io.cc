@@ -227,8 +227,9 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
                                   usr.cell->name.c_str(ctx));
                     iobuf = usr;
                 }
+        pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_ibuf") ? "IN" : "INOUT";
     }
-    if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
+    if (npnr_io->type == ctx->id("$nextpnr_obuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
         ionet = get_net_or_empty(npnr_io, ctx->id("I"));
         if (ionet != nullptr && ionet->driver.cell != nullptr)
             if (toplevel_ports.count(ionet->driver.cell->type) &&
@@ -238,6 +239,7 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
                               ionet->driver.cell->name.c_str(ctx));
                 iobuf = ionet->driver;
             }
+        pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_obuf") ? "OUT" : "INOUT";
     }
 
     if (!iobuf.cell) {

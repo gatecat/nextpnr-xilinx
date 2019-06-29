@@ -512,7 +512,7 @@ public class json2dcp {
         for (NextpnrCell nc : ndes.cells.values()) {
             if (nc.type.equals("IOB_PAD")) {
                 // Process top level IO
-                EDIFPortInst epi = EDIFTools.createTopLevelPortInst(des, nc.name, PinType.INOUT);
+                EDIFPortInst epi = EDIFTools.createTopLevelPortInst(des, nc.name, PinType.valueOf(nc.attrs.get("X_IO_DIR")));
                 Net pad_net = nc.ports.get("PAD").net.rwNet;
                 pad_net.getLogicalNet().addPortInst(epi);
                 for (var attr : nc.attrs.entrySet()) {

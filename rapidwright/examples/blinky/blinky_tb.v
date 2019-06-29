@@ -4,7 +4,7 @@ module blinky_tb;
 
     wire [3:0] led;
 
-    top dut_i(.clk_ibuf(clk), .led0_obuf(led[0]), .led1_obuf(led[1]), .led2_obuf(led[2]), .led3_obuf(led[3]));
+    top dut_i(.clk_i(clk), .led(led));
 
     always #5 clk = (clk === 1'b0);
 

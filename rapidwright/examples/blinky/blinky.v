@@ -1,23 +1,4 @@
-(* blackbox, keep *)
-module IBUFCTRL(
-    output O
-);
-endmodule
-
-module top;
-    wire clk_i, clk;
-    (* BEL="IOB_X0Y111/IBUFCTRL", keep *)
-    IBUFCTRL clk_ibuf (.O(clk_i));
-
-    wire [3:0] led;
-    (* BEL="IOB_X0Y110/OUTBUF", keep *)
-    OBUF led0_obuf (.I(led[0]));
-    (* BEL="IOB_X0Y109/OUTBUF", keep *)
-    OBUF led1_obuf (.I(led[1]));
-    (* BEL="IOB_X0Y108/OUTBUF", keep *)
-    OBUF led2_obuf (.I(led[2]));
-    (* BEL="IOB_X0Y107/OUTBUF", keep *)
-    OBUF led3_obuf (.I(led[3]));
+module top(input clk_i, output [3:0] led);
 
     BUFGCTRL #(
     .IS_CE1_INVERTED(1'b1),
