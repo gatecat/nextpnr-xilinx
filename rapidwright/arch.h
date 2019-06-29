@@ -1390,6 +1390,15 @@ struct Arch : BaseCtx
     void parseXdc(std::istream &file);
     mutable std::unordered_map<std::string, std::string> pin_to_site;
     std::string getPackagePinSite(const std::string &pin) const;
+    std::string getBelPackagePin(BelId bel) const;
+    std::string getBelSite(BelId bel) const
+    {
+        int s = locInfo(bel).bel_data[bel.index].site;
+        NPNR_ASSERT(s != -1);
+        auto &tile = chip_info->tile_insts[bel.tile];
+        auto &site = tile.site_insts[s];
+        return site.name.get();
+    }
 
     // -------------------------------------------------
 

@@ -137,7 +137,7 @@ struct USPacker
     std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
     std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io);
     CellInfo *create_iobuf(CellInfo *npnr_io, IdString &top_port);
-    std::vector<CellInfo *> decompose_iob(CellInfo *xil_iob);
+    void decompose_iob(CellInfo *xil_iob);
     void pack_io();
 
     // BRAM

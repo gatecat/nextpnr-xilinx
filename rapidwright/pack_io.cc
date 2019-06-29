@@ -100,19 +100,29 @@ NetInfo *USPacker::invert_net(NetInfo *toinv)
     }
 }
 
-std::vector<CellInfo *> USPacker::decompose_iob(CellInfo *xil_iob)
+void USPacker::decompose_iob(CellInfo *xil_iob)
 {
     bool is_se_ibuf = xil_iob->type == ctx->id("IBUF") || xil_iob->type == ctx->id("IBUF_IBUFDISABLE") ||
                       xil_iob->type == ctx->id("IBUF_INTERMDISABLE") || xil_iob->type == ctx->id("IBUFE3");
     bool is_se_iobuf = xil_iob->type == ctx->id("IOBUF") || xil_iob->type == ctx->id("IOBUF_DCIEN") ||
                        xil_iob->type == ctx->id("IOBUF_INTERMDISABLE") || xil_iob->type == ctx->id("IOBUFE3");
     bool is_se_obuf = xil_iob->type == ctx->id("OBUF") || xil_iob->type == ctx->id("OBUFT");
+
+    auto pad_site = [&](NetInfo *n) {
+        for (auto user : n->users)
+            if (user.cell->type == ctx->id("PAD"))
+                return ctx->getBelSite(ctx->getBelByName(ctx->id(user.cell->attrs[ctx->id("BEL")])));
+        NPNR_ASSERT_FALSE(("can't find PAD for net " + n->name.str(ctx)).c_str());
+    };
+
     if (is_se_ibuf || is_se_iobuf) {
         NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("I"));
+        std::string site = pad_site(pad_net);
         if (!is_se_iobuf)
             disconnect_port(ctx, xil_iob, ctx->id("I"));
         NetInfo *inb_out = create_internal_net(xil_iob->name, "INBUF_OUT");
         CellInfo *inbuf = insert_inbuf(int_name(xil_iob->name, "IBUF"), pad_net, inb_out);
+        inbuf->attrs[ctx->id("BEL")] = site + "/INBUF";
         // Don't need to check cell type here, as replace_port is a no-op if port doesn't exist
         replace_port(xil_iob, ctx->id("VREF"), inbuf, ctx->id("VREF"));
         replace_port(xil_iob, ctx->id("OSC_EN"), inbuf, ctx->id("OSC_EN"));
@@ -122,18 +132,21 @@ std::vector<CellInfo *> USPacker::decompose_iob(CellInfo *xil_iob)
 
         NetInfo *top_out = get_net_or_empty(xil_iob, ctx->id("O"));
         CellInfo *ibufctrl = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL"), inb_out, top_out);
+        ibufctrl->attrs[ctx->id("BEL")] = site + "/IBUFCTRL";
         replace_port(xil_iob, ctx->id("IBUFDISABLE"), ibufctrl, ctx->id("IBUFDISABLE"));
         if (is_se_iobuf)
             connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("T")), ibufctrl, ctx->id("T"));
     }
     if (is_se_obuf || is_se_iobuf) {
         NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
+        std::string site = pad_site(pad_net);
         disconnect_port(ctx, xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         bool has_dci = xil_iob->type == ctx->id("IOBUF_DCIEN") || xil_iob->type == ctx->id("IOBUFE3");
         CellInfo *obuf =
                 insert_obuf(int_name(xil_iob->name, "OBUF"),
                             is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
                             get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
+        obuf->attrs[ctx->id("BEL")] = site + "/OBUF";
         replace_port(xil_iob, ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
     }
 }
@@ -251,14 +264,62 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
 void USPacker::pack_io()
 {
     log_info("Inserting IO buffers..\n");
+
+    std::vector<std::pair<CellInfo *, PortRef>> pad_and_buf;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf") ||
+            ci->type == ctx->id("$nextpnr_obuf"))
+            pad_and_buf.push_back(insert_pad_and_buf(ci));
+    }
+    flush_cells();
+    std::unordered_set<BelId> used_io_bels;
+    int unconstr_io_count = 0;
+    for (auto &iob : pad_and_buf) {
+        CellInfo *pad = iob.first;
+        // Process location constraints
+        if (pad->attrs.count(ctx->id("LOC"))) {
+            std::string loc = pad->attrs.at(ctx->id("LOC"));
+            std::string site = ctx->getPackagePinSite(loc);
+            if (site.empty())
+                log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n", pad->name.c_str(ctx),
+                          loc.c_str());
+            log_info("    Constraining '%s' to site '%s'\n", pad->name.c_str(ctx), site.c_str());
+            std::string belname = (pad->type == id_IOB_IBUFCTRL) ? "IBUFCTRL" : "OUTBUF";
+            pad->attrs[ctx->id("BEL")].setString(site + "/" + belname);
+        }
+        if (pad->attrs.count(ctx->id("BEL"))) {
+            used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")))));
+        } else {
+            ++unconstr_io_count;
+        }
+    }
+    std::queue<BelId> available_io_bels;
+    IdString pad_id = ctx->id("IOB_PAD");
+    for (auto bel : ctx->getBels()) {
+        if (int(available_io_bels.size()) >= unconstr_io_count)
+            break;
+        if (ctx->getBelType(bel) != pad_id)
+            continue;
+        if (ctx->getBelPackagePin(bel) == ".")
+            continue;
+        if (used_io_bels.count(bel))
+            continue;
+        available_io_bels.push(bel);
+    }
+    for (auto &iob : pad_and_buf) {
+        CellInfo *pad = iob.first;
+        if (!pad->attrs.count(ctx->id("BEL"))) {
+            pad->attrs[ctx->id("BEL")] = ctx->nameOfBel(available_io_bels.front());
+            available_io_bels.pop();
+        }
+        decompose_iob(iob.second.cell);
+    }
+    flush_cells();
+
     std::unordered_map<IdString, XFormRule> io_rules;
-    io_rules[ctx->id("$nextpnr_ibuf")].new_type = ctx->id("IOB_IBUFCTRL");
-    io_rules[ctx->id("$nextpnr_ibuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "IBUFCTRL");
-
-    io_rules[ctx->id("$nextpnr_obuf")].new_type = ctx->id("IOB_OUTBUF");
-    io_rules[ctx->id("$nextpnr_obuf")].set_attrs.emplace_back(ctx->id("X_ORIG_TYPE"), "OBUF");
-
     io_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
+    io_rules[ctx->id("PAD")].new_type = ctx->id("IOB_PAD");
     io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
     io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
     io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
@@ -267,32 +328,6 @@ void USPacker::pack_io()
     io_rules[ctx->id("BUFG_PS")].new_type = ctx->id("BUFCE_BUFG_PS");
 
     generic_xform(io_rules, true);
-
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->type == id_IOB_IBUFCTRL || ci->type == id_IOB_OUTBUF) {
-            if (ci->attrs.count(ctx->id("LOC"))) {
-                std::string loc = ci->attrs.at(ctx->id("LOC"));
-                std::string site = ctx->getPackagePinSite(loc);
-                if (site.empty())
-                    log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n",
-                              ci->name.c_str(ctx), loc.c_str());
-                log_info("    Constraining '%s' to site '%s'\n", ci->name.c_str(ctx), site.c_str());
-                std::string belname = (ci->type == id_IOB_IBUFCTRL) ? "IBUFCTRL" : "OUTBUF";
-                ci->attrs[ctx->id("BEL")].setString(site + "/" + belname);
-            }
-        }
-
-        if (ci->type == id_IOB_OUTBUF) {
-            NetInfo *inet = get_net_or_empty(ci, ctx->id("I"));
-            if (inet)
-                rename_net(inet->name, ctx->id(inet->name.str(ctx) + "$obuf_I$"));
-        } else if (ci->type == id_IOB_IBUFCTRL) {
-            NetInfo *onet = get_net_or_empty(ci, ctx->id("O"));
-            if (onet)
-                rename_net(onet->name, ctx->id(onet->name.str(ctx) + "$ibuf_O$"));
-        }
-    }
 }
 
 NEXTPNR_NAMESPACE_END
