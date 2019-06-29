@@ -1013,6 +1013,9 @@ struct Arch : BaseCtx
                         return true; // Ground driver only available if lowest 5LUT and 6LUT not used
                 }
             }
+        } else if (locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL) {
+            if (locInfo(pip).pip_data[pip.index].bel == ID_TRIBUF)
+                return true;
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_PERMUTATION) {
             LogicTileStatus *lts = tileStatus[pip.tile].lts;
             if (lts == nullptr)

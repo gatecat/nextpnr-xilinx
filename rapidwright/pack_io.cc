@@ -250,6 +250,9 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
         NPNR_ASSERT(!ctx->nets.count(pad_ionet->name));
         ionet = pad_ionet.get();
         ctx->nets[npnr_io->name] = std::move(pad_ionet);
+    } else {
+        log_info("    IO port '%s' driven by %s '%s'\n", npnr_io->name.c_str(ctx), iobuf.cell->type.c_str(ctx),
+                 iobuf.cell->name.c_str(ctx));
     }
 
     NPNR_ASSERT(ionet != nullptr);
@@ -271,6 +274,8 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
 void USPacker::pack_io()
 {
     log_info("Inserting IO buffers..\n");
+
+    get_top_level_pins(ctx, toplevel_ports);
 
     std::vector<std::pair<CellInfo *, PortRef>> pad_and_buf;
     for (auto cell : sorted(ctx->cells)) {
@@ -328,6 +333,8 @@ void USPacker::pack_io()
     io_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
     io_rules[ctx->id("PAD")].new_type = ctx->id("IOB_PAD");
     io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
+    io_rules[ctx->id("OBUFT")].new_type = ctx->id("IOB_OUTBUF");
+    io_rules[ctx->id("OBUFT")].port_xform[ctx->id("T")] = ctx->id("TRI");
     io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
     io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
 

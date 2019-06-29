@@ -485,7 +485,12 @@ public class json2dcp {
                     // FIXME: when does/n't site Wire insertion work?
                     BELPin startPin = null;
                     for (BEL other : si.getBELs()) {
-                        if (other.getBELClass() == BELClass.RBEL || other.getBELClass() == BELClass.PORT)
+                        if (other.getBELClass() == BELClass.RBEL || (other.getBELClass() == BELClass.PORT &&
+                                si.getSiteTypeEnum() != SiteTypeEnum.HDIOB_M &&
+                                si.getSiteTypeEnum() != SiteTypeEnum.HDIOB_S &&
+                                si.getSiteTypeEnum() != SiteTypeEnum.HPIOB &&
+                                si.getSiteTypeEnum() != SiteTypeEnum.HPIOB_M &&
+                                si.getSiteTypeEnum() != SiteTypeEnum.HPIOB_S))
                             continue;
                         for (BELPin p : other.getPins())
                             if(p.isOutput() && p.getSiteWireName().equals(sw[2]))
@@ -499,7 +504,7 @@ public class json2dcp {
                             for (BELPin p : other.getPins())
                                 if (p.isInput() && p.getSiteWireName().equals(sw[2])) {
                                     si.routeIntraSiteNet(n, startPin, p);
-                                    //System.out.println(startPin.getBEL().getName() + "." + startPin.getName() + " -> " + p.getBEL().getName() + "." + p.getName());
+                                    //System.out.println(si.getSiteName() + ": " + startPin.getBEL().getName() + "." + startPin.getName() + " -> " + p.getBEL().getName() + "." + p.getName());
                                 }
                         }
 
