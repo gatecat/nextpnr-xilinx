@@ -117,6 +117,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob)
 
     if (is_se_ibuf || is_se_iobuf) {
         NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("I"));
+        NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
         if (!is_se_iobuf)
             disconnect_port(ctx, xil_iob, ctx->id("I"));
@@ -131,6 +132,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob)
                          ctx->id("OSC[" + std::to_string(i) + "]"));
 
         NetInfo *top_out = get_net_or_empty(xil_iob, ctx->id("O"));
+        disconnect_port(ctx, xil_iob, ctx->id("O"));
         CellInfo *ibufctrl = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL"), inb_out, top_out);
         ibufctrl->attrs[ctx->id("BEL")] = site + "/IBUFCTRL";
         replace_port(xil_iob, ctx->id("IBUFDISABLE"), ibufctrl, ctx->id("IBUFDISABLE"));
@@ -139,6 +141,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob)
     }
     if (is_se_obuf || is_se_iobuf) {
         NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
+        NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
         disconnect_port(ctx, xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         bool has_dci = xil_iob->type == ctx->id("IOBUF_DCIEN") || xil_iob->type == ctx->id("IOBUFE3");
@@ -146,7 +149,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob)
                 insert_obuf(int_name(xil_iob->name, "OBUF"),
                             is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
                             get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
-        obuf->attrs[ctx->id("BEL")] = site + "/OBUF";
+        obuf->attrs[ctx->id("BEL")] = site + "/OUTBUF";
         replace_port(xil_iob, ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
     }
 }
@@ -253,6 +256,8 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
         disconnect_port(ctx, npnr_io, port.first);
 
     connect_port(ctx, ionet, pad_cell.get(), ctx->id("PAD"));
+    if (iobuf.cell->ports.at(iobuf.port).net != ionet)
+        connect_port(ctx, ionet, iobuf.cell, iobuf.port);
 
     result.first = pad_cell.get();
     result.second = iobuf;
@@ -285,8 +290,7 @@ void USPacker::pack_io()
                 log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n", pad->name.c_str(ctx),
                           loc.c_str());
             log_info("    Constraining '%s' to site '%s'\n", pad->name.c_str(ctx), site.c_str());
-            std::string belname = (pad->type == id_IOB_IBUFCTRL) ? "IBUFCTRL" : "OUTBUF";
-            pad->attrs[ctx->id("BEL")].setString(site + "/" + belname);
+            pad->attrs[ctx->id("BEL")].setString(site + "/PAD");
         }
         if (pad->attrs.count(ctx->id("BEL"))) {
             used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")))));
@@ -314,6 +318,7 @@ void USPacker::pack_io()
             available_io_bels.pop();
         }
         decompose_iob(iob.second.cell);
+        packed_cells.insert(iob.second.cell->name);
     }
     flush_cells();
 
