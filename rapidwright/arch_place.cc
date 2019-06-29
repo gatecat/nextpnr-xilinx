@@ -18,6 +18,7 @@
  */
 
 #include <boost/algorithm/string.hpp>
+#include <queue>
 #include "design_utils.h"
 #include "log.h"
 #include "nextpnr.h"
@@ -521,6 +522,66 @@ void Arch::fixupRouting()
                     if (orig_attr.empty())
                         lut5->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
                 }
+            }
+        }
+    }
+    /*
+     * Route PAD nets which won't have been routed due to inout issues
+     */
+    auto route_bfs = [&](NetInfo *net, WireId src, WireId dst) {
+        if (src == dst)
+            return;
+        std::queue<WireId> visit;
+        std::unordered_map<WireId, PipId> backtrace;
+        visit.push(dst);
+        WireId cursor;
+        while (!visit.empty()) {
+            WireId curr = visit.front();
+            visit.pop();
+            for (auto uh : getPipsUphill(curr)) {
+                if (!checkPipAvail(uh))
+                    continue;
+                WireId pip_src = getPipSrcWire(uh);
+                if (pip_src == src) {
+                    cursor = curr;
+                    break;
+                }
+                if (backtrace.count(pip_src))
+                    continue;
+                if (!checkWireAvail(pip_src))
+                    continue;
+                backtrace[pip_src] = uh;
+                visit.push(pip_src);
+            }
+        }
+        NPNR_ASSERT(cursor != WireId());
+        while (backtrace.count(cursor)) {
+            auto uh = backtrace[cursor];
+            cursor = getPipDstWire(uh);
+            if (!getBoundWireNet(cursor))
+                bindWire(cursor, net, STRENGTH_STRONG);
+            bindPip(uh, net, STRENGTH_STRONG);
+        }
+    };
+    for (auto cell : sorted(cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == id("IOB_PAD")) {
+            NetInfo *pad_net = ci->ports[id("PAD")].net;
+            for (auto w : pad_net->wires)
+                if (getBoundWireNet(w.first))
+                    unbindWire(w.first);
+            WireId pad_wire = getBelPinWire(ci->bel, id("PAD"));
+            bindWire(pad_wire, pad_net, STRENGTH_LOCKED);
+            if (pad_net->driver.cell != nullptr) {
+                WireId drv_wire = getCtx()->getNetinfoSourceWire(pad_net);
+                if (drv_wire != pad_wire)
+                    bindWire(drv_wire, pad_net, STRENGTH_LOCKED);
+                route_bfs(pad_net, drv_wire, pad_wire);
+            }
+            for (auto &usr : pad_net->users) {
+                if (usr.cell == ci)
+                    continue;
+                route_bfs(pad_net, pad_wire, getCtx()->getNetinfoSinkWire(pad_net, usr));
             }
         }
     }

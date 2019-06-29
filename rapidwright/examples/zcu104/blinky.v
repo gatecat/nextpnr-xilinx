@@ -1,21 +1,21 @@
-module top (input reset, output [3:0] led);
-
-    // Use PS8 to get a 100MHz clock
-    wire [3:0] plclk;
-    PS8 ps_i(
-        .PLCLK(plclk)
+module top (input clk_p, clk_n, output [3:0] led);
+    wire clk_i;
+    IBUFDS clk_ibuf (
+        .I(clk_p),
+        .IB(clk_n),
+        .O(clk_i)
     );
-
-    (* BEL="BUFG_PS_X0Y91/BUFG_PS" *)
-    BUFG_PS bfg_i(
-        .I(plclk[0]),
+    BUFGCTRL bufg_i (
+        .I0(clk_i),
+        .CE0(1'b1),
+        .S0(1'b1),
         .O(clk)
     );
 
-//`define BLINKY
+`define BLINKY
 `ifdef BLINKY
     reg clkdiv;
-    reg [19:0] ctr;
+    reg [21:0] ctr;
 
     always @(posedge clk) {clkdiv, ctr} <= ctr + 1'b1;
 

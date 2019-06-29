@@ -387,6 +387,9 @@ public class bbaexport {
         if (type.endsWith("_VREF"))
             return "IOB_VREF";
 
+        if (type.endsWith("_DIFFINBUF"))
+            return "IOB_DIFFINBUF";
+
         if (type.startsWith("PSS_ALTO_CORE_PAD_"))
             return "PSS_PAD";
 
