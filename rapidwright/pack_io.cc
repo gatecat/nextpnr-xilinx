@@ -184,9 +184,14 @@ CellInfo *USPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
             }
         }
         if (tbuf) {
+            log_info("    Replacing %s '%s' with a tristate IO buffer\n", tbuf->type.c_str(ctx), tbuf->name.c_str(ctx));
             replace_port(tbuf, ctx->id("A"), cell.get(), ctx->id("I"));
             NetInfo *inv_en = invert_net(get_net_or_empty(tbuf, ctx->id("E")));
             connect_port(ctx, inv_en, cell.get(), ctx->id("T"));
+
+            ctx->nets.erase(tbuf->ports.at(ctx->id("Y")).net->name);
+            tbuf->ports.at(ctx->id("Y")).net = nullptr;
+            packed_cells.insert(tbuf->name);
         } else {
             replace_port(npnr_io, ctx->id("I"), cell.get(), ctx->id("I"));
         }
