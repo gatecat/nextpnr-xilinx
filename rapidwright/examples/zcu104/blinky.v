@@ -12,20 +12,20 @@ module top (input reset, output [3:0] led);
         .O(clk)
     );
 
-//`define BLINKY
+`define BLINKY
 `ifdef BLINKY
     reg clkdiv;
     reg [19:0] ctr;
 
     always @(posedge clk) {clkdiv, ctr} <= ctr + 1'b1;
 
-    reg [4:0] led_r;
+    reg [3:0] led_r;
 
     always @(posedge clk) begin
         if (clkdiv)
             led_r <= led_r - 1'b1;
     end
-    assign led = &led_r;
+    assign led = led_r;
 `else
     wire [7:0] soc_led;
 

@@ -40,7 +40,7 @@ void replace_port(CellInfo *old_cell, IdString old_name, CellInfo *rep_cell, IdS
             rep.net->driver.cell = rep_cell;
             rep.net->driver.port = rep_name;
         }
-    } else if (rep.type == PORT_IN) {
+    } else if (rep.type == PORT_IN || rep.type == PORT_INOUT) {
         if (rep.net != nullptr) {
             for (PortRef &load : rep.net->users) {
                 if (load.cell == old_cell && load.port == old_name) {
@@ -90,7 +90,7 @@ void connect_port(const Context *ctx, NetInfo *net, CellInfo *cell, IdString por
         NPNR_ASSERT(net->driver.cell == nullptr);
         net->driver.cell = cell;
         net->driver.port = port_name;
-    } else if (port.type == PORT_IN) {
+    } else if (port.type == PORT_IN || port.type == PORT_INOUT) {
         PortRef user;
         user.cell = cell;
         user.port = port_name;

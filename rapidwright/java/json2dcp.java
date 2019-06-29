@@ -217,10 +217,8 @@ public class json2dcp {
 
     public static void connect_log_and_phys(Net net, Cell cell, String logical_pin) {
         // Similar to RapidWright's net.connect; but handles some special cases correctly
-        if (cell.getType().equals("INBUF") || cell.getType().equals("IBUFCTRL"))
-            net.connect(cell, logical_pin); // must use connect here
-        else if (cell.getPhysicalPinMapping(logical_pin) == null || cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]") ||
-                    cell.getType().equals("RAMB36E2")) {
+        if (cell.getPhysicalPinMapping(logical_pin) == null || cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]") ||
+                    cell.getType().equals("RAMB36E2") || cell.getType().equals("IBUFCTRL") || cell.getType().equals("OUTBUF") || cell.getType().equals("INBUF")) {
             // Create logical connection only
             EDIFPortInst epi;
             if (logical_pin.endsWith("]")) {
@@ -269,9 +267,8 @@ public class json2dcp {
         for (NextpnrCell nc : ndes.cells.values()) {
             if (!nc.attrs.containsKey("X_ORIG_TYPE"))
                 continue;
-            if (nc.type.equals("IOB_INBUF") || nc.type.equals("IOB_OUTBUF")  || nc.type.equals("IOB_IBUFCTRL")) {
-                nc.rwCell = des.createAndPlaceIOB(nc.name, nc.type.equals("IOB_OUTBUF") ? PinType.OUT : PinType.IN,
-                        siteToPin.get(nc.attrs.get("NEXTPNR_BEL").split("/")[0]), nc.attrs.getOrDefault("IOSTANDARD", "LVCMOS33"));
+            if (nc.type.equals("IOB_PAD")) {
+                nc.rwCell = null;
             } else {
                 Unisim unitype = Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE"));
                 nc.rwCell = des.createAndPlaceCell(nc.name, unitype, nc.attrs.get("NEXTPNR_BEL"));
@@ -341,6 +338,9 @@ public class json2dcp {
                     nc.rwCell.addProperty("RAM_ADDRESS_MASK", "2'b11");
                     nc.rwCell.addProperty("RAM_ADDRESS_SPACE", "2'b11");
                 }
+
+                if (nc.type.startsWith("IOB_"))
+                    nc.rwCell.setSiteFixed(true);
             }
 
         }
@@ -506,6 +506,18 @@ public class json2dcp {
                     }
                 }
 
+            }
+        }
+
+        for (NextpnrCell nc : ndes.cells.values()) {
+            if (nc.type.equals("IOB_PAD")) {
+                // Process top level IO
+                EDIFPortInst epi = EDIFTools.createTopLevelPortInst(des, nc.name, PinType.INOUT);
+                Net pad_net = nc.ports.get("PAD").net.rwNet;
+                pad_net.getLogicalNet().addPortInst(epi);
+                for (var attr : nc.attrs.entrySet()) {
+                    pad_net.getLogicalNet().addProperty(attr.getKey(), attr.getValue());
+                }
             }
         }
 
