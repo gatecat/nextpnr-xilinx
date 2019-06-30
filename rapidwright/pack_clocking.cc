@@ -80,7 +80,6 @@ void USPacker::try_preplace(CellInfo *cell, IdString port)
         log_info("    Constrained %s '%s' to bel '%s' based on dedicated routing\n", cell->type.c_str(ctx),
                  ctx->nameOf(cell), ctx->nameOfBel(tgt));
     }
-
 }
 
 void USPacker::preplace_unique(CellInfo *cell)

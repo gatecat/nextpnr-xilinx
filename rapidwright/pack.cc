@@ -442,7 +442,8 @@ void USPacker::pack_bram()
                         ci->ports[curr_we].name = curr_we;
                     }
                     disconnect_port(ctx, ci, curr_we);
-                    connect_port(ctx, low_we, ci, curr_we);
+                    if (ci->type == ctx->id("RAMB36E2") && write_width <= 9)
+                        connect_port(ctx, low_we, ci, curr_we);
                 }
             }
         }

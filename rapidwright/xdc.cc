@@ -105,6 +105,8 @@ void Arch::parseXdc(std::istream &in)
         if (cmd == "set_property") {
             if (arguments.size() != 4)
                 log_error("expected four arguments to 'set_property' (on line %d)\n", lineno);
+            if (arguments.at(1) == "INTERNAL_VREF")
+                continue;
             std::vector<CellInfo *> dest = get_cells(arguments.at(3));
             for (auto c : dest)
                 c->attrs[id(arguments.at(1))].setString(arguments.at(2));
