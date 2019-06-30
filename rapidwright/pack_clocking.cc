@@ -44,7 +44,7 @@ BelId USPacker::find_bel_with_short_route(WireId source, IdString beltype, IdStr
         WireId cursor = visit.front();
         visit.pop();
         for (auto bp : ctx->getWireBelPins(cursor))
-            if (bp.pin == belpin && ctx->getBelType(bp.bel) == beltype)
+            if (bp.pin == belpin && ctx->getBelType(bp.bel) == beltype && !used_bels.count(bp.bel))
                 return bp.bel;
         for (auto pip : ctx->getPipsDownhill(cursor)) {
             WireId dst = ctx->getPipDstWire(pip);
@@ -74,10 +74,13 @@ void USPacker::try_preplace(CellInfo *cell, IdString port)
     if (drv_wire == WireId())
         return;
     BelId tgt = find_bel_with_short_route(drv_wire, cell->type, port);
-    if (tgt != BelId())
-        drv->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(tgt));
-    log_info("    Constrained %s '%s' to bel '%s' based on dedicated routing\n", cell->type.c_str(ctx),
-             ctx->nameOf(cell), ctx->nameOfBel(tgt));
+    if (tgt != BelId()) {
+        used_bels.insert(tgt);
+        cell->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(tgt));
+        log_info("    Constrained %s '%s' to bel '%s' based on dedicated routing\n", cell->type.c_str(ctx),
+                 ctx->nameOf(cell), ctx->nameOfBel(tgt));
+    }
+
 }
 
 void USPacker::preplace_unique(CellInfo *cell)
@@ -85,32 +88,43 @@ void USPacker::preplace_unique(CellInfo *cell)
     if (cell->attrs.count(ctx->id("BEL")))
         return;
     for (auto bel : ctx->getBels()) {
-        if (ctx->checkBelAvail(bel) && ctx->getBelType(bel) == cell->type) {
+        if (ctx->checkBelAvail(bel) && ctx->getBelType(bel) == cell->type && !used_bels.count(bel)) {
             cell->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(bel));
+            used_bels.insert(bel);
             return;
         }
     }
 }
 
-void USPacker::prepare_plls()
+void USPacker::prepare_clocking()
 {
-    log_info("Preparing PLLs...\n");
-    std::unordered_map<IdString, IdString> legacy_upgrade;
-    legacy_upgrade[ctx->id("MMCME2_ADV")] = ctx->id("MMCME4_ADV");
+    log_info("Preparing clocking...\n");
+    std::unordered_map<IdString, IdString> upgrade;
+    upgrade[ctx->id("MMCME2_ADV")] = ctx->id("MMCME4_ADV");
+    upgrade[ctx->id("MMCME4_BASIC")] = ctx->id("MMCME4_ADV");
+    upgrade[ctx->id("PLLE4_BASIC")] = ctx->id("PLLE4_ADV");
+    upgrade[ctx->id("BUFG")] = ctx->id("BUFGCE");
+
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
-        if (legacy_upgrade.count(ci->type)) {
-            IdString new_type = legacy_upgrade.at(ci->type);
-            log_warning("    Upgrading legacy primitive '%s' of type %s to %s\n", ctx->nameOf(ci), ci->type.c_str(ctx),
-                        new_type.c_str(ctx));
+        if (upgrade.count(ci->type)) {
+            IdString new_type = upgrade.at(ci->type);
             ci->type = new_type;
         }
+        if (ci->attrs.count(ctx->id("BEL")))
+            used_bels.insert(ctx->getBelByName(ctx->id(ci->attrs.at(ctx->id("BEL")))));
     }
 }
 
 void USPacker::pack_plls()
 {
     log_info("Packing PLLs...\n");
+
+    auto set_default = [](CellInfo *ci, IdString param, const Property &value) {
+        if (!ci->params.count(param))
+            ci->params[param] = value;
+    };
+
     std::unordered_map<IdString, XFormRule> pll_rules;
     pll_rules[ctx->id("MMCME4_ADV")].new_type = id_MMCM_MMCM_TOP;
     pll_rules[ctx->id("PLLE4_ADV")].new_type = id_PLL_PLL_TOP;
@@ -120,6 +134,25 @@ void USPacker::pack_plls()
         // Preplace PLLs to make use of dedicated/short routing paths
         if (ci->type == id_MMCM_MMCM_TOP || ci->type == id_PLL_PLL_TOP)
             try_preplace(ci, ctx->id("CLKIN1"));
+        if (ci->type == id_MMCM_MMCM_TOP) {
+            // Fixup parameters
+            for (int i = 1; i <= 2; i++)
+                set_default(ci, ctx->id("CLKIN" + std::to_string(i) + "_PERIOD"), Property("0.0"));
+            for (int i = 0; i <= 6; i++) {
+                set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_CASCADE"), Property("FALSE"));
+                set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_DIVIDE"), Property(1));
+                set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_DUTY_CYCLE"), Property("0.5"));
+                set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_PHASE"), Property(0));
+                set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_USE_FINE_PS"), Property("FALSE"));
+            }
+            set_default(ci, ctx->id("COMPENSATION"), Property("INTERNAL"));
+
+            // Fixup routing
+            if (str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL") == "INTERNAL") {
+                disconnect_port(ctx, ci, ctx->id("CLKFBIN"));
+                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, ctx->id("CLKFBIN"));
+            }
+        }
     }
 }
 

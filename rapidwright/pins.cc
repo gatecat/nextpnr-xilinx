@@ -303,6 +303,12 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DEN")] = false;
     for (int i = 0; i < 16; i++)
         tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DI[" + std::to_string(i) + "]")] = false;
+    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DWE")] = false;
+    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PSCLK")] = false;
+    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PSEN")] = false;
+    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PSINCDEC")] = false;
+    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PWRDWN")] = false;
+    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("RST")] = false;
 
     // Misc clock buffers
     tied_pins[ctx->id("BUFGCE_DIV")][ctx->id("CE")] = true;
