@@ -613,6 +613,7 @@ struct Arch : BaseCtx
         LogicTileStatus *lts = nullptr;
         BRAMTileStatus *bts = nullptr;
         std::vector<CellInfo *> boundcells;
+        std::vector<int> sitevariant;
 
         ~TileStatus()
         {
@@ -726,6 +727,10 @@ struct Arch : BaseCtx
         NPNR_ASSERT(tileStatus[bel.tile].boundcells[bel.index] == nullptr);
 
         tileStatus[bel.tile].boundcells[bel.index] = cell;
+        auto &bd = locInfo(bel).bel_data[bel.index];
+        int site = bd.site;
+        if (site >= 0 && site < int(tileStatus[bel.tile].sitevariant.size()))
+            tileStatus[bel.tile].sitevariant.at(site) = bd.site_variant;
         cell->bel = bel;
         cell->belStrength = strength;
         refreshUiBel(bel);
@@ -1015,8 +1020,12 @@ struct Arch : BaseCtx
                 }
             }
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL) {
-            if (locInfo(pip).pip_data[pip.index].bel == ID_TRIBUF)
+            auto &pd = locInfo(pip).pip_data[pip.index];
+            if (pd.bel == ID_TRIBUF)
                 return true;
+            if (pd.site >= 0 && pd.site <= int(tileStatus[pip.tile].sitevariant.size()))
+                if (pd.site_variant > 0 && pd.site_variant != tileStatus[pip.tile].sitevariant.at(pd.site))
+                    return true;
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_PERMUTATION) {
             LogicTileStatus *lts = tileStatus[pip.tile].lts;
             if (lts == nullptr)

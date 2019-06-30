@@ -75,6 +75,7 @@ Arch::Arch(ArchArgs args) : args(args)
     tileStatus.resize(chip_info->num_tiles);
     for (int i = 0; i < chip_info->num_tiles; i++) {
         tileStatus[i].boundcells.resize(chip_info->tile_types[chip_info->tile_insts[i].type].num_bels);
+        tileStatus[i].sitevariant.resize(chip_info->tile_insts[i].num_sites);
     }
 }
 
