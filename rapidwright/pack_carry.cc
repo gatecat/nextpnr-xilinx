@@ -250,7 +250,7 @@ void USPacker::pack_carries()
                     lut_types.count(c8_s->driver.cell->type)) {
                     s_lut = c8_s->driver.cell;
                     for (int j = 0; j < 5; j++) {
-                        NetInfo *ix = get_net_or_empty(s_lut, ctx->id("I[" + std::to_string(i) + "]"));
+                        NetInfo *ix = get_net_or_empty(s_lut, ctx->id("I" + std::to_string(j)));
                         if (ix) {
                             unique_lut_inputs.insert(ix->name);
                             s_inputs++;
@@ -263,7 +263,7 @@ void USPacker::pack_carries()
                     lut_types.count(c8_di->driver.cell->type)) {
                     di_lut = c8_di->driver.cell;
                     for (int j = 0; j < 5; j++) {
-                        NetInfo *ix = get_net_or_empty(di_lut, ctx->id("I[" + std::to_string(i) + "]"));
+                        NetInfo *ix = get_net_or_empty(di_lut, ctx->id("I" + std::to_string(j)));
                         if (ix) {
                             unique_lut_inputs.insert(ix->name);
                             d_inputs++;

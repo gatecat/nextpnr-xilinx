@@ -34,6 +34,13 @@ inline NetInfo *port_or_nullptr(const CellInfo *cell, IdString name)
     return found->second.net;
 }
 
+//#define DEBUG_VALIDITY
+#ifdef DEBUG_VALIDITY
+#define DBG() log_info("invalid: %s %s %d\n", getCtx()->nameOfBel(bel), __FILE__, __LINE__)
+#else
+#define DBG()
+#endif
+
 bool Arch::isBelLocationValid(BelId bel) const
 {
     IdString belTileType = getBelTileType(bel);
@@ -78,17 +85,23 @@ bool Arch::isBelLocationValid(BelId bel) const
                                         break;
                                 }
                             }
-                            if (shared < need_shared)
+                            if (shared < need_shared) {
+                                DBG();
                                 return false;
+                            }
                         }
                     }
                 }
                 if (lut5 != nullptr) {
-                    if (!is_slicem && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl))
+                    if (!is_slicem && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl)) {
+                        DBG();
                         return false; // Memory and SRLs only valid in SLICEMs
+                    }
                     // 5LUT can use at most 5 inputs and 1 output
-                    if (lut5->lutInfo.input_count > 5 || lut5->lutInfo.output_count == 2)
-                        return false;
+                    if (lut5->lutInfo.input_count > 5 || lut5->lutInfo.output_count == 2) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
                 }
 
                 // Check (over)usage of DI and X inputs
@@ -101,12 +114,16 @@ bool Arch::isBelLocationValid(BelId bel) const
                     if (lut5->lutInfo.di1_net != nullptr) {
                         if (i_net == nullptr)
                             i_net = lut5->lutInfo.di1_net;
-                        else if (i_net != lut5->lutInfo.di1_net)
-                            return false;
+                        else if (i_net != lut5->lutInfo.di1_net) {
+                            DBG();
+                            return false; // Memory and SRLs only valid in SLICEMs
+                        }
                     }
                     // DI2 not available for 5LUT
-                    if (lut5->lutInfo.di2_net != nullptr)
-                        return false;
+                    if (lut5->lutInfo.di2_net != nullptr) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
                 }
 
                 CellInfo *mux = nullptr;
@@ -123,8 +140,10 @@ bool Arch::isBelLocationValid(BelId bel) const
                 if (mux != nullptr) {
                     if (x_net == nullptr)
                         x_net = mux->muxInfo.sel;
-                    else if (x_net != mux->muxInfo.sel)
-                        return false;
+                    else if (x_net != mux->muxInfo.sel) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
                 }
 
                 CellInfo *out_fmux = nullptr;
@@ -143,8 +162,10 @@ bool Arch::isBelLocationValid(BelId bel) const
                 if (carry8 != nullptr && carry8->carryInfo.x_sigs[i] != nullptr) {
                     if (x_net == nullptr)
                         x_net = carry8->carryInfo.x_sigs[i];
-                    else if (x_net != carry8->carryInfo.x_sigs[i])
-                        return false;
+                    else if (x_net != carry8->carryInfo.x_sigs[i]) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
                 }
 
                 // FF1 might use X, if it isn't driven directly
@@ -158,8 +179,10 @@ bool Arch::isBelLocationValid(BelId bel) const
                         // Indirect, must use X input
                         if (x_net == nullptr)
                             x_net = ff1->ffInfo.d;
-                        else if (x_net != ff1->ffInfo.d)
-                            return false;
+                        else if (x_net != ff1->ffInfo.d) {
+                            DBG();
+                            return false; // Memory and SRLs only valid in SLICEMs
+                        }
                     }
                 }
 
@@ -174,8 +197,10 @@ bool Arch::isBelLocationValid(BelId bel) const
                         // Indirect, must use X input
                         if (i_net == nullptr)
                             i_net = ff2->ffInfo.d;
-                        else if (i_net != ff2->ffInfo.d)
-                            return false;
+                        else if (i_net != ff2->ffInfo.d) {
+                            DBG();
+                            return false; // Memory and SRLs only valid in SLICEMs
+                        }
                     }
                 }
 
@@ -196,16 +221,20 @@ bool Arch::isBelLocationValid(BelId bel) const
 
                 if (carry8 != nullptr && carry8->carryInfo.out_sigs[i] != nullptr) {
                     // FIXME: direct connections to FF
-                    if (mux_output_used)
-                        return false;
+                    if (mux_output_used) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
                     mux_output_used = true;
                 }
                 if (out_fmux != nullptr) {
                     NetInfo *f7f8 = out_fmux->muxInfo.out;
                     if (f7f8 != nullptr && (f7f8->users.size() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d) &&
                                                                        (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
-                        if (mux_output_used)
-                            return false;
+                        if (mux_output_used) {
+                            DBG();
+                            return false; // Memory and SRLs only valid in SLICEMs
+                        }
                         mux_output_used = true;
                     }
                 }
