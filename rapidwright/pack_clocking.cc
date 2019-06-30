@@ -76,6 +76,85 @@ void USPacker::try_preplace(CellInfo *cell, IdString port)
     BelId tgt = find_bel_with_short_route(drv_wire, cell->type, port);
     if (tgt != BelId())
         drv->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(tgt));
+    log_info("    Constrained %s '%s' to bel '%s' based on dedicated routing\n", cell->type.c_str(ctx),
+             ctx->nameOf(cell), ctx->nameOfBel(tgt));
+}
+
+void USPacker::preplace_unique(CellInfo *cell)
+{
+    if (cell->attrs.count(ctx->id("BEL")))
+        return;
+    for (auto bel : ctx->getBels()) {
+        if (ctx->checkBelAvail(bel) && ctx->getBelType(bel) == cell->type) {
+            cell->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(bel));
+            return;
+        }
+    }
+}
+
+void USPacker::prepare_plls()
+{
+    log_info("Preparing PLLs...\n");
+    std::unordered_map<IdString, IdString> legacy_upgrade;
+    legacy_upgrade[ctx->id("MMCME2_ADV")] = ctx->id("MMCME4_ADV");
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (legacy_upgrade.count(ci->type)) {
+            IdString new_type = legacy_upgrade.at(ci->type);
+            log_warning("    Upgrading legacy primitive '%s' of type %s to %s\n", ctx->nameOf(ci), ci->type.c_str(ctx),
+                        new_type.c_str(ctx));
+            ci->type = new_type;
+        }
+    }
+}
+
+void USPacker::pack_plls()
+{
+    log_info("Packing PLLs...\n");
+    std::unordered_map<IdString, XFormRule> pll_rules;
+    pll_rules[ctx->id("MMCME4_ADV")].new_type = id_MMCM_MMCM_TOP;
+    pll_rules[ctx->id("PLLE4_ADV")].new_type = id_PLL_PLL_TOP;
+    generic_xform(pll_rules);
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        // Preplace PLLs to make use of dedicated/short routing paths
+        if (ci->type == id_MMCM_MMCM_TOP || ci->type == id_PLL_PLL_TOP)
+            try_preplace(ci, ctx->id("CLKIN1"));
+    }
+}
+
+void USPacker::pack_gbs()
+{
+    log_info("Packing global buffers...\n");
+    std::unordered_map<IdString, XFormRule> gb_rules;
+    gb_rules[id_BUFGCTRL].new_type = id_BUFGCTRL;
+    gb_rules[ctx->id("BUFG_PS")].new_type = id_BUFCE_BUFG_PS;
+    gb_rules[ctx->id("BUFGCE_DIV")].new_type = id_BUFGCE_DIV_BUFGCE_DIV;
+    gb_rules[ctx->id("BUFGCE")].new_type = id_BUFCE_BUFCE;
+
+    // Make sure prerequisites are set up first
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("PSS_ALTO_CORE"))
+            preplace_unique(ci);
+    }
+
+    generic_xform(gb_rules);
+
+    // Preplace global buffers to make use of dedicated/short routing
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == id_BUFGCTRL)
+            try_preplace(ci, ctx->id("I0"));
+        if (ci->type == id_BUFCE_BUFG_PS || ci->type == id_BUFGCE_DIV_BUFGCE_DIV || ci->type == id_BUFCE_BUFCE)
+            try_preplace(ci, ctx->id("I"));
+    }
+}
+
+void USPacker::pack_clocking()
+{
+    pack_plls();
+    pack_gbs();
 }
 
 NEXTPNR_NAMESPACE_END

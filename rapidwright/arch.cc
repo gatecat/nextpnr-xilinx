@@ -486,7 +486,8 @@ void Arch::routeClock()
     for (auto net : sorted(nets)) {
         NetInfo *ni = net.second;
         if (ni->driver.cell == nullptr ||
-            (ni->driver.cell->type != id_BUFGCTRL && ni->driver.cell->type != id("BUFCE_BUFG_PS")) ||
+            (ni->driver.cell->type != id_BUFGCTRL && ni->driver.cell->type != id_BUFCE_BUFG_PS &&
+             ni->driver.cell->type != id_BUFCE_BUFCE && ni->driver.cell->type != id_BUFGCE_DIV_BUFGCE_DIV) ||
             ni->driver.port != id("O"))
             continue;
         log_info("    routing clock '%s'\n", ni->name.c_str(this));

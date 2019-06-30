@@ -806,7 +806,8 @@ struct Arch : BaseCtx
     bool getBelGlobalBuf(BelId bel) const
     {
         IdString type = getBelType(bel);
-        return (type == id_BUFGCTRL) || (type == id_PSEUDO_GND) || (type == id_PSEUDO_VCC);
+        return (type == id_BUFGCTRL) || (type == id_PSEUDO_GND) || (type == id_PSEUDO_VCC) ||
+               (type == id_BUFCE_BUFG_PS) || (type == id_BUFGCE_DIV_BUFGCE_DIV) || (type == id_BUFCE_BUFCE);
     }
 
     bool getBelHidden(BelId bel) const { return locInfo(bel).bel_data[bel.index].is_routing; }

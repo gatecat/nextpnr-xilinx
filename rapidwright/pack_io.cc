@@ -406,7 +406,6 @@ void USPacker::pack_io()
 
     // Type transformations from logical to physical
     std::unordered_map<IdString, XFormRule> io_rules;
-    io_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
     io_rules[ctx->id("PAD")].new_type = ctx->id("IOB_PAD");
     io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
     io_rules[ctx->id("OBUFT")].new_type = ctx->id("IOB_OUTBUF");
@@ -416,7 +415,6 @@ void USPacker::pack_io()
     io_rules[ctx->id("DIFFINBUF")].new_type = ctx->id("IOB_DIFFINBUF");
 
     io_rules[ctx->id("PS8")].new_type = ctx->id("PSS_ALTO_CORE");
-    io_rules[ctx->id("BUFG_PS")].new_type = ctx->id("BUFCE_BUFG_PS");
 
     generic_xform(io_rules, true);
 }

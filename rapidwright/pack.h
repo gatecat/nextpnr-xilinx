@@ -150,6 +150,10 @@ struct USPacker
     // Clocking
     BelId find_bel_with_short_route(WireId source, IdString beltype, IdString belpin);
     void try_preplace(CellInfo *cell, IdString port);
+    void preplace_unique(CellInfo *cell);
+    void prepare_plls();
+    void pack_plls();
+    void pack_gbs();
     void pack_clocking();
 
     // BRAM
