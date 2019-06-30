@@ -147,6 +147,11 @@ struct USPacker
     void prepare_iologic();
     void pack_iologic();
 
+    // Clocking
+    BelId find_bel_with_short_route(WireId source, IdString beltype, IdString belpin);
+    void try_preplace(CellInfo *cell, IdString port);
+    void pack_clocking();
+
     // BRAM
     void pack_bram();
 
