@@ -143,6 +143,8 @@ struct USPacker
     // IOLOGIC
     std::unordered_map<IdString, XFormRule> hp_iol_rules, hd_iol_rules;
     std::string get_iol_site(const std::string &io_bel);
+    // Call before packing constants
+    void prepare_iologic();
     void pack_iologic();
 
     // BRAM

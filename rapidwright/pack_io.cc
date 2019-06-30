@@ -437,6 +437,23 @@ std::string USPacker::get_iol_site(const std::string &io_bel)
     }
 }
 
+void USPacker::prepare_iologic()
+{
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        // ODDRE1 must be transformed to an OSERDESE3
+        if (ci->type == ctx->id("ODDRE1")) {
+            ci->type = ctx->id("OSERDESE3");
+            ci->params[ctx->id("ODDR_MODE")] = "TRUE";
+            rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
+            rename_port(ctx, ci, ctx->id("SR"), ctx->id("RST"));
+            rename_port(ctx, ci, ctx->id("D1"), ctx->id("D[0]"));
+            rename_port(ctx, ci, ctx->id("D2"), ctx->id("D[4]"));
+            rename_port(ctx, ci, ctx->id("Q"), ctx->id("OQ"));
+        }
+    }
+}
+
 void USPacker::pack_iologic()
 {
     hd_iol_rules[ctx->id("IDDRE1")].new_type = ctx->id("IOL_IDDR");
@@ -463,20 +480,6 @@ void USPacker::pack_iologic()
     };
 
     std::unordered_map<IdString, BelId> iodelay_to_io;
-
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
-        // ODDRE1 must be transformed to an OSERDESE3
-        if (ci->type == ctx->id("ODDRE1")) {
-            ci->type = ctx->id("OSERDESE3");
-            ci->params[ctx->id("ODDR_MODE")] = "TRUE";
-            rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
-            rename_port(ctx, ci, ctx->id("SR"), ctx->id("RST"));
-            rename_port(ctx, ci, ctx->id("D1"), ctx->id("D[0]"));
-            rename_port(ctx, ci, ctx->id("D2"), ctx->id("D[4]"));
-            rename_port(ctx, ci, ctx->id("Q"), ctx->id("OQ"));
-        }
-    }
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -518,9 +521,25 @@ void USPacker::pack_iologic()
 
             std::string iol_site = get_iol_site(ctx->getBelName(io_bel).str(ctx));
             if (is_hpio(io_bel)) {
+                NetInfo *rst = get_net_or_empty(ci, ctx->id("RST"));
+                if (rst == ctx->nets[ctx->id("$PACKER_GND_NET")].get()) {
+                    // Can't use the general invertible_pins framework here as this only applies
+                    // to HPIO locations
+                    disconnect_port(ctx, ci, ctx->id("RST"));
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, ctx->id("RST"));
+                    ci->params[ctx->id("IS_RST_INVERTED")] = "1";
+                }
+
                 xform_cell(hp_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/OSERDES";
+                if (str_or_default(ci->params, ctx->id("ODDR_MODE"), "FALSE") == "TRUE") {
+                    ci->ports[ctx->id("OFD_CE")].name = ctx->id("OFD_CE");
+                    ci->ports[ctx->id("OFD_CE")].type = PORT_IN;
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("OFD_CE"));
+                }
+
             } else {
+                disconnect_port(ctx, ci, ctx->id("T"));
                 xform_cell(hd_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/OPTFF";
             }

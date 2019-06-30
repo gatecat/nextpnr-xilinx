@@ -471,6 +471,7 @@ bool Arch::pack()
     USPacker packer;
     packer.ctx = getCtx();
     packer.pack_io();
+    packer.prepare_iologic();
     packer.pack_constants();
     packer.pack_iologic();
     packer.pack_carries();
