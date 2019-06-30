@@ -442,7 +442,9 @@ void USPacker::pack_bram()
                         ci->ports[curr_we].name = curr_we;
                     }
                     disconnect_port(ctx, ci, curr_we);
-                    if (ci->type == ctx->id("RAMB36E2") && write_width <= 9)
+                    if (ci->type == ctx->id("RAMB36E2") && write_width <= 9 && port == 'B')
+                        connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, curr_we);
+                    else
                         connect_port(ctx, low_we, ci, curr_we);
                 }
             }

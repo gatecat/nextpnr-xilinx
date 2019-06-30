@@ -438,7 +438,7 @@ public class json2dcp {
                 String wire = routing[i];
                 String pip = routing[i + 1];
 
-                if (!pip.isEmpty() && pip.startsWith("SITEPIP") && !nn.name.equals("$PACKER_GND_NET")) {
+                if (!pip.isEmpty() && pip.startsWith("SITEPIP") && (!nn.name.equals("$PACKER_GND_NET") || !pip.contains("OUTMUXA"))) {
                     String[] sp = pip.split("/");
                     SiteInst si = des.getSiteInstFromSiteName(sp[1]);
                     if (si == null)
