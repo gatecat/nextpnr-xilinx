@@ -330,7 +330,7 @@ public class json2dcp {
                         }
                     }
                     if (param.getKey().startsWith("IS_") && param.getKey().endsWith("_INVERTED")) {
-                        value = value.replace("h", "b");
+                        value = fixup_init(value, 1).replace("h", "b");
                     }
                     nc.rwCell.addProperty(param.getKey(), value);
                     //System.out.println(param.getKey() + " = " + param.getValue());
