@@ -140,6 +140,11 @@ struct USPacker
     void decompose_iob(CellInfo *xil_iob);
     void pack_io();
 
+    // IOLOGIC
+    std::unordered_map<IdString, XFormRule> hp_iol_rules, hd_iol_rules;
+    std::string get_iol_site(const std::string &io_bel);
+    void pack_iologic();
+
     // BRAM
     void pack_bram();
 

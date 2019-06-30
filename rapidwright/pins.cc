@@ -123,8 +123,8 @@ void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unorder
     invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("PWRDWN"));
     invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("RST"));
     invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("C"));
-    invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("D1"));
-    invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("D2"));
+    // invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("D1"));
+    // invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("D2"));
     invertible_pins[ctx->id("ODELAYE3")].insert(ctx->id("CLK"));
     invertible_pins[ctx->id("ODELAYE3")].insert(ctx->id("RST"));
     invertible_pins[ctx->id("OR2L")].insert(ctx->id("SRI"));
@@ -283,6 +283,10 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         }
         tied_pins[uram][ctx->id("SLEEP")] = false;
     }
+
+    // IDDR/ODDR primitives
+    tied_pins[ctx->id("IDDRE1")][ctx->id("R")] = false;
+    tied_pins[ctx->id("ODDRE1")][ctx->id("SR")] = false;
 }
 
 // Get a list of logical pins that have both L and U bel pins that need

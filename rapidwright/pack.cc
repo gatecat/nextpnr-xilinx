@@ -472,6 +472,7 @@ bool Arch::pack()
     packer.ctx = getCtx();
     packer.pack_io();
     packer.pack_constants();
+    packer.pack_iologic();
     packer.pack_carries();
     packer.pack_luts();
     packer.pack_dram();

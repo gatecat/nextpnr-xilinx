@@ -421,4 +421,111 @@ void USPacker::pack_io()
     generic_xform(io_rules, true);
 }
 
+std::string USPacker::get_iol_site(const std::string &io_bel)
+{
+    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IBUFCTRL"));
+    WireId start = ctx->getBelPinWire(ibc_bel, ctx->id("O"));
+    WireId cursor = start;
+    while (true) {
+        auto bp = ctx->getWireBelPins(cursor);
+        if (cursor != start && bp.begin() != bp.end()) {
+            return ctx->getBelSite((*bp.begin()).bel);
+        }
+        auto pips_dh = ctx->getPipsDownhill(cursor);
+        NPNR_ASSERT(pips_dh.begin() != pips_dh.end());
+        cursor = ctx->getPipDstWire(*pips_dh.begin());
+    }
+}
+
+void USPacker::pack_iologic()
+{
+    hd_iol_rules[ctx->id("IDDRE1")].new_type = ctx->id("IOL_IDDR");
+    hd_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("C")] = ctx->id("CK");
+    hd_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("CB")] = ctx->id("CK_C");
+    hd_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("R")] = ctx->id("RST");
+
+    hd_iol_rules[ctx->id("OSERDESE3")].new_type = ctx->id("IOL_OPTFF");
+    hd_iol_rules[ctx->id("OSERDESE3")].port_xform[ctx->id("CLK")] = ctx->id("CK");
+    hd_iol_rules[ctx->id("OSERDESE3")].port_xform[ctx->id("D[0]")] = ctx->id("D1");
+    hd_iol_rules[ctx->id("OSERDESE3")].port_xform[ctx->id("D[4]")] = ctx->id("D2");
+
+    hp_iol_rules[ctx->id("IDDRE1")].new_type = ctx->id("ISERDESE3");
+    hp_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("C")] = ctx->id("CLK");
+    hp_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("CB")] = ctx->id("CLK_B");
+    hp_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("R")] = ctx->id("RST");
+    hp_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("Q1")] = ctx->id("Q0");
+    hp_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("Q2")] = ctx->id("Q1");
+
+    hp_iol_rules[ctx->id("OSERDESE3")].new_type = ctx->id("OSERDESE3");
+
+    auto is_hpio = [&](BelId bel) {
+        return ctx->getBelTileType(bel) == ctx->id("HPIO_L") || ctx->getBelTileType(bel) == ctx->id("HPIO_RIGHT");
+    };
+
+    std::unordered_map<IdString, BelId> iodelay_to_io;
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        // ODDRE1 must be transformed to an OSERDESE3
+        if (ci->type == ctx->id("ODDRE1")) {
+            ci->type = ctx->id("OSERDESE3");
+            ci->params[ctx->id("ODDR_MODE")] = "TRUE";
+            rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
+            rename_port(ctx, ci, ctx->id("SR"), ctx->id("RST"));
+            rename_port(ctx, ci, ctx->id("D1"), ctx->id("D[0]"));
+            rename_port(ctx, ci, ctx->id("D2"), ctx->id("D[4]"));
+            rename_port(ctx, ci, ctx->id("Q"), ctx->id("OQ"));
+        }
+    }
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDDRE1") || ci->type == ctx->id("ISERDESE3")) {
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            BelId io_bel;
+            if (drv->type == ctx->id("IOB_IBUFCTRL"))
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL"))));
+            else if (drv->type == ctx->id("IDELAYE3") && d->driver.port == ctx->id("DATAOUT"))
+                io_bel = iodelay_to_io.at(drv->name);
+            else
+                log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                          ctx->nameOf(ci), drv->type.c_str(ctx));
+            std::string iol_site = get_iol_site(ctx->getBelName(io_bel).str(ctx));
+            if (is_hpio(io_bel)) {
+                xform_cell(hp_iol_rules, ci);
+                ci->attrs[ctx->id("BEL")] = iol_site + "/ISERDES";
+            } else {
+                if (ci->type == ctx->id("ISERDESE3"))
+                    log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+                xform_cell(hd_iol_rules, ci);
+                ci->attrs[ctx->id("BEL")] = iol_site + "/IDDR";
+            }
+        } else if (ci->type == ctx->id("OSERDESE3")) {
+            NetInfo *q = get_net_or_empty(ci, ctx->id("OQ"));
+            if (q == nullptr || q->users.empty())
+                log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            BelId io_bel;
+            if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("IOB_OUTBUF"))
+                io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL"))));
+            else if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE3") &&
+                     q->users.at(0).port == ctx->id("ODATAIN"))
+                io_bel = iodelay_to_io.at(q->users.at(0).cell->name);
+            else
+                log_error("%s '%s' has illegal fanout on OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+
+            std::string iol_site = get_iol_site(ctx->getBelName(io_bel).str(ctx));
+            if (is_hpio(io_bel)) {
+                xform_cell(hp_iol_rules, ci);
+                ci->attrs[ctx->id("BEL")] = iol_site + "/OSERDES";
+            } else {
+                xform_cell(hd_iol_rules, ci);
+                ci->attrs[ctx->id("BEL")] = iol_site + "/OPTFF";
+            }
+        }
+    }
+}
+
 NEXTPNR_NAMESPACE_END
