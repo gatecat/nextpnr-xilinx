@@ -345,6 +345,10 @@ void USPacker::pack_bram()
     // Rules for normal TDP BRAM
     std::unordered_map<IdString, XFormRule> bram_rules;
     bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
+    bram_rules[ctx->id("RAMB18E2")].port_multixform[ctx->id(std::string("WEA[0]"))] = {ctx->id("WEA0"),
+                                                                                       ctx->id("WEA1")};
+    bram_rules[ctx->id("RAMB18E2")].port_multixform[ctx->id(std::string("WEA[1]"))] = {ctx->id("WEA2"),
+                                                                                       ctx->id("WEA3")};
     bram_rules[ctx->id("RAMB36E2")].new_type = id_RAMB36E2_RAMB36E2;
 
     // Some ports have upper/lower bel pins in 36-bit mode

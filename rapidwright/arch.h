@@ -605,7 +605,7 @@ struct Arch : BaseCtx
 
     struct BRAMTileStatus
     {
-        CellInfo *cells[12];
+        CellInfo *cells[12] = {nullptr};
     };
 
     struct TileStatus
@@ -617,10 +617,8 @@ struct Arch : BaseCtx
 
         ~TileStatus()
         {
-            if (lts != nullptr)
-                delete lts;
-            if (bts != nullptr)
-                delete bts;
+            delete lts;
+            delete bts;
         }
     };
 
@@ -709,15 +707,16 @@ struct Arch : BaseCtx
 
     void updateBramBel(BelId bel, CellInfo *cell)
     {
-        if (cell->type != id_RAMBFIFO18E2_RAMBFIFO18E2 && cell->type != id_RAMBFIFO36E2_RAMBFIFO36E2 &&
-            cell->type != id_RAMB18E2_RAMB18E2 && cell->type != id_FIFO18E2_FIFO18E2 &&
-            cell->type != id_RAMB36E2_RAMB36E2 && cell->type != id_FIFO36E2_FIFO36E2)
+        IdString type = getBelType(bel);
+        if (type != id_RAMBFIFO18E2_RAMBFIFO18E2 && type != id_RAMBFIFO36E2_RAMBFIFO36E2 &&
+            type != id_RAMB18E2_RAMB18E2 && type != id_FIFO18E2_FIFO18E2 && type != id_RAMB36E2_RAMB36E2 &&
+            type != id_FIFO36E2_FIFO36E2)
             return;
         auto &tts = tileStatus[bel.tile];
         if (tts.bts == nullptr)
             tts.bts = new BRAMTileStatus();
         int z = locInfo(bel).bel_data[bel.index].z;
-        NPNR_ASSERT(z < 12);
+        NPNR_ASSERT(z >= 0 && z < 12);
         tts.bts->cells[z] = cell;
     }
 
@@ -737,6 +736,8 @@ struct Arch : BaseCtx
 
         if (isLogicTile(bel))
             updateLogicBel(bel, cell);
+        else if (isBRAMTile(bel))
+            updateBramBel(bel, cell);
     }
 
     void unbindBel(BelId bel)
@@ -750,6 +751,8 @@ struct Arch : BaseCtx
 
         if (isLogicTile(bel))
             updateLogicBel(bel, nullptr);
+        else if (isBRAMTile(bel))
+            updateBramBel(bel, nullptr);
     }
 
     bool usp_bel_hard_unavail(BelId bel) const
@@ -1375,6 +1378,11 @@ struct Arch : BaseCtx
         IdString belTileType = getBelTileType(bel);
         return (belTileType == id_CLEL_L || belTileType == id_CLEL_R || belTileType == id_CLEM ||
                 belTileType == id_CLEM_R);
+    }
+    bool isBRAMTile(BelId bel) const
+    {
+        IdString belTileType = getBelTileType(bel);
+        return belTileType == id_BRAM;
     }
     bool isLogicTile(WireId wire) const
     {

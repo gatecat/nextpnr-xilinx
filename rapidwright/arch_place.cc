@@ -292,19 +292,25 @@ bool Arch::isBelLocationValid(BelId bel) const
         if (!tileStatus[bel.tile].bts)
             return true;
         BRAMTileStatus *bts = tileStatus[bel.tile].bts;
-        auto onehot = [](CellInfo *a, CellInfo *b, CellInfo *c) {
-            return ((a != nullptr) + (b != nullptr) + (c != nullptr)) > 1;
+        auto onehot = [&](CellInfo *a, CellInfo *b, CellInfo *c) {
+            return (((a != nullptr) ? 1 : 0) + ((b != nullptr) ? 1 : 0) + ((c != nullptr) ? 1 : 0)) <= 1;
         };
         // Only one type of BRAM cell at any given location
-        if (!onehot(bts->cells[BEL_RAMFIFO36], bts->cells[BEL_RAM36], bts->cells[BEL_FIFO36]))
+        if (!onehot(bts->cells[BEL_RAMFIFO36], bts->cells[BEL_RAM36], bts->cells[BEL_FIFO36])) {
+            DBG();
             return false;
-        if (!onehot(bts->cells[BEL_RAMFIFO18_L], bts->cells[BEL_RAM18_L], bts->cells[BEL_FIFO18_L]))
+        }
+        if (!onehot(bts->cells[BEL_RAMFIFO18_L], bts->cells[BEL_RAM18_L], bts->cells[BEL_FIFO18_L])) {
+            DBG();
             return false;
+        }
         // 18-bit BRAMs cannot be used whilst 36-bit is used
         if (bts->cells[BEL_RAMFIFO36] || bts->cells[BEL_RAM36] || bts->cells[BEL_FIFO36]) {
             for (int i = 4; i < 12; i++)
-                if (bts->cells[i])
+                if (bts->cells[i]) {
+                    DBG();
                     return false;
+                }
         }
     } else {
         for (auto bel : getBelsByTile(bel.tile % chip_info->width, bel.tile / chip_info->width))
