@@ -257,7 +257,7 @@ public class json2dcp {
                 nc.rwCell = null;
             } else {
                 Unisim unitype = Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE"));
-                nc.rwCell = des.createAndPlaceCell(nc.name, unitype, nc.attrs.get("NEXTPNR_BEL"));
+                nc.rwCell = des.createAndPlaceCell(nc.name.replace("/", "__"), unitype, nc.attrs.get("NEXTPNR_BEL"));
 
                 Map<String, String> map = nc.rwCell.getPinMappingsP2L();
                 Object[] pins = map.keySet().toArray();
