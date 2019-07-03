@@ -7,10 +7,6 @@ import com.xilinx.rapidwright.device.*;
 import com.google.gson.*;
 import com.xilinx.rapidwright.edif.*;
 import com.xilinx.rapidwright.util.RapidWright;
-import jnr.ffi.annotations.In;
-import org.json.JSONObject;
-import org.python.antlr.ast.Str;
-import org.python.modules.math;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -204,16 +200,6 @@ public class json2dcp {
         return bits + "'h" + hex;
     }
 
-    public static ArrayList<String> get_physical_pins(Cell cell, String logical_pin) {
-        // Like cell.getPhysicalPinMapping; but returns all pins
-        ArrayList<String> phys_pins = new ArrayList<>();
-        var p2l = cell.getPinMappingsP2L();
-        for (var entry : p2l.entrySet()) {
-            if (entry.getValue().equals(logical_pin))
-                phys_pins.add(entry.getKey());
-        }
-        return phys_pins;
-    }
 
     public static void connect_log_and_phys(Net net, Cell cell, String logical_pin) {
         // Similar to RapidWright's net.connect; but handles some special cases correctly
@@ -233,7 +219,7 @@ public class json2dcp {
                 epi = net.getLogicalNet().createPortInst(logical_pin, cell.getEDIFCellInst());
             }
             // If there is a physical pin connect it too
-            var phys_pins = get_physical_pins(cell, logical_pin);
+            var phys_pins = cell.getAllPhysicalPinMappings(logical_pin);
             for (String belpin : phys_pins) {
                 if (cell.getBEL().getPin(belpin).getConnectedSitePinName() != null) {
                     String pin = cell.getBEL().getPin(belpin).getConnectedSitePinName();

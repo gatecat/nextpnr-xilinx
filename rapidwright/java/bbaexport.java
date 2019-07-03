@@ -5,8 +5,9 @@ import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.device.PartNameTools;
 import com.xilinx.rapidwright.device.*;
+import com.xilinx.rapidwright.edif.*;
 import com.xilinx.rapidwright.util.Utils;
-import jnr.ffi.annotations.In;
+import com.xilinx.rapidwright.util.RapidWright;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -719,11 +720,11 @@ public class bbaexport {
                         seenNodes.add(flatIndex);
 
                         String wn = n.getWireName();
-                        if (wn.startsWith("GND_WIRE") && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) {
+                        if (n.isTiedToGnd() && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) {
                             gndNodes.add(n);
                             continue;
                         }
-                        if (wn.startsWith("VCC_WIRE")) {
+                        if (n.isTiedToVcc()) {
                             vccNodes.add(n);
                             continue;
                         }
