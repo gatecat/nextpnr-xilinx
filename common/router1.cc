@@ -536,6 +536,10 @@ struct Router1
                         }
                     }
 
+                    NetInfo *res_net = ctx->getReservedWireNet(next_wire);
+                    if (res_net != nullptr && res_net != net_info)
+                        continue;
+
                     if (!ctx->checkPipAvail(pip)) {
                         if (!ripup)
                             continue;

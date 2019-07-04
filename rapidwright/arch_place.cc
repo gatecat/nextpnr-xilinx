@@ -445,6 +445,105 @@ void Arch::fixupPlacement()
             }
         }
     }
+    // Update the set of reserved wires
+    reserved_wires.clear();
+
+    auto get_bouncewire = [&](int tile, IdString swname) {
+        auto &td = chip_info->tile_types[chip_info->tile_insts[tile].type];
+        WireId sitewire;
+        for (int i = 0; i < td.num_wires; i++) {
+            auto &w = td.wire_data[i];
+            if (w.site != -1 && w.name == swname.index) {
+                sitewire.tile = tile;
+                sitewire.index = i;
+                break;
+            }
+        }
+        NPNR_ASSERT(sitewire != WireId());
+        WireId cursor = sitewire;
+        while (wireIntent(cursor) != ID_NODE_PINBOUNCE) {
+            auto uh = getPipsUphill(cursor);
+            NPNR_ASSERT(uh.begin() != uh.end());
+            cursor = getPipSrcWire(*(uh.begin()));
+        }
+        return cursor;
+    };
+
+    for (int tile = 0; tile < chip_info->num_tiles; ++tile) {
+        auto &ts = tileStatus[tile];
+        if (ts.lts == nullptr)
+            continue;
+        auto &lts = *(ts.lts);
+        for (int z = 0; z < 8; z++) {
+            CellInfo *lut5 = lts.cells[z << 4 | BEL_5LUT];
+            CellInfo *lut6 = lts.cells[z << 4 | BEL_6LUT];
+            NetInfo *i_net = nullptr, *x_net = nullptr;
+            // Check usage of DI and X inputs
+            if (lut6 != nullptr) {
+                i_net = lut6->lutInfo.di1_net;
+                x_net = lut6->lutInfo.di2_net;
+            }
+            if (lut5 != nullptr) {
+                if (lut5->lutInfo.di1_net != nullptr)
+                    i_net = lut5->lutInfo.di1_net;
+            }
+
+            CellInfo *mux = nullptr;
+            // Eights A, C, E, G: F7MUX uses X input
+            if (z == 0 || z == 2 || z == 4 || z == 6)
+                mux = lts.cells[z << 4 | BEL_F7MUX];
+            // Eights B, F: F8MUX uses X input
+            if (z == 1 || z == 5)
+                mux = lts.cells[(z - 1) << 4 | BEL_F8MUX];
+            // Eights D: F9MUX uses X input
+            if (z == 3)
+                mux = lts.cells[BEL_F9MUX];
+
+            if (mux != nullptr)
+                if (x_net == nullptr)
+                    x_net = mux->muxInfo.sel;
+
+            CellInfo *carry8 = lts.cells[BEL_CARRY8];
+            // CARRY8 might use X
+            if (carry8 != nullptr && carry8->carryInfo.x_sigs[z] != nullptr) {
+                if (x_net == nullptr)
+                    x_net = carry8->carryInfo.x_sigs[z];
+            }
+
+            // FF1 might use X, if it isn't driven directly
+            CellInfo *ff1 = lts.cells[z << 4 | BEL_FF];
+            if (ff1 != nullptr && ff1->ffInfo.d != nullptr && ff1->ffInfo.d->driver.cell != nullptr) {
+                auto &drv = ff1->ffInfo.d->driver;
+                if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5) {
+                    // Direct, OK
+                } else {
+                    // Indirect, must use X input
+                    x_net = ff1->ffInfo.d;
+                }
+            }
+
+            // FF2 might use I, if it isn't driven directly
+            CellInfo *ff2 = lts.cells[z << 4 | BEL_FF2];
+            if (ff2 != nullptr && ff2->ffInfo.d != nullptr && ff2->ffInfo.d->driver.cell != nullptr) {
+                auto &drv = ff2->ffInfo.d->driver;
+                if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5) {
+                    // Direct, OK
+                } else {
+                    // Indirect, must use X input
+                    i_net = ff2->ffInfo.d;
+                }
+            }
+
+            if (x_net != nullptr) {
+                WireId x_wire = get_bouncewire(tile, id(std::string("") + char('A' + z) + std::string("X")));
+                reserved_wires[x_wire] = x_net;
+            }
+            if (i_net != nullptr) {
+                WireId i_wire = get_bouncewire(tile, id(std::string("") + char('A' + z) + std::string("_I")));
+                reserved_wires[i_wire] = i_net;
+            }
+        }
+    }
 }
 
 void Arch::fixupRouting()
