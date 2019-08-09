@@ -694,8 +694,9 @@ bool Arch::place()
     return retVal;
 }
 
-bool Arch::route() { 
-    bool retVal = router1(getCtx(), Router1Cfg(getCtx())); 
+bool Arch::route()
+{
+    bool retVal = router1(getCtx(), Router1Cfg(getCtx()));
     getCtx()->attrs[getCtx()->id("step")] = "route";
     archInfoToAttributes();
     return retVal;

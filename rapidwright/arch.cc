@@ -369,7 +369,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     return base;
 }
 
-ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const {
+ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
+{
     // FIXME: reduce copy and paste with estimateDelay
     int src_x, src_y, dst_x, dst_y;
     int src_intent = wireIntent(src);
@@ -446,7 +447,8 @@ ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const {
     return {std::min(src_x, dst_x), std::min(src_y, dst_y), std::max(src_x, dst_x), std::max(src_y, dst_y)};
 }
 
-delay_t Arch::getBoundingBoxCost(WireId src, WireId dst, int distance) const {
+delay_t Arch::getBoundingBoxCost(WireId src, WireId dst, int distance) const
+{
     int src_intent = wireIntent(src);
     if (src.tile == -1 && (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC))
         return 0;
@@ -455,7 +457,8 @@ delay_t Arch::getBoundingBoxCost(WireId src, WireId dst, int distance) const {
     return (distance - 5) * 0;
 }
 
-delay_t Arch::getWireRipupDelayPenalty(WireId wire) const {
+delay_t Arch::getWireRipupDelayPenalty(WireId wire) const
+{
     if (wireIntent(wire) == ID_NODE_PINFEED)
         return (3 * getRipupDelayPenalty()) / 2;
     else

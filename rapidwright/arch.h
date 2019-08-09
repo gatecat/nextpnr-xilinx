@@ -1261,7 +1261,7 @@ struct Arch : BaseCtx
                 const delay_t pip_epsilon = 75;
                 delay.delay = pip_epsilon;
             }
-        } else  if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
+        } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
             delay.delay = 300;
         } else
             delay.delay = 25;
