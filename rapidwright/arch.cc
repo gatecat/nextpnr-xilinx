@@ -369,6 +369,99 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     return base;
 }
 
+ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const {
+    // FIXME: reduce copy and paste with estimateDelay
+    int src_x, src_y, dst_x, dst_y;
+    int src_intent = wireIntent(src);
+    // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
+    //    return 500;
+    int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
+    int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
+
+    if (sink_locs.count(dst)) {
+        dst_x = sink_locs.at(dst).x;
+        dst_y = sink_locs.at(dst).y;
+    } else if (dst.tile != -1 && chip_info->tile_insts[dst.tile].num_sites > 0) {
+        auto &site = chip_info->tile_insts[dst.tile].site_insts[wireInfo(dst).site != -1 ? wireInfo(dst).site : 0];
+        if (site.inter_x != -1) {
+            dst_x = site.inter_x;
+            dst_y = site.inter_y;
+        } else {
+            dst_x = dst.tile % chip_info->width;
+            dst_y = dst.tile / chip_info->width;
+        }
+    } else {
+        dst_x = dst_tile % chip_info->width;
+        dst_y = dst_tile / chip_info->width;
+    }
+
+    if (src.tile == -1) {
+        if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC) {
+            if (gnd_glbl == IdString()) {
+                gnd_glbl = id("PSEUDO_GND_WIRE_GLBL");
+                gnd_row = id("PSEUDO_GND_WIRE_ROW");
+                vcc_glbl = id("PSEUDO_VCC_WIRE_GLBL");
+                vcc_row = id("PSEUDO_VCC_WIRE_ROW");
+            }
+
+            src_x = src_tile % chip_info->width;
+            src_y = src_tile / chip_info->width;
+            if (wireInfo(src).name == gnd_row.index || wireInfo(src).name == vcc_row.index)
+                src_x = chip_info->width / 2;
+        } else {
+            auto &src_n = chip_info->nodes[src.index];
+            src_x = -1;
+            src_y = -1;
+            for (int i = 0; i < std::min(200, src_n.num_tile_wires); i++) {
+                // Approximate the nearest location to dest
+                int ti = src_n.tile_wires[i].tile;
+                auto &tw = chip_info->tile_types[chip_info->tile_insts[ti].type].wire_data[src_n.tile_wires[i].index];
+                if (tw.num_downhill == 0 && src_intent != ID_NODE_PINFEED)
+                    continue;
+                int tix = ti % chip_info->width, tiy = ti / chip_info->width;
+                if (src_x == -1 || std::abs(tix - dst_x) < std::abs(src_x - dst_x))
+                    src_x = tix;
+                if (src_y == -1 || std::abs(tiy - dst_y) < std::abs(src_y - dst_y))
+                    src_y = tiy;
+            }
+            if (src_x == -1) {
+                src_x = chip_info->nodes[src.index].tile_wires[0].tile % chip_info->width;
+                src_y = chip_info->nodes[src.index].tile_wires[0].tile / chip_info->width;
+            }
+        }
+
+    } else if (src.tile != -1 && chip_info->tile_insts[src.tile].num_sites > 0) {
+        auto &site = chip_info->tile_insts[src.tile].site_insts[wireInfo(src).site != -1 ? wireInfo(src).site : 0];
+        if (site.inter_x != -1) {
+            src_x = site.inter_x;
+            src_y = site.inter_y;
+        } else {
+            src_x = src.tile % chip_info->width;
+            src_y = src.tile / chip_info->width;
+        }
+    } else {
+        src_x = src_tile % chip_info->width;
+        src_y = src_tile / chip_info->width;
+    }
+    return {std::min(src_x, dst_x), std::min(src_y, dst_y), std::max(src_x, dst_x), std::max(src_y, dst_y)};
+}
+
+delay_t Arch::getBoundingBoxCost(WireId src, WireId dst, int distance) const {
+    int src_intent = wireIntent(src);
+    if (src.tile == -1 && (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC))
+        return 0;
+    if (distance < 5)
+        return 0;
+    return (distance - 5) * 0;
+}
+
+delay_t Arch::getWireRipupDelayPenalty(WireId wire) const {
+    if (wireIntent(wire) == ID_NODE_PINFEED)
+        return 3 * getRipupDelayPenalty();
+    else
+        return getRipupDelayPenalty();
+}
+
 delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
 {
     if (net_info->driver.cell == nullptr || net_info->driver.cell->bel == BelId() || sink.cell->bel == BelId())

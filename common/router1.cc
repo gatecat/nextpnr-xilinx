@@ -456,6 +456,8 @@ struct Router1
             log("  sink ..... %s\n", ctx->nameOfWire(dst_wire));
         }
 
+        ArcBounds bounds = ctx->getRouteBoundingBox(src_wire, dst_wire);
+
         // unbind wires that are currently used exclusively by this arc
 
         std::unordered_set<WireId> old_arc_wires;
@@ -570,9 +572,10 @@ struct Router1
 
                     if (conflictWireWire != WireId()) {
                         auto scores_it = wireScores.find(conflictWireWire);
+                        delay_t wire_penalty = ctx->getWireRipupDelayPenalty(conflictWireWire);
                         if (scores_it != wireScores.end())
-                            next_penalty += scores_it->second * cfg.wireRipupPenalty;
-                        next_penalty += cfg.wireRipupPenalty;
+                            next_penalty += scores_it->second * wire_penalty;
+                        next_penalty += wire_penalty;
 
                         NetInfo *bound = ctx->getBoundWireNet(conflictWireWire);
                         if (bound != nullptr) {
@@ -584,9 +587,10 @@ struct Router1
 
                     if (conflictPipWire != WireId()) {
                         auto scores_it = wireScores.find(conflictPipWire);
+                        delay_t wire_penalty = ctx->getWireRipupDelayPenalty(conflictPipWire);
                         if (scores_it != wireScores.end())
-                            next_penalty += scores_it->second * cfg.wireRipupPenalty;
-                        next_penalty += cfg.wireRipupPenalty;
+                            next_penalty += scores_it->second * wire_penalty;
+                        next_penalty += wire_penalty;
 
                         NetInfo *bound = ctx->getBoundWireNet(conflictPipWire);
                         if (bound != nullptr) {
@@ -611,6 +615,10 @@ struct Router1
                         next_penalty += cfg.netRipupPenalty;
                         next_penalty += conflictPipNet->wires.size() * cfg.wireRipupPenalty;
                     }
+
+                    Loc piploc = ctx->getPipLocation(pip);
+                    int bb_dist = bounds.distance(piploc);
+                    next_penalty += ctx->getBoundingBoxCost(src_wire, dst_wire, bb_dist);
                 }
 
                 delay_t next_score = next_delay + next_penalty;
@@ -709,7 +717,8 @@ struct Router1
                     ctx->getDelayNS(path_delay_delta - last_path_delay_delta));
 
                 last_path_delay_delta = path_delay_delta;
-
+                if (wireScores.count(cursor))
+                    log("         wire score %d\n", wireScores.at(cursor));
                 if (pip != PipId())
                     accumulated_path_delay += ctx->getPipDelay(pip).maxDelay();
                 accumulated_path_delay += ctx->getWireDelay(cursor).maxDelay();
