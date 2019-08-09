@@ -133,6 +133,7 @@ struct USPacker
     CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o);
     CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr);
     CellInfo *insert_diffinbuf(IdString name, const std::array<NetInfo *, 2> &i, NetInfo *o);
+    CellInfo *insert_outinv(IdString name, NetInfo *i, NetInfo *o);
 
     std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
     std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io);
