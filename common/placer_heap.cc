@@ -962,7 +962,7 @@ class HeAPPlacer
         sl_time += std::chrono::duration<float>(endt - startt).count();
     }
     // Implementation of the cut-based spreading as described in the HeAP/SimPL papers
-    static constexpr float beta = 0.6;
+    static constexpr float beta = 0.4;
 
     struct ChainExtent
     {

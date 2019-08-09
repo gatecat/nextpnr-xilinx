@@ -619,6 +619,11 @@ struct Router1
                     Loc piploc = ctx->getPipLocation(pip);
                     int bb_dist = bounds.distance(piploc);
                     next_penalty += ctx->getBoundingBoxCost(src_wire, dst_wire, bb_dist);
+
+                    auto scores_it = wireScores.find(next_wire);
+                    delay_t wire_penalty = ctx->getWireRipupDelayPenalty(next_wire);
+                    if (scores_it != wireScores.end())
+                        next_penalty += (scores_it->second * wire_penalty) / 5;
                 }
 
                 delay_t next_score = next_delay + next_penalty;
@@ -676,7 +681,7 @@ struct Router1
                 queue.push(next_qw);
 
                 if (next_wire == dst_wire) {
-                    maxVisitCnt = std::min(maxVisitCnt, 2 * visitCnt + (next_qw.penalty > 0 ? 100 : 0));
+                    maxVisitCnt = std::min(maxVisitCnt, visitCnt + 5);
                     best_score = next_score - next_bonus;
                 }
             }

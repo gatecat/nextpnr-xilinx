@@ -457,7 +457,7 @@ delay_t Arch::getBoundingBoxCost(WireId src, WireId dst, int distance) const {
 
 delay_t Arch::getWireRipupDelayPenalty(WireId wire) const {
     if (wireIntent(wire) == ID_NODE_PINFEED)
-        return 3 * getRipupDelayPenalty();
+        return (3 * getRipupDelayPenalty()) / 2;
     else
         return getRipupDelayPenalty();
 }

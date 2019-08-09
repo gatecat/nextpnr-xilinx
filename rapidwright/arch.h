@@ -1259,10 +1259,12 @@ struct Arch : BaseCtx
                 delay.delay = 5000;
             } else {
                 const delay_t pip_epsilon = 75;
-                delay.delay = std::max(approx_pip_delay(src_intent, dst_intent), pip_epsilon);
+                delay.delay = pip_epsilon;
             }
+        } else  if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
+            delay.delay = 300;
         } else
-            delay.delay = 0;
+            delay.delay = 25;
         return delay;
     }
 
@@ -1326,8 +1328,8 @@ struct Arch : BaseCtx
     delay_t predictDelay(const NetInfo *net_info, const PortRef &sink) const;
     ArcBounds getRouteBoundingBox(WireId src, WireId dst) const;
     delay_t getBoundingBoxCost(WireId src, WireId dst, int distance) const;
-    delay_t getDelayEpsilon() const { return 30; }
-    delay_t getRipupDelayPenalty() const { return 150; }
+    delay_t getDelayEpsilon() const { return 20; }
+    delay_t getRipupDelayPenalty() const { return 120; }
     delay_t getWireRipupDelayPenalty(WireId wire) const;
     float getDelayNS(delay_t v) const { return v * 0.001; }
     DelayInfo getDelayFromNS(float ns) const
