@@ -483,8 +483,11 @@ void USPacker::pack_io()
     io_rules[ctx->id("OBUFT_DCIEN")].port_xform[ctx->id("T")] = ctx->id("TRI");
     io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
     io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
+    io_rules[ctx->id("IBUFCTRL")].port_xform[ctx->id("T")] = ctx->id("TRI");
     io_rules[ctx->id("DIFFINBUF")].new_type = ctx->id("IOB_DIFFINBUF");
     io_rules[ctx->id("INV")].new_type = ctx->id("HPIO_OUTINV");
+    io_rules[ctx->id("INV")].port_xform[ctx->id("I")] = ctx->id("IN");
+    io_rules[ctx->id("INV")].port_xform[ctx->id("O")] = ctx->id("OUT");
 
     io_rules[ctx->id("PS8")].new_type = ctx->id("PSS_ALTO_CORE");
 
@@ -562,6 +565,9 @@ void USPacker::pack_iologic()
     hp_iol_rules[ctx->id("OSERDESE3")].new_type = ctx->id("OSERDESE3");
     hp_iol_rules[ctx->id("ISERDESE3")].new_type = ctx->id("ISERDESE3");
 
+    hp_iol_rules[ctx->id("ODELAYE3")].new_type = ctx->id("ODELAYE3");
+    hp_iol_rules[ctx->id("IDELAYE3")].new_type = ctx->id("IDELAYE3");
+
     auto is_hpio = [&](BelId bel) {
         return ctx->getBelTileType(bel) == ctx->id("HPIO_L") || ctx->getBelTileType(bel) == ctx->id("HPIO_RIGHT");
     };
@@ -585,6 +591,7 @@ void USPacker::pack_iologic()
             if (is_hpio(io_bel)) {
                 ci->attrs[ctx->id("BEL")] = iol_site + "/IDELAY";
                 iodelay_to_io[ci->name] = io_bel;
+                xform_cell(hp_iol_rules, ci);
             } else {
                 log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             }
@@ -608,6 +615,7 @@ void USPacker::pack_iologic()
             if (is_hpio(io_bel)) {
                 ci->attrs[ctx->id("BEL")] = iol_site + "/ODELAY";
                 iodelay_to_io[ci->name] = io_bel;
+                xform_cell(hp_iol_rules, ci);
             } else {
                 log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             }

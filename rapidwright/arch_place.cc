@@ -701,10 +701,14 @@ void Arch::fixupRouting()
         CellInfo *ci = cell.second;
         if (ci->type == id("IOB_PAD")) {
             NetInfo *pad_net = ci->ports[id("PAD")].net;
+            log_info("%s %s\n", nameOf(ci), nameOf(pad_net));
             for (auto w : pad_net->wires)
                 if (getBoundWireNet(w.first))
                     unbindWire(w.first);
             WireId pad_wire = getBelPinWire(ci->bel, id("PAD"));
+            NetInfo *bound = getBoundWireNet(pad_wire);
+            if (bound != nullptr)
+                log_info("      %s\n", nameOf(bound));
             bindWire(pad_wire, pad_net, STRENGTH_LOCKED);
             if (pad_net->driver.cell != nullptr) {
                 WireId drv_wire = getCtx()->getNetinfoSourceWire(pad_net);
