@@ -479,6 +479,7 @@ bool Arch::pack()
     packer.prepare_clocking();
     packer.pack_constants();
     packer.pack_iologic();
+    packer.pack_idelayctrl();
     packer.pack_clocking();
     packer.pack_carries();
     packer.pack_luts();

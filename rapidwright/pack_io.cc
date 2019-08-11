@@ -209,6 +209,32 @@ void USPacker::decompose_iob(CellInfo *xil_iob)
             disconnect_port(ctx, xil_iob, ctx->id("I"));
             disconnect_port(ctx, xil_iob, ctx->id("IB"));
         }
+
+        std::string site_dibuf = diffinbuf_site(site_p);
+        NetInfo *dibuf_out = create_internal_net(xil_iob->name, "DIFFINBUF_O");
+        CellInfo *dibuf = insert_diffinbuf(int_name(xil_iob->name, "DIFFINBUF"), {pad_p_net, pad_n_net}, dibuf_out);
+        dibuf->attrs[ctx->id("BEL")] = site_dibuf + "/DIFFINBUF";
+        for (int i = 0; i < 2; i++)
+            replace_port(xil_iob, ctx->id("OSC_EN[" + std::to_string(i) + "]"), dibuf,
+                         ctx->id("OSC_EN[" + std::to_string(i) + "]"));
+        for (int i = 0; i < 4; i++)
+            replace_port(xil_iob, ctx->id("OSC[" + std::to_string(i) + "]"), dibuf,
+                         ctx->id("OSC[" + std::to_string(i) + "]"));
+        replace_port(xil_iob, ctx->id("VREF"), dibuf, ctx->id("VREF"));
+
+        NetInfo *top_out = get_net_or_empty(xil_iob, ctx->id("O"));
+        disconnect_port(ctx, xil_iob, ctx->id("O"));
+        CellInfo *ibufctrl_p = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL"), dibuf_out, top_out);
+        ibufctrl_p->attrs[ctx->id("BEL")] = site_p + "/IBUFCTRL";
+
+        if (is_diff_out_ibuf || is_diff_out_iobuf) {
+            NetInfo *dibuf_out_b = create_internal_net(xil_iob->name, "DIFFINBUF_OB");
+            connect_port(ctx, dibuf_out_b, dibuf, ctx->id("O_B"));
+            NetInfo *top_out_b = get_net_or_empty(xil_iob, ctx->id("OB"));
+            disconnect_port(ctx, xil_iob, ctx->id("OB"));
+            CellInfo *ibufctrl_n = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL"), dibuf_out_b, top_out_b);
+            ibufctrl_n->attrs[ctx->id("BEL")] = site_n + "/IBUFCTRL";
+        }
     }
 
     if ((is_diff_obuf || is_diff_out_iobuf || is_diff_iobuf) && is_pseudo_diff_out) {
@@ -469,6 +495,22 @@ std::string USPacker::get_iol_site(const std::string &io_bel)
     }
 }
 
+std::string USPacker::get_ioctrl_site(const std::string &iol_bel)
+{
+    BelId ibc_bel = ctx->getBelByName(ctx->id(iol_bel.substr(0, iol_bel.find('/')) + "/RXTX_BITSLICE"));
+    WireId start = ctx->getBelPinWire(ibc_bel, ctx->id("TX_BIT_CTRL_OUT0"));
+    WireId cursor = start;
+    while (true) {
+        auto bp = ctx->getWireBelPins(cursor);
+        if (cursor != start && bp.begin() != bp.end()) {
+            return ctx->getBelSite((*bp.begin()).bel);
+        }
+        auto pips_dh = ctx->getPipsDownhill(cursor);
+        NPNR_ASSERT(pips_dh.begin() != pips_dh.end());
+        cursor = ctx->getPipDstWire(*pips_dh.begin());
+    }
+}
+
 void USPacker::prepare_iologic()
 {
     for (auto cell : sorted(ctx->cells)) {
@@ -620,6 +662,78 @@ void USPacker::pack_iologic()
             }
         }
     }
+}
+
+void USPacker::pack_idelayctrl()
+{
+    CellInfo *idelayctrl = nullptr;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYCTRL")) {
+            if (idelayctrl != nullptr)
+                log_error("Found more than one IDELAYCTRL cell!\n");
+            idelayctrl = ci;
+        }
+    }
+    if (idelayctrl == nullptr)
+        return;
+    std::set<std::string> ioctrl_sites;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYE3") || ci->type == ctx->id("ODELAYE3")) {
+            if (!ci->attrs.count(ctx->id("BEL")))
+                continue;
+            ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(ctx->id("BEL"))));
+        }
+    }
+    if (ioctrl_sites.empty())
+        log_error("Found IDELAYCTRL but no I/ODELAYs\n");
+    NetInfo *rdy = get_net_or_empty(idelayctrl, ctx->id("RDY"));
+    disconnect_port(ctx, idelayctrl, ctx->id("RDY"));
+    std::vector<NetInfo *> dup_rdys;
+    int i = 0;
+    for (auto site : ioctrl_sites) {
+        auto dup_idc =
+                create_cell(ctx, ctx->id("IDELAYCTRL"), int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i)));
+        connect_port(ctx, get_net_or_empty(idelayctrl, ctx->id("REFCLK")), dup_idc.get(), ctx->id("REFCLK"));
+        connect_port(ctx, get_net_or_empty(idelayctrl, ctx->id("RST")), dup_idc.get(), ctx->id("RST"));
+        if (rdy != nullptr) {
+            NetInfo *dup_rdy =
+                    (ioctrl_sites.size() == 1)
+                            ? rdy
+                            : create_internal_net(idelayctrl->name, "CTRL_DUP_" + std::to_string(i) + "_RDY");
+            connect_port(ctx, dup_rdy, dup_idc.get(), ctx->id("RDY"));
+            dup_rdys.push_back(dup_rdy);
+        }
+        dup_idc->attrs[ctx->id("BEL")] = site + "/CONTROL";
+        new_cells.push_back(std::move(dup_idc));
+        ++i;
+    }
+    disconnect_port(ctx, idelayctrl, ctx->id("REFCLK"));
+    disconnect_port(ctx, idelayctrl, ctx->id("RST"));
+
+    if (rdy != nullptr) {
+        // AND together all the RDY signals
+        std::vector<NetInfo *> int_anded_rdy;
+        int_anded_rdy.push_back(dup_rdys.front());
+        for (size_t j = 1; j < dup_rdys.size(); j++) {
+            NetInfo *anded_net = (j == (dup_rdys.size() - 1))
+                                         ? rdy
+                                         : create_internal_net(idelayctrl->name, "ANDED_RDY_" + std::to_string(j));
+            auto lut = create_lut(ctx, idelayctrl->name.str(ctx) + "/RDY_AND_LUT_" + std::to_string(j),
+                                  {int_anded_rdy.at(j - 1), dup_rdys.at(j)}, anded_net, Property(8));
+            int_anded_rdy.push_back(anded_net);
+            new_cells.push_back(std::move(lut));
+        }
+    }
+
+    packed_cells.insert(idelayctrl->name);
+    flush_cells();
+
+    ioctrl_rules[ctx->id("IDELAYCTRL")].new_type = ctx->id("BITSLICE_CONTROL_BEL");
+    ioctrl_rules[ctx->id("IDELAYCTRL")].port_xform[ctx->id("RDY")] = ctx->id("VTC_RDY");
+
+    generic_xform(ioctrl_rules);
 }
 
 NEXTPNR_NAMESPACE_END
