@@ -198,12 +198,14 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     bool is_pseudo_diff_out = pseudo_diff_iotypes.count(iostandard);
 
     if (is_diff_ibuf || is_diff_out_ibuf || is_diff_iobuf || is_diff_out_iobuf) {
-        NetInfo *pad_p_net = get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("I"));
+        NetInfo *pad_p_net =
+                get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("I"));
         NPNR_ASSERT(pad_p_net != nullptr);
         std::string site_p = pad_site(pad_p_net);
-        NetInfo *pad_n_net = get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("IB"));
+        NetInfo *pad_n_net =
+                get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("IB"));
         NPNR_ASSERT(pad_n_net != nullptr);
-        std::string site_n = pad_site(pad_p_net);
+        std::string site_n = pad_site(pad_n_net);
 
         if (!is_diff_iobuf && !is_diff_out_iobuf) {
             disconnect_port(ctx, xil_iob, ctx->id("I"));
@@ -232,19 +234,21 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
             connect_port(ctx, dibuf_out_b, dibuf, ctx->id("O_B"));
             NetInfo *top_out_b = get_net_or_empty(xil_iob, ctx->id("OB"));
             disconnect_port(ctx, xil_iob, ctx->id("OB"));
-            CellInfo *ibufctrl_n = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL"), dibuf_out_b, top_out_b);
+            CellInfo *ibufctrl_n = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRLN"), dibuf_out_b, top_out_b);
             ibufctrl_n->attrs[ctx->id("BEL")] = site_n + "/IBUFCTRL";
         }
     }
 
     if (is_diff_obuf || is_diff_out_iobuf || is_diff_iobuf) {
         if (is_pseudo_diff_out) {
-            NetInfo *pad_p_net = get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("I"));
+            NetInfo *pad_p_net =
+                    get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
             NPNR_ASSERT(pad_p_net != nullptr);
             std::string site_p = pad_site(pad_p_net);
-            NetInfo *pad_n_net = get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("IB"));
+            NetInfo *pad_n_net =
+                    get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
             NPNR_ASSERT(pad_n_net != nullptr);
-            std::string site_n = pad_site(pad_p_net);
+            std::string site_n = pad_site(pad_n_net);
 
             disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
             disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
@@ -257,17 +261,19 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
             bool has_dci = xil_iob->type == ctx->id("IOBUFDS_DCIEN") || xil_iob->type == ctx->id("IOBUFDSE3");
 
             CellInfo *obuf_p = insert_obuf(
-                    int_name(xil_iob->name, "OBUF"),
-                    is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
+                    int_name(xil_iob->name, "OBUFP"),
+                    (is_diff_iobuf || is_diff_out_iobuf) ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
+                                                         : ctx->id("OBUF"),
                     get_net_or_empty(xil_iob, ctx->id("I")), pad_p_net, get_net_or_empty(xil_iob, ctx->id("T")));
 
             obuf_p->attrs[ctx->id("BEL")] = site_p + "/OUTBUF";
             connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_p, ctx->id("DCITERMDISABLE"));
 
-            CellInfo *obuf_n =
-                    insert_obuf(int_name(xil_iob->name, "OBUF"),
-                                is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
-                                inv_i, pad_n_net, get_net_or_empty(xil_iob, ctx->id("T")));
+            CellInfo *obuf_n = insert_obuf(int_name(xil_iob->name, "OBUFN"),
+                                           (is_diff_iobuf || is_diff_out_iobuf)
+                                                   ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
+                                                   : ctx->id("OBUF"),
+                                           inv_i, pad_n_net, get_net_or_empty(xil_iob, ctx->id("T")));
 
             obuf_n->attrs[ctx->id("BEL")] = site_n + "/OUTBUF";
             connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_n, ctx->id("DCITERMDISABLE"));
@@ -473,6 +479,8 @@ void USPacker::pack_io()
     io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
     io_rules[ctx->id("OBUFT")].new_type = ctx->id("IOB_OUTBUF");
     io_rules[ctx->id("OBUFT")].port_xform[ctx->id("T")] = ctx->id("TRI");
+    io_rules[ctx->id("OBUFT_DCIEN")].new_type = ctx->id("IOB_OUTBUF");
+    io_rules[ctx->id("OBUFT_DCIEN")].port_xform[ctx->id("T")] = ctx->id("TRI");
     io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
     io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
     io_rules[ctx->id("DIFFINBUF")].new_type = ctx->id("IOB_DIFFINBUF");
@@ -552,6 +560,7 @@ void USPacker::pack_iologic()
     hp_iol_rules[ctx->id("IDDRE1")].port_xform[ctx->id("Q2")] = ctx->id("Q1");
 
     hp_iol_rules[ctx->id("OSERDESE3")].new_type = ctx->id("OSERDESE3");
+    hp_iol_rules[ctx->id("ISERDESE3")].new_type = ctx->id("ISERDESE3");
 
     auto is_hpio = [&](BelId bel) {
         return ctx->getBelTileType(bel) == ctx->id("HPIO_L") || ctx->getBelTileType(bel) == ctx->id("HPIO_RIGHT");
@@ -584,11 +593,14 @@ void USPacker::pack_iologic()
             if (q == nullptr || q->users.empty())
                 log_error("%s '%s' has disconnected DATAOUT output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             BelId io_bel;
-            for (auto &usr : q->users)
+            for (auto &usr : q->users) {
+                // log_info("%s %s %s.%s [%s]\n", ctx->nameOf(ci), ctx->nameOf(q), ctx->nameOf(usr.cell),
+                // usr.port.c_str(ctx), usr.cell->type.c_str(ctx));
                 if (usr.cell->type == ctx->id("IOB_OUTBUF")) {
-                    io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL"))));
+                    io_bel = ctx->getBelByName(ctx->id(usr.cell->attrs.at(ctx->id("BEL"))));
                     break;
                 }
+            }
             if (io_bel == BelId())
                 log_error("%s '%s' has no top level output buffer connected to DATAOUT output\n", ci->type.c_str(ctx),
                           ctx->nameOf(ci));
