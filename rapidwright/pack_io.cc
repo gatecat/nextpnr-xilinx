@@ -446,6 +446,7 @@ void USPacker::pack_io()
     io_rules[ctx->id("INBUF")].new_type = ctx->id("IOB_INBUF");
     io_rules[ctx->id("IBUFCTRL")].new_type = ctx->id("IOB_IBUFCTRL");
     io_rules[ctx->id("DIFFINBUF")].new_type = ctx->id("IOB_DIFFINBUF");
+    io_rules[ctx->id("INV")].new_type = ctx->id("HPIO_OUTINV");
 
     io_rules[ctx->id("PS8")].new_type = ctx->id("PSS_ALTO_CORE");
 
@@ -511,6 +512,49 @@ void USPacker::pack_iologic()
     };
 
     std::unordered_map<IdString, BelId> iodelay_to_io;
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYE3")) {
+            NetInfo *d = get_net_or_empty(ci, ctx->id("IDATAIN"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            BelId io_bel;
+            if (drv->type == ctx->id("IOB_IBUFCTRL"))
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL"))));
+            else
+                log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                          ctx->nameOf(ci), drv->type.c_str(ctx));
+            std::string iol_site = get_iol_site(ctx->getBelName(io_bel).str(ctx));
+            if (is_hpio(io_bel)) {
+                ci->attrs[ctx->id("BEL")] = iol_site + "/IDELAY";
+                iodelay_to_io[ci->name] = io_bel;
+            } else {
+                log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            }
+        } else if (ci->type == ctx->id("ODELAYE3")) {
+            NetInfo *q = get_net_or_empty(ci, ctx->id("DATAOUT"));
+            if (q == nullptr || q->users.empty())
+                log_error("%s '%s' has disconnected DATAOUT output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            BelId io_bel;
+            for (auto &usr : q->users)
+                if (usr.cell->type == ctx->id("IOB_OUTBUF")) {
+                    io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL"))));
+                    break;
+                }
+            if (io_bel == BelId())
+                log_error("%s '%s' has no top level output buffer connected to DATAOUT output\n", ci->type.c_str(ctx),
+                          ctx->nameOf(ci));
+            std::string iol_site = get_iol_site(ctx->getBelName(io_bel).str(ctx));
+            if (is_hpio(io_bel)) {
+                ci->attrs[ctx->id("BEL")] = iol_site + "/ODELAY";
+                iodelay_to_io[ci->name] = io_bel;
+            } else {
+                log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            }
+        }
+    }
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;

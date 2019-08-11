@@ -291,6 +291,16 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     tied_pins[ctx->id("OSERDESE3")][ctx->id("RST")] = false;
     tied_pins[ctx->id("OSERDESE3")][ctx->id("T")] = false;
 
+    tied_pins[ctx->id("ODELAYE3")][ctx->id("RST")] = false;
+    tied_pins[ctx->id("ODELAYE3")][ctx->id("CE")] = true;
+    for (int i = 0; i < 9; i++)
+        tied_pins[ctx->id("ODELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
+
+    tied_pins[ctx->id("IDELAYE3")][ctx->id("RST")] = false;
+    tied_pins[ctx->id("IDELAYE3")][ctx->id("CE")] = true;
+    for (int i = 0; i < 9; i++)
+        tied_pins[ctx->id("IDELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
+
     // MMCM
     tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CDDCREQ")] = false;
     tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKFBIN")] = false;
