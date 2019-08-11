@@ -353,18 +353,6 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
     NetInfo *ionet = nullptr;
     PortRef iobuf;
     iobuf.cell = nullptr;
-    if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
-        ionet = get_net_or_empty(npnr_io, ctx->id("O"));
-        if (ionet != nullptr)
-            for (auto &usr : ionet->users)
-                if (toplevel_ports.count(usr.cell->type) && toplevel_ports.at(usr.cell->type).count(usr.port)) {
-                    if (ionet->users.size() > 1)
-                        log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
-                                  usr.cell->name.c_str(ctx));
-                    iobuf = usr;
-                }
-        pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_ibuf") ? "IN" : "INOUT";
-    }
     if (npnr_io->type == ctx->id("$nextpnr_obuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
         ionet = get_net_or_empty(npnr_io, ctx->id("I"));
         if (ionet != nullptr && ionet->driver.cell != nullptr)
@@ -376,6 +364,18 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
                 iobuf = ionet->driver;
             }
         pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_obuf") ? "OUT" : "INOUT";
+    }
+    if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
+        ionet = get_net_or_empty(npnr_io, ctx->id("O"));
+        if (ionet != nullptr)
+            for (auto &usr : ionet->users)
+                if (toplevel_ports.count(usr.cell->type) && toplevel_ports.at(usr.cell->type).count(usr.port)) {
+                    if (ionet->users.size() > 1)
+                        log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
+                                  usr.cell->name.c_str(ctx));
+                    iobuf = usr;
+                }
+        pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_ibuf") ? "IN" : "INOUT";
     }
 
     if (!iobuf.cell) {
