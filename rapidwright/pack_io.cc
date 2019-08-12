@@ -272,7 +272,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
             disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
             disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
 
-            NetInfo *inv_i = create_internal_net(xil_iob->name, is_diff_obuf ? "I_B" : "OBUFTDS$subcell$I_B");
+            NetInfo *inv_i = create_internal_net(xil_iob->name, is_diff_obuf ? "I_B" : "OBUFTDS$subnet$I_B");
             CellInfo *inv = insert_outinv(int_name(xil_iob->name, is_diff_obuf ? "INV" : "OBUFTDS$subcell$INV"),
                                           get_net_or_empty(xil_iob, ctx->id("I")), inv_i);
             inv->attrs[ctx->id("BEL")] = site_p + "/OUTINV";

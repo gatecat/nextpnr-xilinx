@@ -203,7 +203,7 @@ public class json2dcp {
 
     public static void connect_log_and_phys(Net net, Cell cell, String logical_pin) {
         // Similar to RapidWright's net.connect; but handles some special cases correctly
-        if (cell.getName().contains("/")) {
+        if (cell.getName().contains("/") || net.getLogicalNet() == null) {
             var phys_pins = cell.getAllPhysicalPinMappings(logical_pin);
             for (String belpin : phys_pins) {
                 if (cell.getBEL().getPin(belpin).getConnectedSitePinName() != null) {
@@ -248,7 +248,6 @@ public class json2dcp {
 
         if (d.getTopEDIFCell().getCellInst(basename) == null) {
             String macrotype = nc.attrs.get("X_ORIG_MACRO_PRIM");
-            System.out.println(nc.name + " " + macrotype);
             if (d.getNetlist().getCell(macrotype) == null)
                 d.getNetlist().getHDIPrimitivesLibrary().addCell(Design.getUnisimCell(Unisim.valueOf(macrotype)));
             Design.getUnisimCell(Unisim.valueOf(macrotype)).createCellInst(basename, d.getTopEDIFCell());
@@ -381,12 +380,13 @@ public class json2dcp {
             if (nn.name.equals("$PACKER_VCC_NET")) {
                 n = new Net("GLOBAL_LOGIC1", edif_vcc);
                 des.addNet(n);
-            }
-            else if (nn.name.equals("$PACKER_GND_NET")) {
+            } else if (nn.name.equals("$PACKER_GND_NET")) {
                 n = new Net("GLOBAL_LOGIC0", edif_gnd);
                 des.addNet(n);
-            }
-            else {
+            } else if (nn.name.contains("$subnet$")) {
+                n = new Net(escape_name(nn.name), (EDIFNet)null);
+                des.addNet(n);
+            } else {
                 n = new Net(escape_name(nn.name), new EDIFNet(escape_name(nn.name), des.getTopEDIFCell()));
                 des.addNet(n);
             }
@@ -527,22 +527,26 @@ public class json2dcp {
                         for (BEL other : si.getBELs()) {
                             //if (other.getBELClass() == BELClass.RBEL || other.getBELClass() == BELClass.PORT)
                             //    continue;
-                            for (BELPin p : other.getPins())
+                            for (BELPin p : other.getPins()) {
                                 if (p.isInput() && p.getSiteWireName().equals(sw[2])) {
                                     si.routeIntraSiteNet(n, startPin, p);
                                     //System.out.println(si.getSiteName() + ": " + startPin.getBEL().getName() + "." + startPin.getName() + " -> " + p.getBEL().getName() + "." + p.getName());
                                 }
+                            }
                         }
 
                     }
                 }
-
             }
         }
+
+
+        HashMap<String, HashSet<String>> created_ports = new HashMap<>();
 
         for (NextpnrCell nc : ndes.cells.values()) {
             if (nc.name.contains("$subcell$")) {
                 String basename = nc.name.replace("/", "__").split("\\$subcell\\$")[0];
+                created_ports.putIfAbsent(basename, new HashSet<>());
                 EDIFCellInst macro = des.getTopEDIFCell().getCellInst(basename);
                 for (NextpnrCellPort p : nc.ports.values()) {
                     if (p.net == null)
@@ -550,13 +554,22 @@ public class json2dcp {
                     Net physNet = p.net.rwNet;
                     if (physNet == null)
                         continue;
-                    if (nc.attrs.containsKey("X_MACRO_PORTS_" + p.name)) {
-                        String[] mps = nc.attrs.get("X_MACRO_PORTS_" + p.name).split(";");
-                        for (String mp : mps) {
-                            String [] nt = mp.split(",");
-                            physNet.getLogicalNet().createPortInst(nt[0], macro);
+                    if (!nc.attrs.containsKey("X_ORIG_PORT_" + p.name))
+                        continue;
+                    String[] orig_ports = nc.attrs.get("X_ORIG_PORT_" + p.name).split(" ");
+                    for (String o : orig_ports) {
+                        if (nc.attrs.containsKey("X_MACRO_PORTS_" + o)) {
+                            String[] mps = nc.attrs.get("X_MACRO_PORTS_" + o).split(";");
+                            for (String mp : mps) {
+                                String [] nt = mp.split(",");
+                                if (created_ports.get(basename).contains(nt[0]))
+                                    continue;
+                                physNet.getLogicalNet().createPortInst(nt[0], macro);
+                                created_ports.get(basename).add(nt[0]);
+                            }
                         }
                     }
+
                 }
             }
         }
