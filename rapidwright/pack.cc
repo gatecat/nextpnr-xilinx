@@ -229,31 +229,39 @@ void USPacker::pack_lutffs()
 void USPacker::pack_constants()
 {
     log_info("Packing constants..\n");
+    if (tied_pins.empty())
+        get_tied_pins(ctx, tied_pins);
+    if (invertible_pins.empty())
+        get_invertible_pins(ctx, invertible_pins);
+    if (!ctx->cells.count(ctx->id("$PACKER_GND_DRV"))) {
+        std::unique_ptr<CellInfo> gnd_cell{new CellInfo};
+        gnd_cell->name = ctx->id("$PACKER_GND_DRV");
+        gnd_cell->type = id_PSEUDO_GND;
+        gnd_cell->ports[id_Y].name = id_Y;
+        gnd_cell->ports[id_Y].type = PORT_OUT;
+        std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
+        gnd_net->name = ctx->id("$PACKER_GND_NET");
+        gnd_net->driver.cell = gnd_cell.get();
+        gnd_net->driver.port = id_Y;
+        gnd_cell->ports.at(id_Y).net = gnd_net.get();
 
-    get_tied_pins(ctx, tied_pins);
-    get_invertible_pins(ctx, invertible_pins);
+        std::unique_ptr<CellInfo> vcc_cell{new CellInfo};
+        vcc_cell->name = ctx->id("$PACKER_VCC_DRV");
+        vcc_cell->type = id_PSEUDO_VCC;
+        vcc_cell->ports[id_Y].name = id_Y;
+        vcc_cell->ports[id_Y].type = PORT_OUT;
+        std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
+        vcc_net->name = ctx->id("$PACKER_VCC_NET");
+        vcc_net->driver.cell = vcc_cell.get();
+        vcc_net->driver.port = id_Y;
+        vcc_cell->ports.at(id_Y).net = vcc_net.get();
 
-    std::unique_ptr<CellInfo> gnd_cell{new CellInfo};
-    gnd_cell->name = ctx->id("$PACKER_GND_DRV");
-    gnd_cell->type = id_PSEUDO_GND;
-    gnd_cell->ports[id_Y].name = id_Y;
-    gnd_cell->ports[id_Y].type = PORT_OUT;
-    std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
-    gnd_net->name = ctx->id("$PACKER_GND_NET");
-    gnd_net->driver.cell = gnd_cell.get();
-    gnd_net->driver.port = id_Y;
-    gnd_cell->ports.at(id_Y).net = gnd_net.get();
-
-    std::unique_ptr<CellInfo> vcc_cell{new CellInfo};
-    vcc_cell->name = ctx->id("$PACKER_VCC_DRV");
-    vcc_cell->type = id_PSEUDO_VCC;
-    vcc_cell->ports[id_Y].name = id_Y;
-    vcc_cell->ports[id_Y].type = PORT_OUT;
-    std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
-    vcc_net->name = ctx->id("$PACKER_VCC_NET");
-    vcc_net->driver.cell = vcc_cell.get();
-    vcc_net->driver.port = id_Y;
-    vcc_cell->ports.at(id_Y).net = vcc_net.get();
+        ctx->cells[gnd_cell->name] = std::move(gnd_cell);
+        ctx->nets[gnd_net->name] = std::move(gnd_net);
+        ctx->cells[vcc_cell->name] = std::move(vcc_cell);
+        ctx->nets[vcc_net->name] = std::move(vcc_net);
+    }
+    NetInfo *gnd = ctx->nets[ctx->id("$PACKER_GND_NET")].get(), *vcc = ctx->nets[ctx->id("$PACKER_VCC_NET")].get();
 
     std::vector<IdString> dead_nets;
 
@@ -316,13 +324,8 @@ void USPacker::pack_constants()
             cval = true;
         }
 
-        connect_port(ctx, cval ? vcc_net.get() : gnd_net.get(), ci, pname);
+        connect_port(ctx, cval ? vcc : gnd, ci, pname);
     }
-
-    ctx->cells[gnd_cell->name] = std::move(gnd_cell);
-    ctx->nets[gnd_net->name] = std::move(gnd_net);
-    ctx->cells[vcc_cell->name] = std::move(vcc_cell);
-    ctx->nets[vcc_net->name] = std::move(vcc_net);
 
     for (auto dn : dead_nets) {
         ctx->nets.erase(dn);
@@ -474,6 +477,7 @@ bool Arch::pack()
 {
     USPacker packer;
     packer.ctx = getCtx();
+    packer.pack_constants();
     packer.pack_io();
     packer.prepare_iologic();
     packer.prepare_clocking();

@@ -295,11 +295,20 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     tied_pins[ctx->id("ODELAYE3")][ctx->id("CE")] = true;
     for (int i = 0; i < 9; i++)
         tied_pins[ctx->id("ODELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
+    tied_pins[ctx->id("ODELAYE3")][ctx->id("LOAD")] = false;
 
     tied_pins[ctx->id("IDELAYE3")][ctx->id("RST")] = false;
     tied_pins[ctx->id("IDELAYE3")][ctx->id("CE")] = true;
     for (int i = 0; i < 9; i++)
         tied_pins[ctx->id("IDELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
+    tied_pins[ctx->id("IDELAYE3")][ctx->id("LOAD")] = false;
+
+    // IO primitives
+    tied_pins[ctx->id("IOBUFDSE3")][ctx->id("DCITERMDISABLE")] = false;
+    tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC_EN[0]")] = false;
+    tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC_EN[1]")] = false;
+    for (int i = 0; i < 4; i++)
+        tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC[" + std::to_string(i) + "]")] = false;
 
     // MMCM
     tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CDDCREQ")] = false;

@@ -7,6 +7,7 @@ import com.xilinx.rapidwright.device.*;
 import com.google.gson.*;
 import com.xilinx.rapidwright.edif.*;
 import com.xilinx.rapidwright.util.RapidWright;
+import org.python.antlr.ast.Str;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -564,7 +565,18 @@ public class json2dcp {
                                 String [] nt = mp.split(",");
                                 if (created_ports.get(basename).contains(nt[0]))
                                     continue;
-                                physNet.getLogicalNet().createPortInst(nt[0], macro);
+                                if (physNet.getLogicalNet() == null)
+                                    continue;
+                                String logical_pin = nt[0];
+                                if (logical_pin.endsWith("]")) {
+                                    int open_pos = logical_pin.lastIndexOf('[');
+                                    String log_bus = logical_pin.substring(0, open_pos);
+                                    int port_index = Integer.parseInt(logical_pin.substring(open_pos + 1, logical_pin.length() - 1));
+                                    int bus_width = macro.getPort(log_bus).getWidth();
+                                    physNet.getLogicalNet().createPortInst(log_bus, (bus_width - 1) - port_index, macro);
+                                } else {
+                                    physNet.getLogicalNet().createPortInst(logical_pin, macro);
+                                }
                                 created_ports.get(basename).add(nt[0]);
                             }
                         }

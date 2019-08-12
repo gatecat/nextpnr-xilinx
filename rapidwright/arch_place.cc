@@ -443,6 +443,24 @@ void Arch::fixupPlacement()
                 }
                 connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
             }
+        } else if (ci->type == id("BITSLICE_CONTROL_BEL")) {
+            std::unordered_map<IdString, bool> constpins;
+            constpins[id("EN_VTC")] = true;
+            constpins[id("DLY_TEST_IN")] = false;
+            constpins[id("RIU_NIBBLE_SEL")] = false;
+            constpins[id("TBYTE_IN0")] = false;
+            constpins[id("TBYTE_IN1")] = false;
+            constpins[id("TBYTE_IN2")] = false;
+            constpins[id("TBYTE_IN3")] = false;
+
+            for (auto p : constpins) {
+                if (get_net_or_empty(ci, p.first) != nullptr)
+                    continue;
+                ci->ports[p.first].name = p.first;
+                ci->ports[p.first].type = PORT_IN;
+                connect_port(getCtx(), nets[p.second ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci,
+                             p.first);
+            }
         }
     }
     // Update the set of reserved wires

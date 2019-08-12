@@ -719,7 +719,7 @@ void USPacker::pack_iologic()
 
                 xform_cell(hp_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/OSERDES";
-                if (str_or_default(ci->params, ctx->id("ODDR_MODE"), "FALSE") == "TRUE") {
+                if (get_net_or_empty(ci, ctx->id("OFD_CE")) == nullptr) {
                     ci->ports[ctx->id("OFD_CE")].name = ctx->id("OFD_CE");
                     ci->ports[ctx->id("OFD_CE")].type = PORT_IN;
                     connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("OFD_CE"));
@@ -771,7 +771,7 @@ void USPacker::pack_idelayctrl()
             NetInfo *dup_rdy =
                     (ioctrl_sites.size() == 1)
                             ? rdy
-                            : create_internal_net(idelayctrl->name, "CTRL_DUP_" + std::to_string(i) + "_RDY");
+                            : create_internal_net(idelayctrl->name, "CTRL_DUP_" + std::to_string(i) + "_RDY", false);
             connect_port(ctx, dup_rdy, dup_idc.get(), ctx->id("RDY"));
             dup_rdys.push_back(dup_rdy);
         }
