@@ -687,6 +687,11 @@ void USPacker::pack_iologic()
             if (is_hpio(io_bel)) {
                 xform_cell(hp_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/ISERDES";
+                if (get_net_or_empty(ci, ctx->id("IFD_CE")) == nullptr) {
+                    ci->ports[ctx->id("IFD_CE")].name = ctx->id("IFD_CE");
+                    ci->ports[ctx->id("IFD_CE")].type = PORT_IN;
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("IFD_CE"));
+                }
             } else {
                 if (ci->type == ctx->id("ISERDESE3"))
                     log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));

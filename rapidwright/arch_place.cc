@@ -741,6 +741,18 @@ void Arch::fixupRouting()
             }
         }
     }
+
+    /*
+     * Legalise route through OSERDESE3s
+     */
+    for (auto cell : sorted(cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == id("OSERDESE3")) {
+            if (get_net_or_empty(ci, id("T_OUT")) != nullptr)
+                continue;
+            ci->params[id("OSERDES_T_BYPASS")] = "TRUE";
+        }
+    }
 }
 
 NEXTPNR_NAMESPACE_END
