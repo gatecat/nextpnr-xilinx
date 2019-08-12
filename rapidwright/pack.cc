@@ -142,15 +142,15 @@ std::unique_ptr<CellInfo> USPacker::feed_through_lut(NetInfo *net, const std::ve
     return lut;
 }
 
-IdString USPacker::int_name(IdString base, const std::string &postfix)
+IdString USPacker::int_name(IdString base, const std::string &postfix, bool is_hierarchy)
 {
-    return ctx->id(base.str(ctx) + "$subcell$" + postfix);
+    return ctx->id(base.str(ctx) + (is_hierarchy ? "$subcell$" : "$intcell$") + postfix);
 }
 
-NetInfo *USPacker::create_internal_net(IdString base, const std::string &postfix)
+NetInfo *USPacker::create_internal_net(IdString base, const std::string &postfix, bool is_hierarchy)
 {
     std::unique_ptr<NetInfo> net{new NetInfo};
-    IdString name = ctx->id(base.str(ctx) + "$int_net$" + postfix);
+    IdString name = ctx->id(base.str(ctx) + (is_hierarchy ? "$subnet$" : "$intnet$") + postfix);
     net->name = name;
     NPNR_ASSERT(!ctx->nets.count(name));
     ctx->nets[name] = std::move(net);

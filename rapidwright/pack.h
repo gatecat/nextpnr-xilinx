@@ -103,8 +103,8 @@ struct USPacker
     void generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary = false);
 
     std::unique_ptr<CellInfo> feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users);
-    IdString int_name(IdString base, const std::string &postfix);
-    NetInfo *create_internal_net(IdString base, const std::string &postfix);
+    IdString int_name(IdString base, const std::string &postfix, bool is_hierarchy = true);
+    NetInfo *create_internal_net(IdString base, const std::string &postfix, bool is_hierarchy = true);
     void rename_net(IdString old, IdString newname);
 
     // LUTs & FFs
