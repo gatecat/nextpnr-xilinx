@@ -188,7 +188,7 @@ public class json2dcp {
     }
 
     public static String escape_name(String name) {
-        return name.replace("\\", "__").replace("/", "_");
+        return name.replace("\\", "__").replace("/", "_").replace("$subnet$", "/");
     }
 
     public static String fixup_init(String orig, int bits) {
@@ -203,7 +203,15 @@ public class json2dcp {
 
     public static void connect_log_and_phys(Net net, Cell cell, String logical_pin) {
         // Similar to RapidWright's net.connect; but handles some special cases correctly
-        if (cell.getPhysicalPinMapping(logical_pin) == null || cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]") ||
+        if (cell.getName().contains("/")) {
+            var phys_pins = cell.getAllPhysicalPinMappings(logical_pin);
+            for (String belpin : phys_pins) {
+                if (cell.getBEL().getPin(belpin).getConnectedSitePinName() != null) {
+                    String pin = cell.getBEL().getPin(belpin).getConnectedSitePinName();
+                    net.addPin(new SitePinInst(cell.getBEL().getPin(belpin).isOutput(), pin, cell.getSiteInst()));
+                }
+            }
+        } else if (cell.getPhysicalPinMapping(logical_pin) == null || cell.getBEL().getPin(cell.getPhysicalPinMapping(logical_pin)).getConnectedSitePinName() == null || logical_pin.endsWith("]") ||
                     cell.getType().equals("RAMB36E2") || cell.getType().equals("IBUFCTRL") || cell.getType().equals("OUTBUF") || cell.getType().equals("INBUF")) {
             // Create logical connection only
             EDIFPortInst epi;
@@ -232,6 +240,28 @@ public class json2dcp {
         }
     }
 
+    public static Cell create_cell_custom(Design d, NextpnrCell nc) {
+        Unisim unitype = Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE"));
+        String legal_name = nc.name.replace("/", "__");
+        String fullname = legal_name.replace("$subcell$", "/");
+        String basename = legal_name.split("\\$subcell\\$")[0];
+
+        if (d.getTopEDIFCell().getCellInst(basename) == null) {
+            String macrotype = nc.attrs.get("X_ORIG_MACRO_PRIM");
+            System.out.println(nc.name + " " + macrotype);
+            if (d.getNetlist().getCell(macrotype) == null)
+                d.getNetlist().getHDIPrimitivesLibrary().addCell(Design.getUnisimCell(Unisim.valueOf(macrotype)));
+            Design.getUnisimCell(Unisim.valueOf(macrotype)).createCellInst(basename, d.getTopEDIFCell());
+        }
+
+
+        String[] bel = nc.attrs.get("NEXTPNR_BEL").split("/");
+        Cell c = d.createAndPlaceCell(null, fullname, unitype, d.getDevice().getSite(bel[0]), d.getDevice().getSite(bel[0]).getBEL(bel[1]));
+        c.setBELFixed(true);
+        c.setSiteFixed(true);
+        return c;
+   }
+
     public static void main(String[] args) throws FileNotFoundException {
 
         if (args.length < 3) {
@@ -256,8 +286,15 @@ public class json2dcp {
             if (nc.type.equals("IOB_PAD")) {
                 nc.rwCell = null;
             } else {
-                Unisim unitype = Unisim.valueOf(nc.attrs.get("X_ORIG_TYPE"));
-                nc.rwCell = des.createAndPlaceCell(nc.name.replace("/", "__"), unitype, nc.attrs.get("NEXTPNR_BEL"));
+                String origType = nc.attrs.get("X_ORIG_TYPE");
+                Unisim unitype = Unisim.valueOf(origType);
+
+                if (nc.name.contains("$subcell$")) {
+                    nc.rwCell = create_cell_custom(des, nc);
+                } else {
+                    nc.rwCell = des.createAndPlaceCell(nc.name.replace("/", "__"), unitype, nc.attrs.get("NEXTPNR_BEL"));
+                }
+
 
                 Map<String, String> map = nc.rwCell.getPinMappingsP2L();
                 Object[] pins = map.keySet().toArray();
@@ -500,6 +537,27 @@ public class json2dcp {
                     }
                 }
 
+            }
+        }
+
+        for (NextpnrCell nc : ndes.cells.values()) {
+            if (nc.name.contains("$subcell$")) {
+                String basename = nc.name.replace("/", "__").split("\\$subcell\\$")[0];
+                EDIFCellInst macro = des.getTopEDIFCell().getCellInst(basename);
+                for (NextpnrCellPort p : nc.ports.values()) {
+                    if (p.net == null)
+                        continue;
+                    Net physNet = p.net.rwNet;
+                    if (physNet == null)
+                        continue;
+                    if (nc.attrs.containsKey("X_MACRO_PORTS_" + p.name)) {
+                        String[] mps = nc.attrs.get("X_MACRO_PORTS_" + p.name).split(";");
+                        for (String mp : mps) {
+                            String [] nt = mp.split(",");
+                            physNet.getLogicalNet().createPortInst(nt[0], macro);
+                        }
+                    }
+                }
             }
         }
 

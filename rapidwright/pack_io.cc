@@ -132,6 +132,11 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
         NPNR_ASSERT_FALSE(("can't find PAD for net " + n->name.str(ctx)).c_str());
     };
 
+    /*
+     * IO primitives in Xilinx are complex "macros" that usually expand to more than one BEL
+     * To avoid various nasty bugs (such as auto-transformation by Vivado of dedicated INV primitives to LUT1s), we
+     * have to maintain this hierarchy so it can be re-built during DCP conversion in RapidWright
+     */
     std::unordered_map<IdString, PortInfo> orig_ports = xil_iob->ports;
     std::vector<CellInfo *> subcells;
 
@@ -182,11 +187,11 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
         std::string site = pad_site(pad_net);
         disconnect_port(ctx, xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         bool has_dci = xil_iob->type == ctx->id("IOBUF_DCIEN") || xil_iob->type == ctx->id("IOBUFE3");
-        CellInfo *obuf =
-                insert_obuf(int_name(xil_iob->name,
-                                     (is_se_iobuf || xil_iob->type == ctx->id("OBUFT")) ? "OBUFT" : "OBUF", is_se_obuf),
-                            is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
-                            get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
+        CellInfo *obuf = insert_obuf(
+                int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == ctx->id("OBUFT")) ? "OBUFT" : "OBUF",
+                         !is_se_obuf),
+                is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
+                get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
         obuf->attrs[ctx->id("BEL")] = site + "/OUTBUF";
         replace_port(xil_iob, ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
         if (is_se_iobuf)
@@ -267,15 +272,15 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
             disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
             disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
 
-            NetInfo *inv_i = create_internal_net(xil_iob->name, is_diff_obuf ? "I_B" : "OBUFTDS/I_B");
-            CellInfo *inv = insert_outinv(int_name(xil_iob->name, is_diff_obuf ? "INV" : "OBUFTDS/INV"),
+            NetInfo *inv_i = create_internal_net(xil_iob->name, is_diff_obuf ? "I_B" : "OBUFTDS$subcell$I_B");
+            CellInfo *inv = insert_outinv(int_name(xil_iob->name, is_diff_obuf ? "INV" : "OBUFTDS$subcell$INV"),
                                           get_net_or_empty(xil_iob, ctx->id("I")), inv_i);
             inv->attrs[ctx->id("BEL")] = site_p + "/OUTINV";
 
             bool has_dci = xil_iob->type == ctx->id("IOBUFDS_DCIEN") || xil_iob->type == ctx->id("IOBUFDSE3");
 
             CellInfo *obuf_p = insert_obuf(
-                    int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS/P"),
+                    int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
                     (is_diff_iobuf || is_diff_out_iobuf) ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
                                                          : ctx->id("OBUF"),
                     get_net_or_empty(xil_iob, ctx->id("I")), pad_p_net, get_net_or_empty(xil_iob, ctx->id("T")));
@@ -284,7 +289,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
             subcells.push_back(obuf_p);
             connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_p, ctx->id("DCITERMDISABLE"));
 
-            CellInfo *obuf_n = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "N" : "OBUFTDS/N"),
+            CellInfo *obuf_n = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "N" : "OBUFTDS$subcell$N"),
                                            (is_diff_iobuf || is_diff_out_iobuf)
                                                    ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
                                                    : ctx->id("OBUF"),
