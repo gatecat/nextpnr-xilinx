@@ -37,12 +37,12 @@
 #include <Eigen/Core>
 #include <Eigen/IterativeLinearSolvers>
 #include <boost/optional.hpp>
+#include <boost/thread.hpp>
 #include <chrono>
 #include <deque>
 #include <fstream>
 #include <numeric>
 #include <queue>
-#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include "log.h"
@@ -154,7 +154,7 @@ class HeAPPlacer
         for (int i = 0; i < 4; i++) {
             setup_solve_cells();
             auto solve_startt = std::chrono::high_resolution_clock::now();
-            std::thread xaxis([&]() { build_solve_direction(false, -1); });
+            boost::thread xaxis([&]() { build_solve_direction(false, -1); });
             build_solve_direction(true, -1);
             xaxis.join();
             auto solve_endt = std::chrono::high_resolution_clock::now();
@@ -214,7 +214,7 @@ class HeAPPlacer
                     build_solve_direction(false, (iter == 0) ? -1 : iter);
                     build_solve_direction(true, (iter == 0) ? -1 : iter);
                 } else {
-                    std::thread xaxis([&]() { build_solve_direction(false, (iter == 0) ? -1 : iter); });
+                    boost::thread xaxis([&]() { build_solve_direction(false, (iter == 0) ? -1 : iter); });
                     build_solve_direction(true, (iter == 0) ? -1 : iter);
                     xaxis.join();
                 }
@@ -248,7 +248,7 @@ class HeAPPlacer
                          std::chrono::duration<double>(run_stopt - run_startt).count());
             }
 
-            if (ctx->timing_driven)
+            if (cfg.timing_driven)
                 get_criticalities(ctx, &net_crit);
 
             if (legal_hpwl < best_hpwl) {
@@ -362,7 +362,7 @@ class HeAPPlacer
             CellInfo *cell = cell_entry.second.get();
             auto loc = cell->attrs.find(ctx->id("BEL"));
             if (loc != cell->attrs.end()) {
-                std::string loc_name = loc->second;
+                std::string loc_name = loc->second.as_string();
                 BelId bel = ctx->getBelByName(ctx->id(loc_name));
                 if (bel == BelId()) {
                     log_error("No Bel named \'%s\' located for "
@@ -1622,11 +1622,12 @@ int HeAPPlacer::CutSpreader::seq = 0;
 
 bool placer_heap(Context *ctx, PlacerHeapCfg cfg) { return HeAPPlacer(ctx, cfg).place(); }
 
-PlacerHeapCfg::PlacerHeapCfg(Context *ctx) : Settings(ctx)
+PlacerHeapCfg::PlacerHeapCfg(Context *ctx)
 {
-    alpha = get<float>("placerHeap/alpha", 0.08);
-    criticalityExponent = get<int>("placerHeap/criticalityExponent", 2);
-    timingWeight = get<int>("placerHeap/timingWeight", 10);
+    alpha = ctx->setting<float>("placerHeap/alpha", 0.08);
+    criticalityExponent = ctx->setting<int>("placerHeap/criticalityExponent", 2);
+    timingWeight = ctx->setting<int>("placerHeap/timingWeight", 10);
+    timing_driven = ctx->setting<bool>("timing_driven");
 }
 
 NEXTPNR_NAMESPACE_END
@@ -1644,7 +1645,7 @@ bool placer_heap(Context *ctx, PlacerHeapCfg cfg)
     return false;
 }
 
-PlacerHeapCfg::PlacerHeapCfg(Context *ctx) : Settings(ctx) {}
+PlacerHeapCfg::PlacerHeapCfg(Context *ctx) {}
 
 NEXTPNR_NAMESPACE_END
 

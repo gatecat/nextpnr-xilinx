@@ -458,7 +458,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst) const
 
     int dx = abs(src_loc.first - dst_loc.first), dy = abs(src_loc.second - dst_loc.second);
 
-    return (130 - 25 * args.speed) *
+    return (120 - 22 * args.speed) *
            (6 + std::max(dx - 5, 0) + std::max(dy - 5, 0) + 2 * (std::min(dx, 5) + std::min(dy, 5)));
 }
 
@@ -487,7 +487,7 @@ delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
 
     int dx = abs(driver_loc.x - sink_loc.x), dy = abs(driver_loc.y - sink_loc.y);
 
-    return (130 - 25 * args.speed) *
+    return (120 - 22 * args.speed) *
            (6 + std::max(dx - 5, 0) + std::max(dy - 5, 0) + 2 * (std::min(dx, 5) + std::min(dy, 5)));
 }
 
@@ -504,6 +504,8 @@ bool Arch::getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay
     }
 }
 
+delay_t Arch::getRipupDelayPenalty() const { return 400; }
+
 // -----------------------------------------------------------------------
 
 bool Arch::place()
@@ -512,7 +514,7 @@ bool Arch::place()
 
     if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
-        cfg.criticalityExponent = 7;
+        cfg.criticalityExponent = 4;
         cfg.ioBufTypes.insert(id_TRELLIS_IO);
         if (!placer_heap(getCtx(), cfg))
             return false;
@@ -522,9 +524,15 @@ bool Arch::place()
     } else {
         log_error("ECP5 architecture does not support placer '%s'\n", placer.c_str());
     }
-
     permute_luts();
-    getCtx()->attrs[getCtx()->id("step")] = "place";
+
+    // In out-of-context mode, create a locked macro
+    if (bool_or_default(settings, id("arch.ooc")))
+        for (auto &cell : cells)
+            cell.second->belStrength = STRENGTH_LOCKED;
+
+    getCtx()->settings[getCtx()->id("place")] = 1;
+
     archInfoToAttributes();
     return true;
 }
@@ -561,7 +569,7 @@ bool Arch::route()
     log_info("       base %d adder %d\n", speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_base_delay,
              speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_fanout_adder);
 #endif
-    getCtx()->attrs[getCtx()->id("step")] = "route";
+    getCtx()->settings[getCtx()->id("route")] = 1;
     archInfoToAttributes();
     return result;
 }
@@ -699,6 +707,14 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
         return false;
     } else if (cell->type == id_DP16KD) {
         return false;
+    } else if (cell->type == id_MULT18X18D) {
+        std::string fn = fromPort.str(this), tn = toPort.str(this);
+        if (fn.size() > 1 && (fn.front() == 'A' || fn.front() == 'B') && std::isdigit(fn.at(1))) {
+            if (tn.size() > 1 && tn.front() == 'P' && std::isdigit(tn.at(1)))
+                return getDelayFromTimingDatabase(id_MULT18X18D_REGS_NONE, id(std::string("") + fn.front()), id_P,
+                                                  delay);
+        }
+        return false;
     } else if (cell->type == id_IOLOGIC || cell->type == id_SIOLOGIC) {
         return false;
     } else {
@@ -776,7 +792,16 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
         }
         NPNR_ASSERT_FALSE_STR("no timing type for RAM port '" + port.str(this) + "'");
     } else if (cell->type == id_MULT18X18D) {
-        return TMG_IGNORE; // FIXME
+        if (port == id_CLK0 || port == id_CLK1 || port == id_CLK2 || port == id_CLK3)
+            return TMG_CLOCK_INPUT;
+        std::string pname = port.str(this);
+        if (pname.size() > 1) {
+            if ((pname.front() == 'A' || pname.front() == 'B') && std::isdigit(pname.at(1)))
+                return TMG_COMB_INPUT;
+            if (pname.front() == 'P' && std::isdigit(pname.at(1)))
+                return TMG_COMB_OUTPUT;
+        }
+        return TMG_IGNORE;
     } else if (cell->type == id_ALU54B) {
         return TMG_IGNORE; // FIXME
     } else if (cell->type == id_EHXPLLL) {

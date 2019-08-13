@@ -45,6 +45,15 @@ std::string get_string(std::string str)
 
 std::string get_name(IdString name, Context *ctx) { return get_string(name.c_str(ctx)); }
 
+void write_parameter_value(std::ostream &f, const Property &value)
+{
+    if (value.size() == 32 && value.is_fully_def()) {
+        f << stringf("%d", value.as_int64());
+    } else {
+        f << get_string(value.to_string());
+    }
+}
+
 void write_parameters(std::ostream &f, Context *ctx, const std::unordered_map<IdString, Property> &parameters,
                       bool for_module = false)
 {
@@ -52,34 +61,94 @@ void write_parameters(std::ostream &f, Context *ctx, const std::unordered_map<Id
     for (auto &param : parameters) {
         f << stringf("%s\n", first ? "" : ",");
         f << stringf("        %s%s: ", for_module ? "" : "    ", get_name(param.first, ctx).c_str());
-        if (param.second.isString())
-            f << get_string(param.second);
-        else
-            f << param.second.num;
+        write_parameter_value(f, param.second);
         first = false;
     }
+}
+
+struct PortGroup
+{
+    std::string name;
+    std::vector<int> bits;
+    PortType dir;
+};
+
+std::vector<PortGroup> group_ports(Context *ctx)
+{
+    std::vector<PortGroup> groups;
+    std::unordered_map<std::string, size_t> base_to_group;
+    for (auto &pair : ctx->ports) {
+        std::string name = pair.second.name.str(ctx);
+        if ((name.back() != ']') || (name.find('[') == std::string::npos)) {
+            groups.push_back({name, {pair.first.index}, pair.second.type});
+        } else {
+            int off1 = int(name.find_last_of('['));
+            std::string basename = name.substr(0, off1);
+            int index = std::stoi(name.substr(off1 + 1, name.size() - (off1 + 2)));
+
+            if (!base_to_group.count(basename)) {
+                base_to_group[basename] = groups.size();
+                groups.push_back({basename, std::vector<int>(index + 1, -1), pair.second.type});
+            }
+
+            auto &grp = groups.at(base_to_group[basename]);
+            if (int(grp.bits.size()) <= index)
+                grp.bits.resize(index + 1, -1);
+            NPNR_ASSERT(grp.bits.at(index) == -1);
+            grp.bits.at(index) = pair.second.net ? pair.second.net->name.index : pair.first.index;
+        }
+    }
+    return groups;
+};
+
+std::string format_port_bits(const PortGroup &port)
+{
+    std::stringstream s;
+    s << "[ ";
+    bool first = true;
+    for (auto bit : port.bits) {
+        if (!first)
+            s << ", ";
+        if (bit == -1)
+            s << "\"x\"";
+        else
+            s << bit;
+        first = false;
+    }
+    s << " ]";
+    return s.str();
 }
 
 void write_module(std::ostream &f, Context *ctx)
 {
     auto val = ctx->attrs.find(ctx->id("module"));
     if (val != ctx->attrs.end())
-        f << stringf("    %s: {\n", get_string(val->second.str).c_str());
+        f << stringf("    %s: {\n", get_string(val->second.as_string()).c_str());
     else
         f << stringf("    %s: {\n", get_string("top").c_str());
-    // TODO: check if this is better to be separate
-    /*f << stringf("      \"settings\": {");
+    f << stringf("      \"settings\": {");
     write_parameters(f, ctx, ctx->settings, true);
-    f << stringf("\n      },\n");*/
+    f << stringf("\n      },\n");
     f << stringf("      \"attributes\": {");
     write_parameters(f, ctx, ctx->attrs, true);
     f << stringf("\n      },\n");
     f << stringf("      \"ports\": {");
-    // TODO: Top level ports
+
+    auto ports = group_ports(ctx);
+    bool first = true;
+    for (auto &port : ports) {
+        f << stringf("%s\n", first ? "" : ",");
+        f << stringf("        %s: {\n", get_string(port.name).c_str());
+        f << stringf("          \"direction\": \"%s\",\n",
+                     port.dir == PORT_IN ? "input" : port.dir == PORT_INOUT ? "inout" : "output");
+        f << stringf("          \"bits\": %s\n", format_port_bits(port).c_str());
+        f << stringf("        }");
+        first = false;
+    }
     f << stringf("\n      },\n");
 
     f << stringf("      \"cells\": {");
-    bool first = true;
+    first = true;
     for (auto &pair : ctx->cells) {
         auto &c = pair.second;
         f << stringf("%s\n", first ? "" : ",");

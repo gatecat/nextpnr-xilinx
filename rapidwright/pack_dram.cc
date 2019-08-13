@@ -44,7 +44,7 @@ CellInfo *USPacker::create_dram_lut(const std::string &name, CellInfo *base, con
     connect_port(ctx, ctrlset.we, dram_lut.get(), ctx->id("WE"));
     for (int i = 0; i < int(ctrlset.wa.size()); i++)
         connect_port(ctx, ctrlset.wa[i], dram_lut.get(), ctx->id("WADR" + std::to_string(i)));
-    dram_lut->params[ctx->id("IS_WCLK_INVERTED")] = ctrlset.wclk_inv ? "1" : "0";
+    dram_lut->params[ctx->id("IS_WCLK_INVERTED")] = ctrlset.wclk_inv ? 1 : 0;
 
     xform_cell(dram_rules, dram_lut.get());
 
@@ -130,23 +130,11 @@ void USPacker::pack_dram()
             ++inverted_ports;
             if (ci->params.count(ctx->id("INIT"))) {
                 Property &init = ci->params[ctx->id("INIT")];
-                if (init.isString()) {
-                    // Binary init value
-                    for (int j = 0; j < int(init.str.size()); j++) {
-                        if (j & (1 << i))
-                            init.str[j] = init.str[j & ~(1 << i)];
-                    }
-                } else {
-                    uint32_t int_init = init.num;
-                    for (int j = 0; j < 32; j++) {
-                        if (int_init & (1 << j)) {
-                            if ((j & (1 << i)) && (int_init & (1 << (j & ~(1 << i))))) {
-                                int_init |= 1 << j;
-                            }
-                        }
-                    }
-                    init.num = int_init;
+                for (int j = 0; j < int(init.str.size()); j++) {
+                    if (j & (1 << i))
+                        init.str[j] = init.str[j & ~(1 << i)];
                 }
+                init.update_intval();
             }
         }
     }

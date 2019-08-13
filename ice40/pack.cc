@@ -34,7 +34,7 @@ NEXTPNR_NAMESPACE_BEGIN
 static void pack_lut_lutffs(Context *ctx)
 {
     log_info("Packing LUT-FFs..\n");
-
+    int lut_only = 0, lut_and_ff = 0;
     std::unordered_set<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
     for (auto cell : sorted(ctx->cells)) {
@@ -62,6 +62,7 @@ static void pack_lut_lutffs(Context *ctx)
                 } else {
                     lut_to_lc(ctx, ci, packed.get(), false);
                     dff_to_lc(ctx, dff, packed.get(), false);
+                    ++lut_and_ff;
                     ctx->nets.erase(o->name);
                     if (dff_bel != dff->attrs.end())
                         packed->attrs[ctx->id("BEL")] = dff_bel->second;
@@ -73,6 +74,7 @@ static void pack_lut_lutffs(Context *ctx)
             }
             if (!packed_dff) {
                 lut_to_lc(ctx, ci, packed.get(), true);
+                ++lut_only;
             }
             new_cells.push_back(std::move(packed));
         }
@@ -83,6 +85,8 @@ static void pack_lut_lutffs(Context *ctx)
     for (auto &ncell : new_cells) {
         ctx->cells[ncell->name] = std::move(ncell);
     }
+    log_info("    %4d LCs used as LUT4 only\n", lut_only);
+    log_info("    %4d LCs used as LUT4 and DFF\n", lut_and_ff);
 }
 
 // Pack FFs not packed as LUTFFs
@@ -92,6 +96,7 @@ static void pack_nonlut_ffs(Context *ctx)
 
     std::unordered_set<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
+    int ff_only = 0;
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -104,6 +109,7 @@ static void pack_nonlut_ffs(Context *ctx)
             packed_cells.insert(ci->name);
             dff_to_lc(ctx, ci, packed.get(), true);
             new_cells.push_back(std::move(packed));
+            ++ff_only;
         }
     }
     for (auto pcell : packed_cells) {
@@ -112,6 +118,7 @@ static void pack_nonlut_ffs(Context *ctx)
     for (auto &ncell : new_cells) {
         ctx->cells[ncell->name] = std::move(ncell);
     }
+    log_info("    %4d LCs used as DFF only\n", ff_only);
 }
 
 static bool net_is_constant(const Context *ctx, NetInfo *net, bool &value)
@@ -133,6 +140,7 @@ static void pack_carries(Context *ctx)
     std::unordered_set<IdString> exhausted_cells;
     std::unordered_set<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
+    int carry_only = 0;
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -209,8 +217,9 @@ static void pack_carries(Context *ctx)
                     i1_net->users.push_back(pr);
                 }
                 new_cells.push_back(std::move(created_lc));
+                ++carry_only;
             }
-            carry_lc->params[ctx->id("CARRY_ENABLE")] = "1";
+            carry_lc->params[ctx->id("CARRY_ENABLE")] = Property::State::S1;
             replace_port(ci, ctx->id("CI"), carry_lc, ctx->id("CIN"));
             replace_port(ci, ctx->id("CO"), carry_lc, ctx->id("COUT"));
             if (i0_net) {
@@ -230,8 +239,9 @@ static void pack_carries(Context *ctx)
             if (carry_lc->ports.at(ctx->id("CIN")).net != nullptr) {
                 IdString cin_net = carry_lc->ports.at(ctx->id("CIN")).net->name;
                 if (cin_net == ctx->id("$PACKER_GND_NET") || cin_net == ctx->id("$PACKER_VCC_NET")) {
-                    carry_lc->params[ctx->id("CIN_CONST")] = "1";
-                    carry_lc->params[ctx->id("CIN_SET")] = cin_net == ctx->id("$PACKER_VCC_NET") ? "1" : "0";
+                    carry_lc->params[ctx->id("CIN_CONST")] = Property::State::S1;
+                    carry_lc->params[ctx->id("CIN_SET")] =
+                            cin_net == ctx->id("$PACKER_VCC_NET") ? Property::State::S1 : Property::State::S0;
                     carry_lc->ports.at(ctx->id("CIN")).net = nullptr;
                     auto &cin_users = ctx->nets.at(cin_net)->users;
                     cin_users.erase(
@@ -249,6 +259,7 @@ static void pack_carries(Context *ctx)
     for (auto &ncell : new_cells) {
         ctx->cells[ncell->name] = std::move(ncell);
     }
+    log_info("    %4d LCs used as CARRY only\n", carry_only);
 }
 
 // "Pack" RAMs
@@ -270,9 +281,9 @@ static void pack_ram(Context *ctx)
             for (auto param : ci->params)
                 packed->params[param.first] = param.second;
             packed->params[ctx->id("NEG_CLK_W")] =
-                    std::to_string(ci->type == ctx->id("SB_RAM40_4KNW") || ci->type == ctx->id("SB_RAM40_4KNRNW"));
+                    Property(ci->type == ctx->id("SB_RAM40_4KNW") || ci->type == ctx->id("SB_RAM40_4KNRNW"), 1);
             packed->params[ctx->id("NEG_CLK_R")] =
-                    std::to_string(ci->type == ctx->id("SB_RAM40_4KNR") || ci->type == ctx->id("SB_RAM40_4KNRNW"));
+                    Property(ci->type == ctx->id("SB_RAM40_4KNR") || ci->type == ctx->id("SB_RAM40_4KNRNW"), 1);
             packed->type = ctx->id("ICESTORM_RAM");
             for (auto port : ci->ports) {
                 PortInfo &pi = port.second;
@@ -334,7 +345,7 @@ static void pack_constants(Context *ctx)
     log_info("Packing constants..\n");
 
     std::unique_ptr<CellInfo> gnd_cell = create_ice_cell(ctx, ctx->id("ICESTORM_LC"), "$PACKER_GND");
-    gnd_cell->params[ctx->id("LUT_INIT")] = "0";
+    gnd_cell->params[ctx->id("LUT_INIT")] = Property(0, 16);
     std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
     gnd_net->name = ctx->id("$PACKER_GND_NET");
     gnd_net->driver.cell = gnd_cell.get();
@@ -347,7 +358,7 @@ static void pack_constants(Context *ctx)
     }
 
     std::unique_ptr<CellInfo> vcc_cell = create_ice_cell(ctx, ctx->id("ICESTORM_LC"), "$PACKER_VCC");
-    vcc_cell->params[ctx->id("LUT_INIT")] = "1";
+    vcc_cell->params[ctx->id("LUT_INIT")] = Property(1, 16);
     std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
     vcc_net->name = ctx->id("$PACKER_VCC_NET");
     vcc_net->driver.cell = vcc_cell.get();
@@ -417,13 +428,13 @@ static std::unique_ptr<CellInfo> create_padin_gbuf(Context *ctx, CellInfo *cell,
                                                    std::string gbuf_name)
 {
     // Find the matching SB_GB BEL connected to the same global network
-    BelId bel = ctx->getBelByName(ctx->id(cell->attrs[ctx->id("BEL")]));
+    BelId bel = ctx->getBelByName(ctx->id(cell->attrs[ctx->id("BEL")].as_string()));
     BelId gb_bel = find_padin_gbuf(ctx, bel, port_name);
     NPNR_ASSERT(gb_bel != BelId());
 
     // Create a SB_GB Cell and lock it there
     std::unique_ptr<CellInfo> gb = create_ice_cell(ctx, ctx->id("SB_GB"), gbuf_name);
-    gb->attrs[ctx->id("FOR_PAD_IN")] = "1";
+    gb->attrs[ctx->id("FOR_PAD_IN")] = Property::State::S1;
     gb->attrs[ctx->id("BEL")] = ctx->getBelName(gb_bel).str(ctx);
 
     // Reconnect the net to that port for easier identification it's a global net
@@ -462,7 +473,8 @@ static void pack_io(Context *ctx)
             } else if (ci->type == ctx->id("$nextpnr_obuf")) {
                 NetInfo *net = ci->ports.at(ctx->id("I")).net;
                 sb = net_only_drives(ctx, net, is_ice_iob, ctx->id("PACKAGE_PIN"), true, ci);
-                if (net && net->driver.cell && is_sb_rgba_drv(ctx, net->driver.cell))
+                if (net && net->driver.cell &&
+                    (is_sb_rgba_drv(ctx, net->driver.cell) || is_sb_rgb_drv(ctx, net->driver.cell)))
                     rgb = net->driver.cell;
             }
             if (sb != nullptr) {
@@ -488,7 +500,8 @@ static void pack_io(Context *ctx)
                     }
                 }
             } else if (rgb != nullptr) {
-                log_info("%s use by SB_RGBA_DRV %s, not creating SB_IO\n", ci->name.c_str(ctx), rgb->name.c_str(ctx));
+                log_info("%s use by SB_RGBA_DRV/SB_RGB_DRV %s, not creating SB_IO\n", ci->name.c_str(ctx),
+                         rgb->name.c_str(ctx));
                 disconnect_port(ctx, ci, ctx->id("I"));
                 packed_cells.insert(ci->name);
                 continue;
@@ -519,7 +532,7 @@ static void pack_io(Context *ctx)
 
             // Make it a normal SB_IO with global marker
             ci->type = ctx->id("SB_IO");
-            ci->attrs[ctx->id("GLOBAL")] = "1";
+            ci->attrs[ctx->id("GLOBAL")] = Property::State::S1;
         } else if (is_sb_io(ctx, ci)) {
             // Disconnect unused inputs
             NetInfo *net_in0 = ci->ports.count(id_D_IN_0) ? ci->ports[id_D_IN_0].net : nullptr;
@@ -634,7 +647,7 @@ static void promote_globals(Context *ctx)
             /* And possibly limits what we can promote */
             if (cell.second->attrs.find(ctx->id("BEL")) != cell.second->attrs.end()) {
                 /* If the SB_GB is locked, doesn't matter what it drives */
-                BelId bel = ctx->getBelByName(ctx->id(cell.second->attrs[ctx->id("BEL")]));
+                BelId bel = ctx->getBelByName(ctx->id(cell.second->attrs[ctx->id("BEL")].as_string()));
                 int glb_id = ctx->getDrivenGlobalNetwork(bel);
                 if ((glb_id % 2) == 0)
                     resets_available--;
@@ -753,10 +766,10 @@ static void place_plls(Context *ctx)
 
         // If it's constrained already, add to already used list
         if (ci->attrs.count(ctx->id("BEL"))) {
-            BelId bel_constrain = ctx->getBelByName(ctx->id(ci->attrs[ctx->id("BEL")]));
+            BelId bel_constrain = ctx->getBelByName(ctx->id(ci->attrs[ctx->id("BEL")].as_string()));
             if (pll_all_bels.count(bel_constrain) == 0)
                 log_error("PLL '%s' is constrained to invalid BEL '%s'\n", ci->name.c_str(ctx),
-                          ci->attrs[ctx->id("BEL")].c_str());
+                          ci->attrs[ctx->id("BEL")].as_string().c_str());
             pll_used_bels[bel_constrain] = ci;
         }
 
@@ -788,7 +801,7 @@ static void place_plls(Context *ctx)
             log_error("PLL '%s' PACKAGEPIN SB_IO '%s' is unconstrained\n", ci->name.c_str(ctx),
                       io_cell->name.c_str(ctx));
 
-        BelId io_bel = ctx->getBelByName(ctx->id(io_cell->attrs.at(ctx->id("BEL"))));
+        BelId io_bel = ctx->getBelByName(ctx->id(io_cell->attrs.at(ctx->id("BEL")).as_string()));
         BelId found_bel;
 
         // Find the PLL BEL that would suit that connection
@@ -813,7 +826,7 @@ static void place_plls(Context *ctx)
         // Is it user constrained ?
         if (ci->attrs.count(ctx->id("BEL"))) {
             // Yes. Check it actually matches !
-            BelId bel_constrain = ctx->getBelByName(ctx->id(ci->attrs[ctx->id("BEL")]));
+            BelId bel_constrain = ctx->getBelByName(ctx->id(ci->attrs[ctx->id("BEL")].as_string()));
             if (bel_constrain != found_bel)
                 log_error("PLL '%s' is user constrained to %s but can only be placed in %s based on its PACKAGEPIN "
                           "connection\n",
@@ -843,7 +856,7 @@ static void place_plls(Context *ctx)
             continue;
 
         // Check all placed PLL (either forced by user, or forced by PACKAGEPIN)
-        BelId io_bel = ctx->getBelByName(ctx->id(io_ci->attrs[ctx->id("BEL")]));
+        BelId io_bel = ctx->getBelByName(ctx->id(io_ci->attrs[ctx->id("BEL")].as_string()));
 
         for (auto placed_pll : pll_used_bels) {
             BelPin pll_io_a, pll_io_b;
@@ -877,7 +890,7 @@ static void place_plls(Context *ctx)
             continue;
 
         // Check all placed PLL (either forced by user, or forced by PACKAGEPIN)
-        BelId gb_bel = ctx->getBelByName(ctx->id(gb_ci->attrs[ctx->id("BEL")]));
+        BelId gb_bel = ctx->getBelByName(ctx->id(gb_ci->attrs[ctx->id("BEL")].as_string()));
 
         for (auto placed_pll : pll_used_bels) {
             CellInfo *ci = placed_pll.second;
@@ -936,7 +949,7 @@ static void place_plls(Context *ctx)
             bool could_be_pad = false;
             BelId pad_bel;
             if (ni->users.size() == 1 && is_sb_io(ctx, ni->driver.cell) && ni->driver.cell->attrs.count(ctx->id("BEL")))
-                pad_bel = ctx->getBelByName(ctx->id(ni->driver.cell->attrs[ctx->id("BEL")]));
+                pad_bel = ctx->getBelByName(ctx->id(ni->driver.cell->attrs[ctx->id("BEL")].as_string()));
 
             // Find a BEL for it
             BelId found_bel;
@@ -987,7 +1000,7 @@ static std::unique_ptr<CellInfo> spliceLUT(Context *ctx, CellInfo *ci, IdString 
     // Create pass-through LUT.
     std::unique_ptr<CellInfo> pt = create_ice_cell(ctx, ctx->id("ICESTORM_LC"),
                                                    ci->name.str(ctx) + "$nextpnr_" + portId.str(ctx) + "_lut_through");
-    pt->params[ctx->id("LUT_INIT")] = "65280"; // output is always I3
+    pt->params[ctx->id("LUT_INIT")] = Property(65280, 16); // output is always I3
 
     // Create LUT output net.
     std::unique_ptr<NetInfo> out_net = std::unique_ptr<NetInfo>(new NetInfo);
@@ -1049,6 +1062,27 @@ static void pack_special(Context *ctx)
 
     std::unordered_set<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
+
+    // Handle LED_DRV_CUR first to set the ledCurConnected flag before RGB_DRV is handled below.
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (is_sb_led_drv_cur(ctx, ci)) {
+            /* Force placement (no choices anyway) */
+            cell_place_unique(ctx, ci);
+
+            NetInfo *ledpu_net = ci->ports.at(ctx->id("LEDPU")).net;
+            for (auto &user : ledpu_net->users) {
+                if (!is_sb_rgb_drv(ctx, user.cell)) {
+                    log_error("SB_LED_DRV_CUR LEDPU port can only be connected to SB_RGB_DRV!\n");
+                } else {
+                    user.cell->ledInfo.ledCurConnected = true;
+                    user.cell->ports.at(user.port).net = nullptr;
+                }
+            }
+            ci->ports.erase(ctx->id("LEDPU"));
+            ctx->nets.erase(ledpu_net->name);
+        }
+    }
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -1125,7 +1159,7 @@ static void pack_special(Context *ctx)
                 replace_port(ci, ctx->id(pi.name.c_str(ctx)), packed.get(), ctx->id(newname));
             }
             new_cells.push_back(std::move(packed));
-        } else if (is_sb_rgba_drv(ctx, ci)) {
+        } else if (is_sb_rgba_drv(ctx, ci) || is_sb_rgb_drv(ctx, ci)) {
             /* Force placement (no choices anyway) */
             cell_place_unique(ctx, ci);
 
@@ -1137,14 +1171,20 @@ static void pack_special(Context *ctx)
 
                 if (net == nullptr)
                     continue;
+
                 if ((pi.name != ctx->id("RGB0")) && (pi.name != ctx->id("RGB1")) && (pi.name != ctx->id("RGB2")))
                     continue;
 
                 if (net->users.size() > 0)
-                    log_error("SB_RGBA_DRV port connected to more than just package pin !\n");
+                    log_error("SB_RGB_DRV/SB_RGBA_DRV port connected to more than just package pin !\n");
 
                 ctx->nets.erase(net->name);
             }
+
+            if (is_sb_rgb_drv(ctx, ci) && !ci->ledInfo.ledCurConnected)
+                log_error("Port RGBPU of SB_RGB_DRV should be driven by port LEDPU of SB_LED_DRV_CUR!\n");
+
+            ci->ports.erase(ctx->id("RGBPU"));
             ci->ports.erase(ctx->id("RGB0"));
             ci->ports.erase(ctx->id("RGB1"));
             ci->ports.erase(ctx->id("RGB2"));
@@ -1158,10 +1198,11 @@ static void pack_special(Context *ctx)
                     {std::make_tuple(id_SB_SPI, "0b0010"), Loc(25, 0, 1)},
                     {std::make_tuple(id_SB_I2C, "0b0011"), Loc(25, 31, 0)},
             };
-            if (map_ba74.find(std::make_tuple(ci->type, ci->params[ctx->id("BUS_ADDR74")])) == map_ba74.end())
+            if (map_ba74.find(std::make_tuple(ci->type, ci->params[ctx->id("BUS_ADDR74")].as_string())) ==
+                map_ba74.end())
                 log_error("Invalid value for BUS_ADDR74 for cell '%s' of type '%s'\n", ci->name.c_str(ctx),
                           ci->type.c_str(ctx));
-            Loc bel_loc = map_ba74.at(std::make_tuple(ci->type, ci->params[ctx->id("BUS_ADDR74")]));
+            Loc bel_loc = map_ba74.at(std::make_tuple(ci->type, ci->params[ctx->id("BUS_ADDR74")].as_string()));
             BelId bel = ctx->getBelByLocation(bel_loc);
             if (bel == BelId() || ctx->getBelType(bel) != ci->type)
                 log_error("Unable to find placement for cell '%s' of type '%s'\n", ci->name.c_str(ctx),
@@ -1201,12 +1242,14 @@ static void pack_special(Context *ctx)
             };
             for (auto param : ci->params)
                 if (pos_map_name.find(param.first) != pos_map_name.end()) {
-                    if (pos_map_val.find(param.second) == pos_map_val.end())
-                        log_error("Invalid PLL output selection '%s'\n", param.second.c_str());
-                    packed->params[pos_map_name.at(param.first)] = std::to_string(pos_map_val.at(param.second));
+                    if (pos_map_val.find(param.second.as_string()) == pos_map_val.end())
+                        log_error("Invalid PLL output selection '%s'\n", param.second.as_string().c_str());
+                    packed->params[pos_map_name.at(param.first)] = pos_map_val.at(param.second.as_string());
                 }
 
-            auto feedback_path = packed->params[ctx->id("FEEDBACK_PATH")];
+            auto feedback_path = packed->params[ctx->id("FEEDBACK_PATH")].is_string
+                                         ? packed->params[ctx->id("FEEDBACK_PATH")].as_string()
+                                         : std::to_string(packed->params[ctx->id("FEEDBACK_PATH")].as_int64());
             std::string fbp_value =
                     feedback_path == "DELAY"
                             ? "0"
@@ -1218,8 +1261,8 @@ static void pack_special(Context *ctx)
             if (!std::all_of(fbp_value.begin(), fbp_value.end(), isdigit))
                 log_error("PLL '%s' has unsupported FEEDBACK_PATH value '%s'\n", ci->name.c_str(ctx),
                           feedback_path.c_str());
-            packed->params[ctx->id("FEEDBACK_PATH")] = fbp_value;
-            packed->params[ctx->id("PLLTYPE")] = std::to_string(sb_pll40_type(ctx, ci));
+            packed->params[ctx->id("FEEDBACK_PATH")] = Property(std::stoi(fbp_value), 3);
+            packed->params[ctx->id("PLLTYPE")] = sb_pll40_type(ctx, ci);
 
             NetInfo *pad_packagepin_net = nullptr;
 
@@ -1275,7 +1318,7 @@ static void pack_special(Context *ctx)
             }
 
             // PLL must have been placed already in place_plls()
-            BelId pll_bel = ctx->getBelByName(ctx->id(packed->attrs[ctx->id("BEL")]));
+            BelId pll_bel = ctx->getBelByName(ctx->id(packed->attrs[ctx->id("BEL")].as_string()));
             NPNR_ASSERT(pll_bel != BelId());
 
             // Deal with PAD PLL peculiarities
@@ -1419,7 +1462,7 @@ bool Arch::pack()
         ctx->assignArchInfo();
         constrain_chains(ctx);
         ctx->assignArchInfo();
-        ctx->attrs[ctx->id("step")] = "pack";
+        ctx->settings[ctx->id("pack")] = 1;
         archInfoToAttributes();
         log_info("Checksum: 0x%08x\n", ctx->checksum());
         return true;

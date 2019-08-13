@@ -109,7 +109,7 @@ void Arch::parseXdc(std::istream &in)
                 continue;
             std::vector<CellInfo *> dest = get_cells(arguments.at(3));
             for (auto c : dest)
-                c->attrs[id(arguments.at(1))].setString(arguments.at(2));
+                c->attrs[id(arguments.at(1))] = std::string(arguments.at(2));
         } else {
             log_info("ignoring unsupported LPF command '%s' (on line %d)\n", cmd.c_str(), lineno);
         }

@@ -514,7 +514,7 @@ bool Arch::place()
         log_error("US+ architecture does not support placer '%s'\n", placer.c_str());
     }
     fixupPlacement();
-    getCtx()->attrs[getCtx()->id("step")] = "place";
+    getCtx()->attrs[getCtx()->id("step")] = std::string("place");
     archInfoToAttributes();
     return true;
 }
@@ -728,7 +728,7 @@ bool Arch::route()
              speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_fanout_adder);
 #endif
     fixupRouting();
-    getCtx()->attrs[getCtx()->id("step")] = "route";
+    getCtx()->attrs[getCtx()->id("step")] = std::string("route");
     archInfoToAttributes();
     return result;
 }

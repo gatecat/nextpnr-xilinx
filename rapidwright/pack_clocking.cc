@@ -67,7 +67,7 @@ void USPacker::try_preplace(CellInfo *cell, IdString port)
     CellInfo *drv = n->driver.cell;
     if (!drv->attrs.count(ctx->id("BEL")))
         return;
-    BelId drv_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL"))));
+    BelId drv_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
     if (drv_bel == BelId())
         return;
     WireId drv_wire = ctx->getBelPinWire(drv_bel, n->driver.port);
@@ -111,7 +111,7 @@ void USPacker::prepare_clocking()
             ci->type = new_type;
         }
         if (ci->attrs.count(ctx->id("BEL")))
-            used_bels.insert(ctx->getBelByName(ctx->id(ci->attrs.at(ctx->id("BEL")))));
+            used_bels.insert(ctx->getBelByName(ctx->id(ci->attrs.at(ctx->id("BEL")).as_string())));
     }
 }
 

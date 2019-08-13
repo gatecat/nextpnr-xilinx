@@ -275,7 +275,7 @@ class Ecp5GlobalRouter
         if (drv.cell == nullptr) {
             return 0;
         } else if (drv.cell->attrs.count(ctx->id("BEL"))) {
-            drv_bel = ctx->getBelByName(ctx->id(drv.cell->attrs.at(ctx->id("BEL"))));
+            drv_bel = ctx->getBelByName(ctx->id(drv.cell->attrs.at(ctx->id("BEL")).as_string()));
         } else {
             // Check if driver is a singleton
             BelId last_bel;
@@ -382,7 +382,7 @@ class Ecp5GlobalRouter
         glbnet->name = ctx->id("$glbnet$" + net->name.str(ctx));
         glbnet->driver.cell = dcc.get();
         glbnet->driver.port = id_CLKO;
-        glbnet->attrs[ctx->id("ECP5_IS_GLOBAL")] = "1";
+        glbnet->attrs[ctx->id("ECP5_IS_GLOBAL")] = 1;
         dcc->ports[id_CLKO].net = glbnet.get();
 
         std::vector<PortRef> keep_users;
@@ -431,11 +431,15 @@ class Ecp5GlobalRouter
   public:
     void promote_globals()
     {
+        bool is_ooc = bool_or_default(ctx->settings, ctx->id("arch.ooc"));
         log_info("Promoting globals...\n");
         auto clocks = get_clocks();
         for (auto clock : clocks) {
             log_info("    promoting clock net %s to global network\n", clock->name.c_str(ctx));
-            insert_dcc(clock);
+            if (is_ooc) // Don't actually do anything in OOC mode, global routing will be done in the full design
+                clock->is_global = true;
+            else
+                insert_dcc(clock);
         }
     }
 

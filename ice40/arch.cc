@@ -689,7 +689,7 @@ bool Arch::place()
         tocfg.cellTypes.insert(id_ICESTORM_LC);
         retVal = timing_opt(getCtx(), tocfg);
     }
-    getCtx()->attrs[getCtx()->id("step")] = "place";
+    getCtx()->settings[getCtx()->id("place")] = 1;
     archInfoToAttributes();
     return retVal;
 }
@@ -697,7 +697,7 @@ bool Arch::place()
 bool Arch::route()
 {
     bool retVal = router1(getCtx(), Router1Cfg(getCtx()));
-    getCtx()->attrs[getCtx()->id("step")] = "route";
+    getCtx()->settings[getCtx()->id("route")] = 1;
     archInfoToAttributes();
     return retVal;
 }
@@ -1052,6 +1052,14 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
             return cell->gbInfo.forPadIn ? TMG_GEN_CLOCK : TMG_COMB_OUTPUT;
         return TMG_COMB_INPUT;
     } else if (cell->type == id_SB_WARMBOOT) {
+        return TMG_ENDPOINT;
+    } else if (cell->type == id_SB_LED_DRV_CUR) {
+        if (port == id_LEDPU)
+            return TMG_IGNORE;
+        return TMG_ENDPOINT;
+    } else if (cell->type == id_SB_RGB_DRV) {
+        if (port == id_RGB0 || port == id_RGB1 || port == id_RGB2 || port == id_RGBPU)
+            return TMG_IGNORE;
         return TMG_ENDPOINT;
     } else if (cell->type == id_SB_RGBA_DRV) {
         if (port == id_RGB0 || port == id_RGB1 || port == id_RGB2)

@@ -26,12 +26,14 @@
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include <boost/functional/hash.hpp>
+#include <boost/lexical_cast.hpp>
+#include <boost/range/adaptor/reversed.hpp>
+#include <boost/thread.hpp>
 
 #ifndef NEXTPNR_H
 #define NEXTPNR_H
@@ -310,60 +312,98 @@ struct PipMap
 
 struct Property
 {
-    bool is_string;
-
-    std::string str;
-    int num;
-
-    std::string::iterator begin() { return str.begin(); }
-    std::string::iterator end() { return str.end(); }
-
-    bool isString() const { return is_string; }
-
-    void setNumber(int val)
+    enum State : char
     {
-        is_string = false;
-        num = val;
-        str = std::to_string(val);
-    }
-    void setString(std::string val)
-    {
-        is_string = true;
-        str = val;
-    }
-
-    const char *c_str() const { return str.c_str(); }
-    operator std::string() const { return str; }
-
-    bool operator==(const std::string other) const { return str == other; }
-    bool operator!=(const std::string other) const { return str != other; }
-
-    Property &operator=(std::string other)
-    {
-        is_string = true;
-        str = other;
-        return *this;
-    }
-
-    Property()
-    {
-        is_string = true;
-        str = "";
+        S0 = '0',
+        S1 = '1',
+        Sx = 'x',
+        Sz = 'z'
     };
 
-    explicit Property(const std::string &other)
+    Property();
+    Property(int64_t intval, int width = 32);
+    Property(const std::string &strval);
+    Property(State bit);
+    Property &operator=(const Property &other) = default;
+
+    bool is_string;
+
+    // The string literal (for string values), or a string of [01xz] (for numeric values)
+    std::string str;
+    // The lower 64 bits (for numeric values), unused for string values
+    int64_t intval;
+
+    void update_intval()
     {
-        is_string = true;
-        str = other;
+        intval = 0;
+        for (int i = 0; i < int(str.size()); i++) {
+            NPNR_ASSERT(str[i] == S0 || str[i] == S1 || str[i] == Sx || str[i] == Sz);
+            if ((str[i] == S1) && i < 64)
+                intval |= (1ULL << i);
+        }
     }
 
-    explicit Property(int other)
+    int64_t as_int64() const
     {
-        is_string = false;
-        num = other;
-        str = std::to_string(other);
+        NPNR_ASSERT(!is_string);
+        return intval;
     }
+    std::vector<bool> as_bits() const
+    {
+        std::vector<bool> result;
+        result.reserve(str.size());
+        NPNR_ASSERT(!is_string);
+        for (auto c : str)
+            result.push_back(c == S1);
+        return result;
+    }
+    std::string as_string() const
+    {
+        NPNR_ASSERT(is_string);
+        return str;
+    }
+    const char *c_str() const
+    {
+        NPNR_ASSERT(is_string);
+        return str.c_str();
+    }
+    size_t size() const { return is_string ? 8 * str.size() : str.size(); }
+    double as_double() const
+    {
+        NPNR_ASSERT(is_string);
+        return std::stod(str);
+    }
+    bool as_bool() const
+    {
+        if (int(str.size()) <= 64)
+            return intval != 0;
+        else
+            return std::any_of(str.begin(), str.end(), [](char c) { return c == S1; });
+    }
+    bool is_fully_def() const
+    {
+        return !is_string && std::all_of(str.begin(), str.end(), [](char c) { return c == S0 || c == S1; });
+    }
+    Property extract(int offset, int len, State padding = State::S0) const
+    {
+        Property ret;
+        ret.is_string = false;
+        ret.str.reserve(len);
+        for (int i = offset; i < offset + len; i++)
+            ret.str.push_back(i < int(str.size()) ? str[i] : padding);
+        ret.update_intval();
+        return ret;
+    }
+    // Convert to a string representation, escaping literal strings matching /^[01xz]* *$/ by adding a space at the end,
+    // to disambiguate from binary strings
+    std::string to_string() const;
+    // Convert a string of four-value binary [01xz], or a literal string escaped according to the above rule
+    // to a Property
+    static Property from_string(const std::string &s);
 };
+
+inline bool operator==(const Property &a, const Property &b) { return a.is_string == b.is_string && a.str == b.str; }
+inline bool operator!=(const Property &a, const Property &b) { return a.is_string != b.is_string || a.str != b.str; }
 
 struct ClockConstraint;
 
@@ -573,7 +613,7 @@ struct BaseCtx
 {
     // Lock to perform mutating actions on the Context.
     std::mutex mutex;
-    std::thread::id mutex_owner;
+    boost::thread::id mutex_owner;
 
     // Lock to be taken by UI when wanting to access context - the yield()
     // method will lock/unlock it when its' released the main mutex to make
@@ -585,11 +625,14 @@ struct BaseCtx
     mutable std::vector<const std::string *> *idstring_idx_to_str;
 
     // Project settings and config switches
-    std::unordered_map<IdString, std::string> settings;
+    std::unordered_map<IdString, Property> settings;
 
     // Placed nets and cells.
     std::unordered_map<IdString, std::unique_ptr<NetInfo>> nets;
     std::unordered_map<IdString, std::unique_ptr<CellInfo>> cells;
+
+    // Top-level ports
+    std::unordered_map<IdString, PortInfo> ports;
 
     // Floorplanning regions
     std::unordered_map<IdString, std::unique_ptr<Region>> region;
@@ -620,12 +663,12 @@ struct BaseCtx
     void lock(void)
     {
         mutex.lock();
-        mutex_owner = std::this_thread::get_id();
+        mutex_owner = boost::this_thread::get_id();
     }
 
     void unlock(void)
     {
-        NPNR_ASSERT(std::this_thread::get_id() == mutex_owner);
+        NPNR_ASSERT(boost::this_thread::get_id() == mutex_owner);
         mutex.unlock();
     }
 
@@ -744,10 +787,6 @@ struct Context : Arch, DeterministicRNG
     bool verbose = false;
     bool debug = false;
     bool force = false;
-    bool timing_driven = true;
-    float target_freq = 12e6;
-    bool auto_freq = false;
-    int slack_redist_iter = 0;
 
     Context(ArchArgs args) : Arch(args) {}
 
@@ -768,6 +807,30 @@ struct Context : Arch, DeterministicRNG
 
     void check() const;
     void archcheck() const;
+
+    template <typename T> T setting(const char *name, T defaultValue)
+    {
+        IdString new_id = id(name);
+        auto found = settings.find(new_id);
+        if (found != settings.end())
+            return boost::lexical_cast<T>(found->second.is_string ? found->second.as_string()
+                                                                  : std::to_string(found->second.as_int64()));
+        else
+            settings[id(name)] = std::to_string(defaultValue);
+
+        return defaultValue;
+    }
+
+    template <typename T> T setting(const char *name) const
+    {
+        IdString new_id = id(name);
+        auto found = settings.find(new_id);
+        if (found != settings.end())
+            return boost::lexical_cast<T>(found->second.is_string ? found->second.as_string()
+                                                                  : std::to_string(found->second.as_int64()));
+        else
+            throw std::runtime_error("settings does not exists");
+    }
 };
 
 NEXTPNR_NAMESPACE_END

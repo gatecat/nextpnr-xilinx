@@ -372,7 +372,7 @@ void Arch::fixupPlacement()
                         lut5->ports[ports[index]].type = PORT_IN;
                     }
                     connect_port(getCtx(), nets.at(i).get(), lut5, ports[index]);
-                    lut5->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = "";
+                    lut5->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = std::string("");
                     bool first = true;
                     for (auto inp : lut5Inputs[i]) {
                         lut5->attrs[id("X_ORIG_PORT_" + ports[index].str(this))].str +=
@@ -387,7 +387,7 @@ void Arch::fixupPlacement()
                     }
                     connect_port(getCtx(), nets.at(i).get(), lut6, ports[index]);
 
-                    lut6->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = "";
+                    lut6->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = std::string("");
                     bool first = true;
                     for (auto inp : lut6Inputs[i]) {
                         lut6->attrs[id("X_ORIG_PORT_" + ports[index].str(this))].str +=
@@ -399,7 +399,7 @@ void Arch::fixupPlacement()
             }
             rename_port(getCtx(), lut5, id_O6, id_O5);
             lut5->attrs.erase(id("X_ORIG_PORT_O6"));
-            lut5->attrs[id("X_ORIG_PORT_O5")] = "O";
+            lut5->attrs[id("X_ORIG_PORT_O5")] = std::string("O");
 
             if (lut6) {
                 if (!lut6->ports.count(id_A6)) {
@@ -648,7 +648,7 @@ void Arch::fixupRouting()
                         lut6->ports[p].type = PORT_IN;
                     }
                     connect_port(getCtx(), orig_nets[new_connections.at(p).front()], lut6, p);
-                    lut6->attrs[id("X_ORIG_PORT_" + p.str(this))] = "";
+                    lut6->attrs[id("X_ORIG_PORT_" + p.str(this))] = std::string("");
                     auto &orig_attr = lut6->attrs[id("X_ORIG_PORT_" + p.str(this))].str;
                     bool first = true;
                     for (auto &nc : new_connections.at(p)) {
@@ -664,7 +664,7 @@ void Arch::fixupRouting()
                         lut5->ports[p].type = PORT_IN;
                     }
                     connect_port(getCtx(), orig_nets[new_connections.at(p).front()], lut5, p);
-                    lut5->attrs[id("X_ORIG_PORT_" + p.str(this))] = "";
+                    lut5->attrs[id("X_ORIG_PORT_" + p.str(this))] = std::string("");
                     auto &orig_attr = lut5->attrs[id("X_ORIG_PORT_" + p.str(this))].str;
                     bool first = true;
                     for (auto &nc : new_connections.at(p)) {
@@ -750,7 +750,7 @@ void Arch::fixupRouting()
         if (ci->type == id("OSERDESE3")) {
             if (get_net_or_empty(ci, id("T_OUT")) != nullptr)
                 continue;
-            ci->params[id("OSERDES_T_BYPASS")] = "TRUE";
+            ci->params[id("OSERDES_T_BYPASS")] = std::string("TRUE");
         }
     }
 }

@@ -52,7 +52,7 @@ void USPacker::flush_cells()
 void USPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci)
 {
     auto &rule = rules.at(ci->type);
-    ci->attrs[ctx->id("X_ORIG_TYPE")] = ci->type.c_str(ctx);
+    ci->attrs[ctx->id("X_ORIG_TYPE")] = ci->type.str(ctx);
     ci->type = rule.new_type;
     std::vector<IdString> orig_port_names;
     for (auto &port : ci->ports)
@@ -492,7 +492,7 @@ bool Arch::pack()
     packer.pack_ffs();
     packer.pack_lutffs();
     assignArchInfo();
-    attrs[id("step")] = "pack";
+    attrs[id("step")] = std::string("pack");
     archInfoToAttributes();
     return true;
 }

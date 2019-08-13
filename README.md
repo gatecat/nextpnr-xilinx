@@ -12,9 +12,12 @@ checking.
 ## Prerequisites
 
  - Follow the [RapidWright manual install instructions](https://www.rapidwright.io/docs/Manual_Install.html)
- 	- Make sure `$RAPIDWRIGHT_PATH` is set correctly for all further steps
+ - Make sure `$RAPIDWRIGHT_PATH` is set correctly for all further steps
  - Download a JAR of recent [GSON](https://repo1.maven.org/maven2/com/google/code/gson/gson/2.8.5/)
  - Use [this branch](https://github.com/daveshah1/yosys/tree/nextpnr_rw_usp) of Yosys
+
+A brief (academic) paper describing the Yosys+nextpnr flow can be found
+on [arXiv](https://arxiv.org/abs/1903.10407).
 
 ## Building
 
@@ -30,9 +33,6 @@ checking.
 
  - Run `./bbasm rapidwright/xczu2cg.bba rapidwright/xczu2cg.bin`
    - This converts the text database from above to a binary database that nextpnr can _mmap_
-
-## Running the flow
-
   - See [rapidwright/examples](rapidwright/examples) for example scripts that run the Yosys/nextpnr/RapidWright flow,
     then use Vivado to write a Verilog simulation netlist.
 

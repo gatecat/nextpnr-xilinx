@@ -36,7 +36,7 @@ class Ice40CommandHandler : public CommandHandler
   public:
     Ice40CommandHandler(int argc, char **argv);
     virtual ~Ice40CommandHandler(){};
-    std::unique_ptr<Context> createContext() override;
+    std::unique_ptr<Context> createContext(std::unordered_map<std::string, Property> &values) override;
     void setupArchContext(Context *ctx) override;
     void validate() override;
     void customAfterLoad(Context *ctx) override;
@@ -116,8 +116,10 @@ void Ice40CommandHandler::setupArchContext(Context *ctx)
     }
 }
 
-std::unique_ptr<Context> Ice40CommandHandler::createContext()
+std::unique_ptr<Context> Ice40CommandHandler::createContext(std::unordered_map<std::string, Property> &values)
 {
+    ArchArgs chipArgs;
+    chipArgs.type = ArchArgs::NONE;
     if (vm.count("lp384")) {
         chipArgs.type = ArchArgs::LP384;
         chipArgs.package = "qn32";
@@ -153,6 +155,52 @@ std::unique_ptr<Context> Ice40CommandHandler::createContext()
         chipArgs.package = "sg48";
     }
 
+    if (vm.count("package"))
+        chipArgs.package = vm["package"].as<std::string>();
+    else
+        log_warning("Use of default value for --package is deprecated. Please add '--package %s' to arguments.\n",
+                    chipArgs.package.c_str());
+
+    if (values.find("arch.name") != values.end()) {
+        std::string arch_name = values["arch.name"].as_string();
+        if (arch_name != "ice40")
+            log_error("Unsuported architecture '%s'.\n", arch_name.c_str());
+    }
+    if (values.find("arch.type") != values.end()) {
+        std::string arch_type = values["arch.type"].as_string();
+        if (chipArgs.type != ArchArgs::NONE)
+            log_error("Overriding architecture is unsuported.\n");
+
+        if (arch_type == "lp384") {
+            chipArgs.type = ArchArgs::LP384;
+        }
+        if (arch_type == "lp1k") {
+            chipArgs.type = ArchArgs::LP1K;
+        }
+        if (arch_type == "lp8k") {
+            chipArgs.type = ArchArgs::LP8K;
+        }
+        if (arch_type == "hx1k") {
+            chipArgs.type = ArchArgs::HX1K;
+        }
+        if (arch_type == "hx8k") {
+            chipArgs.type = ArchArgs::HX8K;
+        }
+        if (arch_type == "up5k") {
+            chipArgs.type = ArchArgs::UP5K;
+        }
+        if (arch_type == "u4k") {
+            chipArgs.type = ArchArgs::U4K;
+        }
+        if (chipArgs.type == ArchArgs::NONE)
+            log_error("Unsuported FPGA type '%s'.\n", arch_type.c_str());
+    }
+    if (values.find("arch.package") != values.end()) {
+        if (vm.count("package"))
+            log_error("Overriding architecture is unsuported.\n");
+        chipArgs.package = values["arch.package"].as_string();
+    }
+
     if (chipArgs.type == ArchArgs::NONE) {
         chipArgs.type = ArchArgs::HX1K;
         chipArgs.package = "tq144";
@@ -163,19 +211,19 @@ std::unique_ptr<Context> Ice40CommandHandler::createContext()
     }
 #endif
 
-    if (vm.count("package"))
-        chipArgs.package = vm["package"].as<std::string>();
-
     auto ctx = std::unique_ptr<Context>(new Context(chipArgs));
+    for (auto &val : values)
+        ctx->settings[ctx->id(val.first)] = val.second;
 
+    ctx->settings[ctx->id("arch.package")] = ctx->archArgs().package;
     if (vm.count("promote-logic"))
-        ctx->settings[ctx->id("promote_logic")] = "1";
+        ctx->settings[ctx->id("promote_logic")] = Property::State::S1;
     if (vm.count("no-promote-globals"))
-        ctx->settings[ctx->id("no_promote_globals")] = "1";
+        ctx->settings[ctx->id("no_promote_globals")] = Property::State::S1;
     if (vm.count("opt-timing"))
-        ctx->settings[ctx->id("opt_timing")] = "1";
+        ctx->settings[ctx->id("opt_timing")] = Property::State::S1;
     if (vm.count("pcf-allow-unconstrained"))
-        ctx->settings[ctx->id("pcf_allow_unconstrained")] = "1";
+        ctx->settings[ctx->id("pcf_allow_unconstrained")] = Property::State::S1;
     return ctx;
 }
 

@@ -134,12 +134,14 @@ inline int chtohex(char c)
     return hex.find(c);
 }
 
-std::vector<bool> parse_init_str(const std::string &str, int length)
+std::vector<bool> parse_init_str(const Property &p, int length, const char *cellname)
 {
     // Parse a string that may be binary or hex
     std::vector<bool> result;
     result.resize(length, false);
-    if (str.substr(0, 2) == "0x") {
+    if (p.is_string) {
+        std::string str = p.as_string();
+        NPNR_ASSERT(str.substr(0, 2) == "0x");
         // Lattice style hex string
         if (int(str.length()) > (2 + ((length + 3) / 4)))
             log_error("hex string value too long, expected up to %d chars and found %d.\n", (2 + ((length + 3) / 4)),
@@ -156,14 +158,8 @@ std::vector<bool> parse_init_str(const std::string &str, int length)
                 result.at(i * 4 + 3) = nibble & 0x8;
         }
     } else {
-        // Yosys style binary string
-        if (int(str.length()) > length)
-            log_error("hex string value too long, expected up to %d bits and found %d.\n", length, int(str.length()));
-        for (int i = 0; i < int(str.length()); i++) {
-            char c = str.at((str.size() - i) - 1);
-            NPNR_ASSERT(c == '0' || c == '1' || c == 'X' || c == 'x');
-            result.at(i) = (c == '1');
-        }
+        result = p.as_bits();
+        result.resize(length, false);
     }
     return result;
 }
@@ -497,45 +493,66 @@ static void set_pip(Context *ctx, ChipConfig &cc, PipId pip)
     cc.tiles[tile].add_arc(sink, source);
 }
 
-static std::vector<bool> parse_config_str(std::string str, int length)
+static std::vector<bool> parse_config_str(const Property &p, int length)
 {
-    // For DCU config which might be bin, hex or dec using prefices accordingly
-    std::string base = str.substr(0, 2);
     std::vector<bool> word;
-    word.resize(length, false);
-    if (base == "0b") {
-        for (int i = 0; i < int(str.length()) - 2; i++) {
-            char c = str.at((str.size() - 1) - i);
-            NPNR_ASSERT(c == '0' || c == '1');
-            word.at(i) = (c == '1');
+    if (p.is_string) {
+        std::string str = p.as_string();
+        // For DCU config which might be bin, hex or dec using prefices accordingly
+        std::string base = str.substr(0, 2);
+        word.resize(length, false);
+        if (base == "0b") {
+            for (int i = 0; i < int(str.length()) - 2; i++) {
+                char c = str.at((str.size() - 1) - i);
+                NPNR_ASSERT(c == '0' || c == '1');
+                word.at(i) = (c == '1');
+            }
+        } else if (base == "0x") {
+            for (int i = 0; i < int(str.length()) - 2; i++) {
+                char c = str.at((str.size() - i) - 1);
+                int nibble = chtohex(c);
+                word.at(i * 4) = nibble & 0x1;
+                if (i * 4 + 1 < length)
+                    word.at(i * 4 + 1) = nibble & 0x2;
+                if (i * 4 + 2 < length)
+                    word.at(i * 4 + 2) = nibble & 0x4;
+                if (i * 4 + 3 < length)
+                    word.at(i * 4 + 3) = nibble & 0x8;
+            }
+        } else if (base == "0d") {
+            NPNR_ASSERT(length < 64);
+            unsigned long long value = std::stoull(str.substr(2));
+            for (int i = 0; i < length; i++)
+                if (value & (1 << i))
+                    word.at(i) = true;
+        } else {
+            NPNR_ASSERT(length < 64);
+            unsigned long long value = std::stoull(str);
+            for (int i = 0; i < length; i++)
+                if (value & (1 << i))
+                    word.at(i) = true;
         }
-    } else if (base == "0x") {
-        for (int i = 0; i < int(str.length()) - 2; i++) {
-            char c = str.at((str.size() - i) - 1);
-            int nibble = chtohex(c);
-            word.at(i * 4) = nibble & 0x1;
-            if (i * 4 + 1 < length)
-                word.at(i * 4 + 1) = nibble & 0x2;
-            if (i * 4 + 2 < length)
-                word.at(i * 4 + 2) = nibble & 0x4;
-            if (i * 4 + 3 < length)
-                word.at(i * 4 + 3) = nibble & 0x8;
-        }
-    } else if (base == "0d") {
-        NPNR_ASSERT(length < 64);
-        unsigned long long value = std::stoull(str.substr(2));
-        for (int i = 0; i < length; i++)
-            if (value & (1 << i))
-                word.at(i) = true;
     } else {
-        NPNR_ASSERT(length < 64);
-        unsigned long long value = std::stoull(str);
-        for (int i = 0; i < length; i++)
-            if (value & (1 << i))
-                word.at(i) = true;
+        word = p.as_bits();
+        word.resize(length, 0);
     }
+
     return word;
 }
+
+std::string intstr_or_default(const std::unordered_map<IdString, Property> &ct, const IdString &key,
+                              std::string def = "0")
+{
+    auto found = ct.find(key);
+    if (found == ct.end())
+        return def;
+    else {
+        if (found->second.is_string)
+            return found->second.as_string();
+        else
+            return std::to_string(found->second.as_int64());
+    }
+};
 
 void write_bitstream(Context *ctx, std::string base_config_file, std::string text_config_file)
 {
@@ -734,8 +751,8 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             cc.tiles[tname].add_word(slice + ".K1.INIT", int_to_bitvector(lut1_init, 16));
             cc.tiles[tname].add_enum(slice + ".MODE", str_or_default(ci->params, ctx->id("MODE"), "LOGIC"));
             cc.tiles[tname].add_enum(slice + ".GSR", str_or_default(ci->params, ctx->id("GSR"), "ENABLED"));
-            cc.tiles[tname].add_enum(slice + ".REG0.SD", str_or_default(ci->params, ctx->id("REG0_SD"), "0"));
-            cc.tiles[tname].add_enum(slice + ".REG1.SD", str_or_default(ci->params, ctx->id("REG1_SD"), "0"));
+            cc.tiles[tname].add_enum(slice + ".REG0.SD", intstr_or_default(ci->params, ctx->id("REG0_SD"), "0"));
+            cc.tiles[tname].add_enum(slice + ".REG1.SD", intstr_or_default(ci->params, ctx->id("REG1_SD"), "0"));
             cc.tiles[tname].add_enum(slice + ".REG0.REGSET",
                                      str_or_default(ci->params, ctx->id("REG0_REGSET"), "RESET"));
             cc.tiles[tname].add_enum(slice + ".REG1.REGSET",
@@ -772,15 +789,13 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
 
             if (str_or_default(ci->params, ctx->id("MODE"), "LOGIC") == "CCU2") {
                 cc.tiles[tname].add_enum(slice + ".CCU2.INJECT1_0",
-                                         str_or_default(ci->params, ctx->id("INJECT1_0"), "YES"));
+                                         str_or_default(ci->params, ctx->id("CCU2_INJECT1_0"), "YES"));
                 cc.tiles[tname].add_enum(slice + ".CCU2.INJECT1_1",
-                                         str_or_default(ci->params, ctx->id("INJECT1_1"), "YES"));
+                                         str_or_default(ci->params, ctx->id("CCU2_INJECT1_1"), "YES"));
             } else {
                 // Don't interfere with cascade mux wiring
-                cc.tiles[tname].add_enum(slice + ".CCU2.INJECT1_0",
-                                         str_or_default(ci->params, ctx->id("INJECT1_0"), "_NONE_"));
-                cc.tiles[tname].add_enum(slice + ".CCU2.INJECT1_1",
-                                         str_or_default(ci->params, ctx->id("INJECT1_1"), "_NONE_"));
+                cc.tiles[tname].add_enum(slice + ".CCU2.INJECT1_0", "_NONE_");
+                cc.tiles[tname].add_enum(slice + ".CCU2.INJECT1_1", "_NONE_");
             }
 
             if (str_or_default(ci->params, ctx->id("MODE"), "LOGIC") == "DPRAM" && slice == "SLICEA") {
@@ -887,8 +902,10 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             auto csd_a = str_to_bitvector(str_or_default(ci->params, ctx->id("CSDECODE_A"), "0b000"), 3),
                  csd_b = str_to_bitvector(str_or_default(ci->params, ctx->id("CSDECODE_B"), "0b000"), 3);
 
-            tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_A", str_or_default(ci->params, ctx->id("DATA_WIDTH_A"), "18"));
-            tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_B", str_or_default(ci->params, ctx->id("DATA_WIDTH_B"), "18"));
+            tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_A",
+                               intstr_or_default(ci->params, ctx->id("DATA_WIDTH_A"), "18"));
+            tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_B",
+                               intstr_or_default(ci->params, ctx->id("DATA_WIDTH_B"), "18"));
 
             tg.config.add_enum(ebr + ".DP16KD.WRITEMODE_A",
                                str_or_default(ci->params, ctx->id("WRITEMODE_A"), "NORMAL"));
@@ -915,7 +932,7 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
                         // If MUX doesn't exist, set to INV to emulate default 0
                         tie_cib_signal(ctx, cc, ctx->getBelPinWire(ci->bel, port.first), true);
                         if (!ci->params.count(ctx->id(port.first.str(ctx) + "MUX")))
-                            ci->params[ctx->id(port.first.str(ctx) + "MUX")] = "INV";
+                            ci->params[ctx->id(port.first.str(ctx) + "MUX")] = std::string("INV");
                     } else if (port.first == id_CEA || port.first == id_CEB || port.first == id_OCEA ||
                                port.first == id_OCEB) {
                         // CIB CE. Tie to "1" in CIB
@@ -929,7 +946,7 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
                         // If MUX doesn't exist, set to INV to emulate default 0
                         tie_cib_signal(ctx, cc, ctx->getBelPinWire(ci->bel, port.first), true);
                         if (!ci->params.count(ctx->id(port.first.str(ctx) + "MUX")))
-                            ci->params[ctx->id(port.first.str(ctx) + "MUX")] = "INV";
+                            ci->params[ctx->id(port.first.str(ctx) + "MUX")] = std::string("INV");
                     } else {
                         // CIB ABCD signal
                         // Tie signals low unless explicit MUX param specified
@@ -970,7 +987,7 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             for (int i = 0; i <= 0x3F; i++) {
                 IdString param = ctx->id("INITVAL_" +
                                          fmt_str(std::hex << std::uppercase << std::setw(2) << std::setfill('0') << i));
-                auto value = parse_init_str(str_or_default(ci->params, param, "0"), 320);
+                auto value = parse_init_str(get_or_default(ci->params, param, Property(0)), 320, ci->name.c_str(ctx));
                 for (int j = 0; j < 16; j++) {
                     // INIT parameter consists of 16 18-bit words with 2-bit padding
                     int ofs = 20 * j;
@@ -1078,17 +1095,21 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             tg.config.add_enum(dsp + ".MASKPAT_SOURCE",
                                str_or_default(ci->params, ctx->id("MASKPAT_SOURCE"), "STATIC"));
             tg.config.add_word(dsp + ".MASK01",
-                               parse_init_str(str_or_default(ci->params, ctx->id("MASK01"), "0x00000000000000"), 56));
+                               parse_init_str(str_or_default(ci->params, ctx->id("MASK01"), "0x00000000000000"), 56,
+                                              ci->name.c_str(ctx)));
             tg.config.add_enum(dsp + ".CLK0_DIV", str_or_default(ci->params, ctx->id("CLK0_DIV"), "ENABLED"));
             tg.config.add_enum(dsp + ".CLK1_DIV", str_or_default(ci->params, ctx->id("CLK1_DIV"), "ENABLED"));
             tg.config.add_enum(dsp + ".CLK2_DIV", str_or_default(ci->params, ctx->id("CLK2_DIV"), "ENABLED"));
             tg.config.add_enum(dsp + ".CLK3_DIV", str_or_default(ci->params, ctx->id("CLK3_DIV"), "ENABLED"));
             tg.config.add_word(dsp + ".MCPAT",
-                               parse_init_str(str_or_default(ci->params, ctx->id("MCPAT"), "0x00000000000000"), 56));
+                               parse_init_str(str_or_default(ci->params, ctx->id("MCPAT"), "0x00000000000000"), 56,
+                                              ci->name.c_str(ctx)));
             tg.config.add_word(dsp + ".MASKPAT",
-                               parse_init_str(str_or_default(ci->params, ctx->id("MASKPAT"), "0x00000000000000"), 56));
+                               parse_init_str(str_or_default(ci->params, ctx->id("MASKPAT"), "0x00000000000000"), 56,
+                                              ci->name.c_str(ctx)));
             tg.config.add_word(dsp + ".RNDPAT",
-                               parse_init_str(str_or_default(ci->params, ctx->id("RNDPAT"), "0x00000000000000"), 56));
+                               parse_init_str(str_or_default(ci->params, ctx->id("RNDPAT"), "0x00000000000000"), 56,
+                                              ci->name.c_str(ctx)));
             tg.config.add_enum(dsp + ".GSR", str_or_default(ci->params, ctx->id("GSR"), "ENABLED"));
             tg.config.add_enum(dsp + ".RESETMODE", str_or_default(ci->params, ctx->id("RESETMODE"), "SYNC"));
             tg.config.add_enum(dsp + ".FORCE_ZERO_BARREL_SHIFT",
@@ -1215,9 +1236,9 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             for (auto &param : ci->params) {
                 if (param.first == ctx->id("DELAY.DEL_VALUE"))
                     cc.tiles[pic_tile].add_word(prim + "." + param.first.str(ctx),
-                                                int_to_bitvector(std::stoi(param.second), 7));
+                                                int_to_bitvector(param.second.as_int64(), 7));
                 else
-                    cc.tiles[pic_tile].add_enum(prim + "." + param.first.str(ctx), param.second);
+                    cc.tiles[pic_tile].add_enum(prim + "." + param.first.str(ctx), param.second.as_string());
             }
         } else if (ci->type == id_DCUA) {
             TileGroup tg;
@@ -1229,12 +1250,13 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
         } else if (ci->type == id_EXTREFB) {
             TileGroup tg;
             tg.tiles = get_dcu_tiles(ctx, ci->bel);
-            tg.config.add_word("EXTREF.REFCK_DCBIAS_EN",
-                               parse_config_str(str_or_default(ci->params, ctx->id("REFCK_DCBIAS_EN"), "0"), 1));
+            tg.config.add_word(
+                    "EXTREF.REFCK_DCBIAS_EN",
+                    parse_config_str(get_or_default(ci->params, ctx->id("REFCK_DCBIAS_EN"), Property(0)), 1));
             tg.config.add_word("EXTREF.REFCK_RTERM",
-                               parse_config_str(str_or_default(ci->params, ctx->id("REFCK_RTERM"), "0"), 1));
+                               parse_config_str(get_or_default(ci->params, ctx->id("REFCK_RTERM"), Property(0)), 1));
             tg.config.add_word("EXTREF.REFCK_PWDNB",
-                               parse_config_str(str_or_default(ci->params, ctx->id("REFCK_PWDNB"), "0"), 1));
+                               parse_config_str(get_or_default(ci->params, ctx->id("REFCK_PWDNB"), Property(0)), 1));
             cc.tilegroups.push_back(tg);
         } else if (ci->type == id_PCSCLKDIV) {
             Loc loc = ctx->getBelLocation(ci->bel);

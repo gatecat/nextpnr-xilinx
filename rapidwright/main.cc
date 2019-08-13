@@ -33,7 +33,7 @@ class UspCommandHandler : public CommandHandler
   public:
     UspCommandHandler(int argc, char **argv);
     virtual ~UspCommandHandler(){};
-    std::unique_ptr<Context> createContext() override;
+    std::unique_ptr<Context> createContext(std::unordered_map<std::string, Property> &values) override;
     void setupArchContext(Context *ctx) override{};
     void customBitstream(Context *ctx) override;
     void customAfterLoad(Context *ctx) override;
@@ -84,8 +84,9 @@ void UspCommandHandler::customBitstream(Context *ctx)
     }
 }
 
-std::unique_ptr<Context> UspCommandHandler::createContext()
+std::unique_ptr<Context> UspCommandHandler::createContext(std::unordered_map<std::string, Property> &values)
 {
+    ArchArgs chipArgs;
     chipArgs.chipdb = vm["chipdb"].as<std::string>();
     return std::unique_ptr<Context>(new Context(chipArgs));
 }

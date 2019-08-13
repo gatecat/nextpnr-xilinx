@@ -128,7 +128,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     auto pad_site = [&](NetInfo *n) {
         for (auto user : n->users)
             if (user.cell->type == ctx->id("PAD"))
-                return ctx->getBelSite(ctx->getBelByName(ctx->id(user.cell->attrs[ctx->id("BEL")])));
+                return ctx->getBelSite(ctx->getBelByName(ctx->id(user.cell->attrs[ctx->id("BEL")].as_string())));
         NPNR_ASSERT_FALSE(("can't find PAD for net " + n->name.str(ctx)).c_str());
     };
 
@@ -409,7 +409,7 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
                               ionet->driver.cell->name.c_str(ctx));
                 iobuf = ionet->driver;
             }
-        pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_obuf") ? "OUT" : "INOUT";
+        pad_cell->attrs[ctx->id("X_IO_DIR")] = std::string(npnr_io->type == ctx->id("$nextpnr_obuf") ? "OUT" : "INOUT");
     }
     if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
         ionet = get_net_or_empty(npnr_io, ctx->id("O"));
@@ -421,7 +421,7 @@ std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
                                   usr.cell->name.c_str(ctx));
                     iobuf = usr;
                 }
-        pad_cell->attrs[ctx->id("X_IO_DIR")] = npnr_io->type == ctx->id("$nextpnr_ibuf") ? "IN" : "INOUT";
+        pad_cell->attrs[ctx->id("X_IO_DIR")] = std::string(npnr_io->type == ctx->id("$nextpnr_ibuf") ? "IN" : "INOUT");
     }
 
     if (!iobuf.cell) {
@@ -475,16 +475,16 @@ void USPacker::pack_io()
         CellInfo *pad = iob.first;
         // Process location constraints
         if (pad->attrs.count(ctx->id("LOC"))) {
-            std::string loc = pad->attrs.at(ctx->id("LOC"));
+            std::string loc = pad->attrs.at(ctx->id("LOC")).as_string();
             std::string site = ctx->getPackagePinSite(loc);
             if (site.empty())
                 log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n", pad->name.c_str(ctx),
                           loc.c_str());
             log_info("    Constraining '%s' to site '%s'\n", pad->name.c_str(ctx), site.c_str());
-            pad->attrs[ctx->id("BEL")].setString(site + "/PAD");
+            pad->attrs[ctx->id("BEL")] = std::string(site + "/PAD");
         }
         if (pad->attrs.count(ctx->id("BEL"))) {
-            used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")))));
+            used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")).as_string())));
         } else {
             ++unconstr_io_count;
         }
@@ -506,7 +506,7 @@ void USPacker::pack_io()
     for (auto &iob : pad_and_buf) {
         CellInfo *pad = iob.first;
         if (!pad->attrs.count(ctx->id("BEL"))) {
-            pad->attrs[ctx->id("BEL")] = ctx->nameOfBel(available_io_bels.front());
+            pad->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(available_io_bels.front()));
             available_io_bels.pop();
         }
     }
@@ -579,7 +579,7 @@ void USPacker::prepare_iologic()
         // ODDRE1 must be transformed to an OSERDESE3
         if (ci->type == ctx->id("ODDRE1")) {
             ci->type = ctx->id("OSERDESE3");
-            ci->params[ctx->id("ODDR_MODE")] = "TRUE";
+            ci->params[ctx->id("ODDR_MODE")] = std::string("TRUE");
             rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
             rename_port(ctx, ci, ctx->id("SR"), ctx->id("RST"));
             rename_port(ctx, ci, ctx->id("D1"), ctx->id("D[0]"));
@@ -629,7 +629,7 @@ void USPacker::pack_iologic()
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
             if (drv->type == ctx->id("IOB_IBUFCTRL"))
-                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL"))));
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
                           ctx->nameOf(ci), drv->type.c_str(ctx));
@@ -650,7 +650,7 @@ void USPacker::pack_iologic()
                 // log_info("%s %s %s.%s [%s]\n", ctx->nameOf(ci), ctx->nameOf(q), ctx->nameOf(usr.cell),
                 // usr.port.c_str(ctx), usr.cell->type.c_str(ctx));
                 if (usr.cell->type == ctx->id("IOB_OUTBUF")) {
-                    io_bel = ctx->getBelByName(ctx->id(usr.cell->attrs.at(ctx->id("BEL"))));
+                    io_bel = ctx->getBelByName(ctx->id(usr.cell->attrs.at(ctx->id("BEL")).as_string()));
                     break;
                 }
             }
@@ -677,7 +677,7 @@ void USPacker::pack_iologic()
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
             if (drv->type == ctx->id("IOB_IBUFCTRL"))
-                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL"))));
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
             else if (drv->type == ctx->id("IDELAYE3") && d->driver.port == ctx->id("DATAOUT"))
                 io_bel = iodelay_to_io.at(drv->name);
             else
@@ -704,7 +704,7 @@ void USPacker::pack_iologic()
                 log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             BelId io_bel;
             if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("IOB_OUTBUF"))
-                io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL"))));
+                io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL")).as_string()));
             else if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE3") &&
                      q->users.at(0).port == ctx->id("ODATAIN"))
                 io_bel = iodelay_to_io.at(q->users.at(0).cell->name);
@@ -719,7 +719,7 @@ void USPacker::pack_iologic()
                     // to HPIO locations
                     disconnect_port(ctx, ci, ctx->id("RST"));
                     connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, ctx->id("RST"));
-                    ci->params[ctx->id("IS_RST_INVERTED")] = "1";
+                    ci->params[ctx->id("IS_RST_INVERTED")] = 1;
                 }
 
                 xform_cell(hp_iol_rules, ci);
@@ -758,7 +758,7 @@ void USPacker::pack_idelayctrl()
         if (ci->type == ctx->id("IDELAYE3") || ci->type == ctx->id("ODELAYE3")) {
             if (!ci->attrs.count(ctx->id("BEL")))
                 continue;
-            ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(ctx->id("BEL"))));
+            ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(ctx->id("BEL")).as_string()));
         }
     }
     if (ioctrl_sites.empty())
