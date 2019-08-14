@@ -54,14 +54,17 @@ struct USPacker
         std::vector<NetInfo *> wa;
         NetInfo *wclk, *we;
         bool wclk_inv;
+        IdString memtype;
 
         bool operator==(const DRAMControlSet &other) const
         {
-            return wa == other.wa && wclk == other.wclk && we == other.we && wclk_inv == other.wclk_inv;
+            return wa == other.wa && wclk == other.wclk && we == other.we && wclk_inv == other.wclk_inv &&
+                   memtype == other.memtype;
         }
         bool operator!=(const DRAMControlSet &other) const
         {
-            return wa != other.wa && wclk != other.wclk && we != other.we && wclk_inv != other.wclk_inv;
+            return wa != other.wa || wclk != other.wclk || we != other.we || wclk_inv != other.wclk_inv ||
+                   memtype != other.memtype;
         }
     };
 
@@ -76,6 +79,7 @@ struct USPacker
             boost::hash_combine(seed, std::hash<IdString>()(dcs.wclk == nullptr ? IdString() : dcs.wclk->name));
             boost::hash_combine(seed, std::hash<IdString>()(dcs.we == nullptr ? IdString() : dcs.we->name));
             boost::hash_combine(seed, std::hash<bool>()(dcs.wclk_inv));
+            boost::hash_combine(seed, std::hash<IdString>()(dcs.memtype));
             return seed;
         }
     };

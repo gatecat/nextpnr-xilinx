@@ -153,63 +153,126 @@ void USPacker::pack_dram()
         dcs.wclk = get_net_or_empty(ci, ctx->id("WCLK"));
         dcs.we = get_net_or_empty(ci, ctx->id("WE"));
         dcs.wclk_inv = bool_or_default(ci->params, ctx->id("IS_WCLK_INVERTED"));
+        dcs.memtype = ci->type;
         dram_groups[dcs].push_back(ci);
     }
 
     for (auto &group : dram_groups) {
-        int z = 7;
-        CellInfo *base = nullptr;
         auto &cs = group.first;
-        for (auto cell : group.second) {
-            NPNR_ASSERT(cell->type == ctx->id("RAM64X1D")); // FIXME
+        if (cs.memtype == ctx->id("RAM64X1D")) {
+            int z = 7;
+            CellInfo *base = nullptr;
+            for (auto cell : group.second) {
+                NPNR_ASSERT(cell->type == ctx->id("RAM64X1D")); // FIXME
 
-            int z_size = 0;
-            if (get_net_or_empty(cell, ctx->id("SPO")) != nullptr)
-                z_size++;
-            if (get_net_or_empty(cell, ctx->id("DPO")) != nullptr)
-                z_size++;
+                int z_size = 0;
+                if (get_net_or_empty(cell, ctx->id("SPO")) != nullptr)
+                    z_size++;
+                if (get_net_or_empty(cell, ctx->id("DPO")) != nullptr)
+                    z_size++;
 
-            if (z == 7 || (z - z_size + 1) < 0) {
-                z = 7;
-                // Topmost cell is the write address input
-                std::vector<NetInfo *> address(cs.wa.begin(), cs.wa.begin() + std::min<size_t>(cs.wa.size(), 6));
-                base = create_dram_lut(cell->name.str(ctx) + "/ADDR", nullptr, cs, address, nullptr, nullptr, z);
-                z--;
-            }
-
-            NetInfo *dpo = get_net_or_empty(cell, ctx->id("DPO"));
-            NetInfo *spo = get_net_or_empty(cell, ctx->id("SPO"));
-            disconnect_port(ctx, cell, ctx->id("DPO"));
-            disconnect_port(ctx, cell, ctx->id("SPO"));
-
-            NetInfo *di = get_net_or_empty(cell, ctx->id("D"));
-            if (spo != nullptr) {
-                if (z == 6) {
-                    // Can fold DPO into address buffer
-                    connect_port(ctx, spo, base, ctx->id("O"));
-                    connect_port(ctx, di, base, ctx->id("I"));
-                    if (cell->params.count(ctx->id("INIT")))
-                        base->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
-                } else {
+                if (z == 7 || (z - z_size + 1) < 0) {
+                    z = 7;
+                    // Topmost cell is the write address input
                     std::vector<NetInfo *> address(cs.wa.begin(), cs.wa.begin() + std::min<size_t>(cs.wa.size(), 6));
-                    CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/SP", base, cs, address, di, spo, z);
+                    base = create_dram_lut(cell->name.str(ctx) + "/ADDR", nullptr, cs, address, nullptr, nullptr, z);
+                    z--;
+                }
+
+                NetInfo *dpo = get_net_or_empty(cell, ctx->id("DPO"));
+                NetInfo *spo = get_net_or_empty(cell, ctx->id("SPO"));
+                disconnect_port(ctx, cell, ctx->id("DPO"));
+                disconnect_port(ctx, cell, ctx->id("SPO"));
+
+                NetInfo *di = get_net_or_empty(cell, ctx->id("D"));
+                if (spo != nullptr) {
+                    if (z == 6) {
+                        // Can fold DPO into address buffer
+                        connect_port(ctx, spo, base, ctx->id("O"));
+                        connect_port(ctx, di, base, ctx->id("I"));
+                        if (cell->params.count(ctx->id("INIT")))
+                            base->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
+                    } else {
+                        std::vector<NetInfo *> address(cs.wa.begin(),
+                                                       cs.wa.begin() + std::min<size_t>(cs.wa.size(), 6));
+                        CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/SP", base, cs, address, di, spo, z);
+                        if (cell->params.count(ctx->id("INIT")))
+                            dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
+                        z--;
+                    }
+                }
+
+                if (dpo != nullptr) {
+                    std::vector<NetInfo *> address;
+                    for (int i = 0; i < 6; i++)
+                        address.push_back(get_net_or_empty(cell, ctx->id("DPRA" + std::to_string(i))));
+                    CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/DP", base, cs, address, di, dpo, z);
                     if (cell->params.count(ctx->id("INIT")))
                         dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
                     z--;
                 }
-            }
 
-            if (dpo != nullptr) {
-                std::vector<NetInfo *> address;
-                for (int i = 0; i < 6; i++)
-                    address.push_back(get_net_or_empty(cell, ctx->id("DPRA" + std::to_string(i))));
-                CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/DP", base, cs, address, di, dpo, z);
-                if (cell->params.count(ctx->id("INIT")))
-                    dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
-                z--;
+                packed_cells.insert(cell->name);
             }
+        } else if (cs.memtype == ctx->id("RAM32X1D")) {
+            int z = 7;
+            CellInfo *base = nullptr;
+            for (auto cell : group.second) {
+                NPNR_ASSERT(cell->type == ctx->id("RAM32X1D"));
 
-            packed_cells.insert(cell->name);
+                int z_size = 0;
+                if (get_net_or_empty(cell, ctx->id("SPO")) != nullptr)
+                    z_size++;
+                if (get_net_or_empty(cell, ctx->id("DPO")) != nullptr)
+                    z_size++;
+
+                if (z == 7 || (z - z_size + 1) < 0) {
+                    z = 7;
+                    // Topmost cell is the write address input
+                    std::vector<NetInfo *> address(cs.wa.begin(), cs.wa.begin() + std::min<size_t>(cs.wa.size(), 5));
+                    address.push_back(ctx->nets[ctx->id("$PACKER_GND_NET")].get());
+                    base = create_dram_lut(cell->name.str(ctx) + "/ADDR", nullptr, cs, address, nullptr, nullptr, z);
+                    z--;
+                }
+
+                NetInfo *dpo = get_net_or_empty(cell, ctx->id("DPO"));
+                NetInfo *spo = get_net_or_empty(cell, ctx->id("SPO"));
+                disconnect_port(ctx, cell, ctx->id("DPO"));
+                disconnect_port(ctx, cell, ctx->id("SPO"));
+
+                NetInfo *di = get_net_or_empty(cell, ctx->id("D"));
+                if (spo != nullptr) {
+                    if (z == 5) {
+                        // Can fold DPO into address buffer
+                        connect_port(ctx, spo, base, ctx->id("O"));
+                        connect_port(ctx, di, base, ctx->id("I"));
+                        if (cell->params.count(ctx->id("INIT")))
+                            base->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
+                    } else {
+                        std::vector<NetInfo *> address(cs.wa.begin(),
+                                                       cs.wa.begin() + std::min<size_t>(cs.wa.size(), 5));
+                        address.push_back(ctx->nets[ctx->id("$PACKER_GND_NET")].get());
+                        CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/SP", base, cs, address, di, spo, z);
+                        if (cell->params.count(ctx->id("INIT")))
+                            dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
+                        z--;
+                    }
+                }
+
+                if (dpo != nullptr) {
+                    std::vector<NetInfo *> address;
+                    for (int i = 0; i < 5; i++)
+                        address.push_back(get_net_or_empty(cell, ctx->id("DPRA" + std::to_string(i))));
+                    address.push_back(ctx->nets[ctx->id("$PACKER_GND_NET")].get());
+                    CellInfo *dpr = create_dram_lut(cell->name.str(ctx) + "/DP", base, cs, address, di, dpo, z);
+                    if (cell->params.count(ctx->id("INIT")))
+                        dpr->params[ctx->id("INIT")] = cell->params[ctx->id("INIT")];
+                    z--;
+                }
+
+                packed_cells.insert(cell->name);
+            }
+        } else if (cs.memtype == ctx->id("RAM128X1D")) {
         }
     }
 
