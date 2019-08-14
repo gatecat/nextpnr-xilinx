@@ -33,7 +33,7 @@
 NEXTPNR_NAMESPACE_BEGIN
 
 // Process the contents of packed_cells and new_cells
-void USPacker::flush_cells()
+void XilinxPacker::flush_cells()
 {
     for (auto pcell : packed_cells) {
         for (auto &port : ctx->cells[pcell]->ports) {
@@ -49,7 +49,7 @@ void USPacker::flush_cells()
     new_cells.clear();
 }
 
-void USPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci)
+void XilinxPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci)
 {
     auto &rule = rules.at(ci->type);
     ci->attrs[ctx->id("X_ORIG_TYPE")] = ci->type.str(ctx);
@@ -101,7 +101,7 @@ void USPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rules, 
         ci->params[param.first] = param.second;
 }
 
-void USPacker::generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary)
+void XilinxPacker::generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary)
 {
     std::map<std::string, int> cell_count;
     std::map<std::string, int> new_types;
@@ -125,7 +125,7 @@ void USPacker::generic_xform(const std::unordered_map<IdString, XFormRule> &rule
     }
 }
 
-std::unique_ptr<CellInfo> USPacker::feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users)
+std::unique_ptr<CellInfo> XilinxPacker::feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users)
 {
     std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
     feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
@@ -142,12 +142,12 @@ std::unique_ptr<CellInfo> USPacker::feed_through_lut(NetInfo *net, const std::ve
     return lut;
 }
 
-IdString USPacker::int_name(IdString base, const std::string &postfix, bool is_hierarchy)
+IdString XilinxPacker::int_name(IdString base, const std::string &postfix, bool is_hierarchy)
 {
     return ctx->id(base.str(ctx) + (is_hierarchy ? "$subcell$" : "$intcell$") + postfix);
 }
 
-NetInfo *USPacker::create_internal_net(IdString base, const std::string &postfix, bool is_hierarchy)
+NetInfo *XilinxPacker::create_internal_net(IdString base, const std::string &postfix, bool is_hierarchy)
 {
     std::unique_ptr<NetInfo> net{new NetInfo};
     IdString name = ctx->id(base.str(ctx) + (is_hierarchy ? "$subnet$" : "$intnet$") + postfix);
@@ -157,7 +157,7 @@ NetInfo *USPacker::create_internal_net(IdString base, const std::string &postfix
     return ctx->nets.at(name).get();
 }
 
-void USPacker::pack_luts()
+void XilinxPacker::pack_luts()
 {
     log_info("Packing LUTs..\n");
 
@@ -173,7 +173,7 @@ void USPacker::pack_luts()
     generic_xform(lut_rules, true);
 }
 
-void USPacker::pack_ffs()
+void XilinxPacker::pack_ffs()
 {
     log_info("Packing flipflops..\n");
 
@@ -201,7 +201,7 @@ void USPacker::pack_ffs()
     generic_xform(ff_rules, true);
 }
 
-void USPacker::pack_lutffs()
+void XilinxPacker::pack_lutffs()
 {
     int pairs = 0;
     for (auto cell : sorted(ctx->cells)) {
@@ -226,7 +226,7 @@ void USPacker::pack_lutffs()
     log_info("Constrained %d LUTFF pairs.\n", pairs);
 }
 
-void USPacker::pack_constants()
+void XilinxPacker::pack_constants()
 {
     log_info("Packing constants..\n");
     if (tied_pins.empty())
@@ -332,7 +332,7 @@ void USPacker::pack_constants()
     }
 }
 
-void USPacker::rename_net(IdString old, IdString newname)
+void XilinxPacker::rename_net(IdString old, IdString newname)
 {
     std::unique_ptr<NetInfo> ni;
     std::swap(ni, ctx->nets[old]);

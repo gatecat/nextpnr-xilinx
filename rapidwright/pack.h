@@ -31,7 +31,7 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-struct USPacker
+struct XilinxPacker
 {
     Context *ctx;
 
@@ -127,12 +127,25 @@ struct USPacker
     std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
     void pack_constants();
 
+    // IO
+    NetInfo *invert_net(NetInfo *toinv);
+
+    // Clocking
+    std::unordered_set<BelId> used_bels;
+    BelId find_bel_with_short_route(WireId source, IdString beltype, IdString belpin);
+    void try_preplace(CellInfo *cell, IdString port);
+    void preplace_unique(CellInfo *cell);
+
+    int autoidx = 0;
+};
+
+struct USPacker : public XilinxPacker
+{
     // Carries
     bool has_illegal_fanout(NetInfo *carry);
     void pack_carries();
 
     // IO
-    NetInfo *invert_net(NetInfo *toinv);
     CellInfo *insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o);
     CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o);
     CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr);
@@ -156,10 +169,6 @@ struct USPacker
     void pack_idelayctrl();
 
     // Clocking
-    std::unordered_set<BelId> used_bels;
-    BelId find_bel_with_short_route(WireId source, IdString beltype, IdString belpin);
-    void try_preplace(CellInfo *cell, IdString port);
-    void preplace_unique(CellInfo *cell);
     void prepare_clocking();
     void pack_plls();
     void pack_gbs();
@@ -167,8 +176,35 @@ struct USPacker
 
     // BRAM
     void pack_bram();
+};
 
-    int autoidx = 0;
+struct XC7Packer : public XilinxPacker
+{
+    // IO
+    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
+    std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io);
+    CellInfo *create_iobuf(CellInfo *npnr_io, IdString &top_port);
+    void decompose_iob(CellInfo *xil_iob, const std::string &iostandard);
+    void pack_io();
+
+    // IOLOGIC
+    std::unordered_map<IdString, XFormRule> hp_iol_rules, hd_iol_rules, ioctrl_rules;
+    std::string get_iol_site(const std::string &io_bel);
+    std::string get_ioctrl_site(const std::string &iol_bel);
+    // Call before packing constants
+    void prepare_iologic();
+
+    void pack_iologic();
+    void pack_idelayctrl();
+
+    // Clocking
+    void prepare_clocking();
+    void pack_plls();
+    void pack_gbs();
+    void pack_clocking();
+
+    // BRAM
+    void pack_bram();
 };
 
 NEXTPNR_NAMESPACE_END

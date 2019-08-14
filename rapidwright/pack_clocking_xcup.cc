@@ -32,7 +32,7 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-BelId USPacker::find_bel_with_short_route(WireId source, IdString beltype, IdString belpin)
+BelId XilinxPacker::find_bel_with_short_route(WireId source, IdString beltype, IdString belpin)
 {
     if (source == WireId())
         return BelId();
@@ -57,7 +57,7 @@ BelId USPacker::find_bel_with_short_route(WireId source, IdString beltype, IdStr
     return BelId();
 }
 
-void USPacker::try_preplace(CellInfo *cell, IdString port)
+void XilinxPacker::try_preplace(CellInfo *cell, IdString port)
 {
     if (cell->attrs.count(ctx->id("BEL")))
         return;
@@ -82,7 +82,7 @@ void USPacker::try_preplace(CellInfo *cell, IdString port)
     }
 }
 
-void USPacker::preplace_unique(CellInfo *cell)
+void XilinxPacker::preplace_unique(CellInfo *cell)
 {
     if (cell->attrs.count(ctx->id("BEL")))
         return;

@@ -84,7 +84,7 @@ CellInfo *USPacker::insert_outinv(IdString name, NetInfo *i, NetInfo *o)
     return inv_ptr;
 }
 
-NetInfo *USPacker::invert_net(NetInfo *toinv)
+NetInfo *XilinxPacker::invert_net(NetInfo *toinv)
 {
     if (toinv == nullptr)
         return nullptr;

@@ -32,8 +32,8 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-CellInfo *USPacker::create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
-                                    std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, int z)
+CellInfo *XilinxPacker::create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
+                                        std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, int z)
 {
     std::unique_ptr<CellInfo> dram_lut = create_cell(ctx, ctx->id("RAMD64E"), ctx->id(name));
     for (int i = 0; i < int(address.size()); i++)
@@ -63,7 +63,7 @@ CellInfo *USPacker::create_dram_lut(const std::string &name, CellInfo *base, con
     return dl;
 }
 
-void USPacker::pack_dram()
+void XilinxPacker::pack_dram()
 {
 
     log_info("Packing DRAM..\n");
