@@ -200,13 +200,19 @@ public class bbaexport {
             return np;
         }
 
-        private NextpnrPip addSiteIOPIP(Device d, Site s, BELPin bp) {
+        private NextpnrPip addSiteIOPIP(Device d, Site s, SiteInst si, BELPin bp) {
             NextpnrPip np;
             String sitePinName = bp.getConnectedSitePinName();
-            if (bp.isOutput() || bp.isBidir())
-                np = new NextpnrPip(pips.size(), siteWireToWire(s, bp.getSiteWireName()), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePinName)),
+            if (bp.isOutput() || bp.isBidir()) {
+                if (si.getSiteTypeEnum() == SiteTypeEnum.IPAD && sitePinName.equals("O"))
+                    return null;
+                String sitePin = si.getPrimarySitePinName(sitePinName);
+                if (s.getSiteTypeEnum() == si.getSiteTypeEnum())
+                    sitePin = sitePinName;
+                //System.out.println(s.getName() + " " + sitePinName + " " + si.getPrimarySitePinName(sitePinName) + " " + sitePin + " " + si.getSiteTypeEnum() + " " + s.getTileWireNameFromPinName(sitePin));
+                np = new NextpnrPip(pips.size(), siteWireToWire(s, bp.getSiteWireName()), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)),
                         0, NextpnrPipType.SITE_EXIT);
-            else {
+            } else {
                 if (((s.getSiteTypeEnum() == SiteTypeEnum.SLICEL || s.getSiteTypeEnum() == SiteTypeEnum.SLICEM))) {
                     // Permutation pseudo-pips for LUT pins
 
@@ -241,7 +247,11 @@ public class bbaexport {
                     }
 
                 }
-                np = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePinName)), siteWireToWire(s, bp.getSiteWireName()),
+                String sitePin = si.getPrimarySitePinName(sitePinName);
+                if (s.getSiteTypeEnum() == si.getSiteTypeEnum())
+                    sitePin = sitePinName;
+                //System.out.println(s.getName() + " " + sitePinName + " " + si.getPrimarySitePinName(sitePinName) + " " + sitePin + " " + si.getSiteTypeEnum() + " " + s.getTileWireNameFromPinName(sitePin));
+                np = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)), siteWireToWire(s, bp.getSiteWireName()),
                         0, NextpnrPipType.SITE_ENTRANCE);
 
             }
@@ -323,8 +333,10 @@ public class bbaexport {
                         addBel(si, variant, b);
                         for (BELPin bp : b.getPins()) {
                             String sitePin = bp.getConnectedSitePinName();
-                            if (sitePin != null)
+                            if (sitePin != null && !sitePins.contains(bp)) {
                                 sitePins.add(bp);
+                                addSiteIOPIP(d, s, si, bp);
+                            }
                             sitePips.addAll(bp.getSitePIPs());
                         }
 
@@ -334,10 +346,6 @@ public class bbaexport {
 
                     si.unPlace();
                 }
-
-
-                for (BELPin bp : sitePins)
-                    addSiteIOPIP(d, s, bp);
             }
             TileTypeEnum tt = t.getTileTypeEnum();
             boolean isLogic = (tt == TileTypeEnum.CLEM || tt == TileTypeEnum.CLEM_R || tt == TileTypeEnum.CLEL_L || tt == TileTypeEnum.CLEL_R);

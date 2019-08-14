@@ -72,6 +72,12 @@ Arch::Arch(ArchArgs args) : args(args)
         IdString::initialize_add(this, chip_info->extra_constids->bba_ids[i].get(),
                                  i + chip_info->extra_constids->known_id_count);
     }
+
+    if (std::string(chip_info->name.get()).find("xc7") == 0)
+        xc7 = true;
+    else
+        xc7 = false;
+
     tileStatus.resize(chip_info->num_tiles);
     for (int i = 0; i < chip_info->num_tiles; i++) {
         tileStatus[i].boundcells.resize(chip_info->tile_types[chip_info->tile_insts[i].type].num_bels);
@@ -613,7 +619,9 @@ void Arch::routeClock()
                     int intent = wireIntent(src);
                     if (intent == ID_NODE_DOUBLE || intent == ID_NODE_HLONG || intent == ID_NODE_HQUAD ||
                         intent == ID_NODE_VLONG || intent == ID_NODE_VQUAD || intent == ID_NODE_SINGLE ||
-                        intent == ID_NODE_CLE_OUTPUT || intent == ID_NODE_OPTDELAY)
+                        intent == ID_NODE_CLE_OUTPUT || intent == ID_NODE_OPTDELAY || intent == ID_BENTQUAD ||
+                        intent == ID_DOUBLE || intent == ID_HLONG || intent == ID_HQUAD || intent == ID_OPTDELAY ||
+                        intent == ID_SINGLE || intent == ID_VLONG || intent == ID_VLONG12 || intent == ID_VQUAD)
                         continue;
                     if (!checkWireAvail(src) && getBoundWireNet(src) != ni)
                         continue;

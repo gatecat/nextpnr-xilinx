@@ -82,20 +82,21 @@ NPNR_PACKED_STRUCT(struct BelWirePOD {
 // MSnibble of Z: index in CLB (A-H)
 enum LogicBelTypeZ
 {
-    BEL_6LUT = 0,
-    BEL_5LUT,
-    BEL_FF,
-    BEL_FF2,
-    BEL_FFMUX1,
-    BEL_FFMUX2,
-    BEL_OUTMUX,
-    BEL_F7MUX,
-    BEL_F8MUX,
-    BEL_F9MUX,
-    BEL_CARRY8,
-    BEL_CLKINV,
-    BEL_RSTINV,
-    BEL_HARD0
+    BEL_6LUT = 0x0,
+    BEL_5LUT = 0x1,
+    BEL_FF = 0x2,
+    BEL_FF2 = 0x3,
+    BEL_FFMUX1 = 0x4,
+    BEL_FFMUX2 = 0x5,
+    BEL_OUTMUX = 0x6,
+    BEL_F7MUX = 0x7,
+    BEL_F8MUX = 0x8,
+    BEL_F9MUX = 0x9,
+    BEL_CARRY8 = 0xA,
+    BEL_CLKINV = 0xB,
+    BEL_RSTINV = 0xC,
+    BEL_HARD0 = 0xD,
+    BEL_CARRY4 = 0xF
 };
 
 enum BRAMBelTypeZ
@@ -714,7 +715,8 @@ struct Arch : BaseCtx
         IdString type = getBelType(bel);
         if (type != id_RAMBFIFO18E2_RAMBFIFO18E2 && type != id_RAMBFIFO36E2_RAMBFIFO36E2 &&
             type != id_RAMB18E2_RAMB18E2 && type != id_FIFO18E2_FIFO18E2 && type != id_RAMB36E2_RAMB36E2 &&
-            type != id_FIFO36E2_FIFO36E2)
+            type != id_FIFO36E2_FIFO36E2 && type != id_RAMBFIFO36E1_RAMBFIFO36E1 && type != id_RAMB36E1_RAMB36E1 &&
+            type != id_RAMB18E1_RAMB18E1)
             return;
         auto &tts = tileStatus[bel.tile];
         if (tts.bts == nullptr)
@@ -1393,12 +1395,13 @@ struct Arch : BaseCtx
     {
         IdString belTileType = getBelTileType(bel);
         return (belTileType == id_CLEL_L || belTileType == id_CLEL_R || belTileType == id_CLEM ||
-                belTileType == id_CLEM_R);
+                belTileType == id_CLEM_R || belTileType == id_CLBLL_L || belTileType == id_CLBLL_R ||
+                belTileType == id_CLBLM_L || belTileType == id_CLBLM_R);
     }
     bool isBRAMTile(BelId bel) const
     {
         IdString belTileType = getBelTileType(bel);
-        return belTileType == id_BRAM;
+        return belTileType == id_BRAM || belTileType == id_BRAM_L || belTileType == id_BRAM_R;
     }
     bool isLogicTile(WireId wire) const
     {
@@ -1406,7 +1409,8 @@ struct Arch : BaseCtx
             return false;
         IdString wireTileType = chip_info->tile_insts[wire.tile].type;
         return (wireTileType == id_CLEL_L || wireTileType == id_CLEL_R || wireTileType == id_CLEM ||
-                wireTileType == id_CLEM_R);
+                wireTileType == id_CLEM_R || wireTileType == id_CLBLL_L || wireTileType == id_CLBLL_R ||
+                wireTileType == id_CLBLM_L || wireTileType == id_CLBLM_R);
     }
     // -------------------------------------------------
     // Assign architecure-specific arguments to nets and cells, which must be
