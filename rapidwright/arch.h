@@ -1387,6 +1387,9 @@ struct Arch : BaseCtx
     // Return true whether all Bels at a given location are valid
     bool isBelLocationValid(BelId bel) const;
 
+    bool xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const;
+    bool xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const;
+
     // Helper function for above
     bool logicCellsCompatible(const CellInfo **it, const size_t size) const;
 

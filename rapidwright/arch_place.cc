@@ -41,6 +41,469 @@ inline NetInfo *port_or_nullptr(const CellInfo *cell, IdString name)
 #define DBG()
 #endif
 
+bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
+{
+    bool is_slicem = (tileType == id_CLEM) || (tileType == id_CLEM_R);
+    bool tile_is_memory = false;
+    if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
+        tile_is_memory = true;
+    // Check eight-tiles (mostly LUT-related validity)
+    for (int i = 0; i < 8; i++) {
+        if (lts.eights[i].dirty) {
+            lts.eights[i].dirty = false;
+            lts.eights[i].valid = false;
+
+            CellInfo *lut6 = lts.cells[(i << 4) | BEL_6LUT];
+            CellInfo *lut5 = lts.cells[(i << 4) | BEL_5LUT];
+
+            // Check 6LUT
+            if (lut6 != nullptr) {
+                if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
+                    return false; // Memory and SRLs only valid in SLICEMs
+                if (lut5 != nullptr) {
+                    // Can't mix memory and non-memory
+                    if (lut6->lutInfo.is_memory != lut5->lutInfo.is_memory ||
+                        lut6->lutInfo.is_srl != lut5->lutInfo.is_srl)
+                        return false;
+                    // If all 6 inputs or 2 outputs are used, 5LUT can't also be present
+                    if (lut6->lutInfo.input_count == 6 || lut6->lutInfo.output_count == 2)
+                        return false;
+                    // If more than 5 total inputs are used, need to check number of shared input
+                    if ((lut6->lutInfo.input_count + lut5->lutInfo.input_count) > 5) {
+                        int shared = 0, need_shared = (lut6->lutInfo.input_count + lut5->lutInfo.input_count - 5);
+                        for (int j = 0; j < lut6->lutInfo.input_count; j++) {
+                            for (int k = 0; k < lut5->lutInfo.input_count; k++) {
+                                if (lut6->lutInfo.input_sigs[j] == lut5->lutInfo.input_sigs[k])
+                                    shared++;
+                                if (shared >= need_shared)
+                                    break;
+                            }
+                        }
+                        if (shared < need_shared) {
+                            DBG();
+                            return false;
+                        }
+                    }
+                }
+            }
+            if (lut5 != nullptr) {
+                if (!is_slicem && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl)) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+                // 5LUT can use at most 5 inputs and 1 output
+                if (lut5->lutInfo.input_count > 5 || lut5->lutInfo.output_count == 2) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+            }
+
+            // Check (over)usage of DI and X inputs
+            NetInfo *i_net = nullptr, *x_net = nullptr;
+            if (lut6 != nullptr) {
+                i_net = lut6->lutInfo.di1_net;
+                x_net = lut6->lutInfo.di2_net;
+            }
+            if (lut5 != nullptr) {
+                if (lut5->lutInfo.di1_net != nullptr) {
+                    if (i_net == nullptr)
+                        i_net = lut5->lutInfo.di1_net;
+                    else if (i_net != lut5->lutInfo.di1_net) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
+                }
+                // DI2 not available for 5LUT
+                if (lut5->lutInfo.di2_net != nullptr) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+            }
+
+            CellInfo *mux = nullptr;
+            // Eights A, C, E, G: F7MUX uses X input
+            if (i == 0 || i == 2 || i == 4 || i == 6)
+                mux = lts.cells[i << 4 | BEL_F7MUX];
+            // Eights B, F: F8MUX uses X input
+            if (i == 1 || i == 5)
+                mux = lts.cells[(i - 1) << 4 | BEL_F8MUX];
+            // Eights D: F9MUX uses X input
+            if (i == 3)
+                mux = lts.cells[BEL_F9MUX];
+
+            if (mux != nullptr) {
+                if (x_net == nullptr)
+                    x_net = mux->muxInfo.sel;
+                else if (x_net != mux->muxInfo.sel) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+            }
+
+            CellInfo *out_fmux = nullptr;
+            // Eights B, D, F, H: F7MUX connects to F7F8 out
+            if (i == 1 || i == 3 || i == 5 || i == 7)
+                out_fmux = lts.cells[(i - 1) << 4 | BEL_F7MUX];
+            // Eights C, G: F8MUX connects to F7F8 out
+            if (i == 2 || i == 6)
+                out_fmux = lts.cells[(i - 2) << 4 | BEL_F8MUX];
+            // Eights E: F9MUX connects to F7F8 out
+            if (i == 4)
+                out_fmux = lts.cells[BEL_F9MUX];
+
+            CellInfo *carry8 = lts.cells[BEL_CARRY8];
+            // CARRY8 might use X
+            if (carry8 != nullptr && carry8->carryInfo.x_sigs[i] != nullptr) {
+                if (x_net == nullptr)
+                    x_net = carry8->carryInfo.x_sigs[i];
+                else if (x_net != carry8->carryInfo.x_sigs[i]) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+            }
+
+            // FF1 might use X, if it isn't driven directly
+            CellInfo *ff1 = lts.cells[i << 4 | BEL_FF];
+            if (ff1 != nullptr && ff1->ffInfo.d != nullptr && ff1->ffInfo.d->driver.cell != nullptr) {
+                auto &drv = ff1->ffInfo.d->driver;
+                if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
+                    // Direct, OK
+                    // FIXME: CARRY8 direct
+                } else {
+                    // Indirect, must use X input
+                    if (x_net == nullptr)
+                        x_net = ff1->ffInfo.d;
+                    else if (x_net != ff1->ffInfo.d) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
+                }
+            }
+
+            // FF2 might use I, if it isn't driven directly
+            CellInfo *ff2 = lts.cells[i << 4 | BEL_FF2];
+            if (ff2 != nullptr && ff2->ffInfo.d != nullptr && ff2->ffInfo.d->driver.cell != nullptr) {
+                auto &drv = ff2->ffInfo.d->driver;
+                if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
+                    // Direct, OK
+                    // FIXME: CARRY8 direct
+                } else {
+                    // Indirect, must use X input
+                    if (i_net == nullptr)
+                        i_net = ff2->ffInfo.d;
+                    else if (i_net != ff2->ffInfo.d) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
+                }
+            }
+
+            if ((i == 3) || (i == 5) || (i == 6))
+                if (tile_is_memory && x_net != nullptr)
+                    return false; // collision with top address bits
+
+            bool mux_output_used = false;
+            NetInfo *out5 = nullptr;
+            if (lut6 != nullptr && lut6->lutInfo.output_count == 2)
+                out5 = lut6->lutInfo.output_sigs[1];
+            else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
+                out5 = lut5->lutInfo.output_sigs[0];
+            if (out5 != nullptr && (out5->users.size() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
+                                                               (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
+                mux_output_used = true;
+            }
+
+            if (carry8 != nullptr && carry8->carryInfo.out_sigs[i] != nullptr) {
+                // FIXME: direct connections to FF
+                if (mux_output_used) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+                mux_output_used = true;
+            }
+            if (out_fmux != nullptr) {
+                NetInfo *f7f8 = out_fmux->muxInfo.out;
+                if (f7f8 != nullptr && (f7f8->users.size() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d) &&
+                                                                   (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
+                    if (mux_output_used) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
+                    mux_output_used = true;
+                }
+            }
+
+            lts.eights[i].valid = true;
+        } else if (!lts.eights[i].valid) {
+            return false;
+        }
+    }
+    // Check half-tiles
+    for (int i = 0; i < 2; i++) {
+        if (lts.halfs[i].dirty) {
+            lts.halfs[i].valid = false;
+            bool found_ff[2] = {false, false};
+            NetInfo *clk = nullptr, *sr = nullptr, *ce[2] = {nullptr};
+            bool clkinv = false, srinv = false, islatch = false;
+            for (int z = 4 * i; z < 4 * (i + 1); z++) {
+                for (int k = 0; k < 2; k++) {
+                    CellInfo *ff = lts.cells[z << 4 | (BEL_FF + k)];
+                    if (ff == nullptr)
+                        continue;
+                    if (found_ff[0] || found_ff[1]) {
+                        if (ff->ffInfo.clk != clk)
+                            return false;
+                        if (ff->ffInfo.sr != sr)
+                            return false;
+                        if (ff->ffInfo.is_clkinv != clkinv)
+                            return false;
+                        if (ff->ffInfo.is_srinv != srinv)
+                            return false;
+                        if (ff->ffInfo.is_latch != islatch)
+                            return false;
+                    } else {
+                        clk = ff->ffInfo.clk;
+                        sr = ff->ffInfo.sr;
+                        clkinv = ff->ffInfo.is_clkinv;
+                        srinv = ff->ffInfo.is_srinv;
+                        islatch = ff->ffInfo.is_latch;
+                    }
+                    if (found_ff[k]) {
+                        if (ff->ffInfo.ce != ce[k])
+                            return false;
+                    } else {
+                        ce[k] = ff->ffInfo.ce;
+                    }
+                    found_ff[k] = true;
+                }
+            }
+            lts.halfs[i].valid = true;
+        } else if (!lts.halfs[i].valid) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
+{
+    bool is_slicem = (tileType == id_CLBLM_L) || (tileType == id_CLBLM_R);
+    bool tile_is_memory = false;
+    if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
+        tile_is_memory = true;
+    // Check eight-tiles (mostly LUT-related validity)
+    for (int i = 0; i < 8; i++) {
+        if (lts.eights[i].dirty) {
+            lts.eights[i].dirty = false;
+            lts.eights[i].valid = false;
+
+            CellInfo *lut6 = lts.cells[(i << 4) | BEL_6LUT];
+            CellInfo *lut5 = lts.cells[(i << 4) | BEL_5LUT];
+
+            // Check 6LUT
+            if (lut6 != nullptr) {
+                if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
+                    return false; // Memory and SRLs only valid in SLICEMs
+                if (lut5 != nullptr) {
+                    // Can't mix memory and non-memory
+                    if (lut6->lutInfo.is_memory != lut5->lutInfo.is_memory ||
+                        lut6->lutInfo.is_srl != lut5->lutInfo.is_srl)
+                        return false;
+                    // If all 6 inputs or 2 outputs are used, 5LUT can't also be present
+                    if (lut6->lutInfo.input_count == 6 || lut6->lutInfo.output_count == 2)
+                        return false;
+                    // If more than 5 total inputs are used, need to check number of shared input
+                    if ((lut6->lutInfo.input_count + lut5->lutInfo.input_count) > 5) {
+                        int shared = 0, need_shared = (lut6->lutInfo.input_count + lut5->lutInfo.input_count - 5);
+                        for (int j = 0; j < lut6->lutInfo.input_count; j++) {
+                            for (int k = 0; k < lut5->lutInfo.input_count; k++) {
+                                if (lut6->lutInfo.input_sigs[j] == lut5->lutInfo.input_sigs[k])
+                                    shared++;
+                                if (shared >= need_shared)
+                                    break;
+                            }
+                        }
+                        if (shared < need_shared) {
+                            DBG();
+                            return false;
+                        }
+                    }
+                }
+            }
+            if (lut5 != nullptr) {
+                if (!is_slicem && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl)) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+                // 5LUT can use at most 5 inputs and 1 output
+                if (lut5->lutInfo.input_count > 5 || lut5->lutInfo.output_count == 2) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+            }
+
+            // Check (over)usage ofX inputs
+            NetInfo *x_net = nullptr;
+            if (lut6 != nullptr) {
+                x_net = lut6->lutInfo.di2_net;
+            }
+
+            CellInfo *mux = nullptr;
+            // Eights A, C, E, G: F7MUX uses X input
+            if (i == 0 || i == 2 || i == 4 || i == 6)
+                mux = lts.cells[i << 4 | BEL_F7MUX];
+            // Eights B, F: F8MUX uses X input
+            if (i == 1 || i == 5)
+                mux = lts.cells[(i - 1) << 4 | BEL_F8MUX];
+
+            if (mux != nullptr) {
+                if (x_net == nullptr)
+                    x_net = mux->muxInfo.sel;
+                else if (x_net != mux->muxInfo.sel) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+            }
+
+            CellInfo *out_fmux = nullptr;
+            // Eights B, D, F, H: F7MUX connects to F7F8 out
+            if (i == 1 || i == 3 || i == 5 || i == 7)
+                out_fmux = lts.cells[(i - 1) << 4 | BEL_F7MUX];
+            // Eights C, G: F8MUX connects to F7F8 out
+            if (i == 2 || i == 6)
+                out_fmux = lts.cells[(i - 2) << 4 | BEL_F8MUX];
+
+            CellInfo *carry4 = lts.cells[BEL_CARRY4];
+
+            // FF1 might use X, if it isn't driven directly
+            CellInfo *ff1 = lts.cells[i << 4 | BEL_FF];
+            if (ff1 != nullptr && ff1->ffInfo.d != nullptr && ff1->ffInfo.d->driver.cell != nullptr) {
+                auto &drv = ff1->ffInfo.d->driver;
+                if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
+                    // Direct, OK
+                } else {
+                    // Indirect, must use X input
+                    if (x_net == nullptr)
+                        x_net = ff1->ffInfo.d;
+                    else if (x_net != ff1->ffInfo.d) {
+                        DBG();
+                        return false;
+                    }
+                }
+            }
+
+            // FF2 might use X, if it isn't driven directly
+            CellInfo *ff2 = lts.cells[i << 4 | BEL_FF2];
+            if (ff2 != nullptr && ff2->ffInfo.d != nullptr && ff2->ffInfo.d->driver.cell != nullptr) {
+                auto &drv = ff2->ffInfo.d->driver;
+                if (drv.cell == lut5) {
+                    // Direct, OK
+                } else {
+                    // Indirect, must use X input
+                    if (x_net == nullptr)
+                        x_net = ff2->ffInfo.d;
+                    else if (x_net != ff2->ffInfo.d) {
+                        DBG();
+                        return false;
+                    }
+                }
+            }
+
+            if ((i == 1) || (i == 2) || (i == 5) || (i == 6))
+                if (tile_is_memory && x_net != nullptr)
+                    return false; // collision with top address bits
+
+            bool mux_output_used = false;
+            NetInfo *out5 = nullptr;
+            if (lut6 != nullptr && lut6->lutInfo.output_count == 2)
+                out5 = lut6->lutInfo.output_sigs[1];
+            else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
+                out5 = lut5->lutInfo.output_sigs[0];
+            if (out5 != nullptr && (out5->users.size() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
+                                                               (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
+                mux_output_used = true;
+            }
+
+            if (carry4 != nullptr && carry4->carryInfo.out_sigs[i] != nullptr) {
+                // FIXME: direct connections to FF
+                if (mux_output_used) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+                mux_output_used = true;
+            }
+            if (out_fmux != nullptr) {
+                NetInfo *f7f8 = out_fmux->muxInfo.out;
+                if (f7f8 != nullptr && (f7f8->users.size() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d)))) {
+                    if (mux_output_used) {
+                        DBG();
+                        return false; // Memory and SRLs only valid in SLICEMs
+                    }
+                    mux_output_used = true;
+                }
+            }
+            if (ff2 != nullptr) {
+                if (mux_output_used) {
+                    DBG();
+                    return false; // Memory and SRLs only valid in SLICEMs
+                }
+                mux_output_used = true;
+            }
+
+            lts.eights[i].valid = true;
+        } else if (!lts.eights[i].valid) {
+            return false;
+        }
+    }
+    // Check half-tiles
+    for (int i = 0; i < 2; i++) {
+        if (lts.halfs[i].dirty) {
+            lts.halfs[i].valid = false;
+            bool found_ff[2] = {false, false};
+            NetInfo *clk = nullptr, *sr = nullptr, *ce = nullptr;
+            bool clkinv = false, srinv = false, islatch = false;
+            for (int z = 4 * i; z < 4 * (i + 1); z++) {
+                for (int k = 0; k < 2; k++) {
+                    CellInfo *ff = lts.cells[z << 4 | (BEL_FF + k)];
+                    if (ff == nullptr)
+                        continue;
+                    if (ff->ffInfo.is_latch && k == 1)
+                        return false;
+                    if (found_ff[0] || found_ff[1]) {
+                        if (ff->ffInfo.clk != clk)
+                            return false;
+                        if (ff->ffInfo.sr != sr)
+                            return false;
+                        if (ff->ffInfo.is_clkinv != clkinv)
+                            return false;
+                        if (ff->ffInfo.is_srinv != srinv)
+                            return false;
+                        if (ff->ffInfo.is_latch != islatch)
+                            return false;
+                    } else {
+                        clk = ff->ffInfo.clk;
+                        sr = ff->ffInfo.sr;
+                        clkinv = ff->ffInfo.is_clkinv;
+                        srinv = ff->ffInfo.is_srinv;
+                        islatch = ff->ffInfo.is_latch;
+                    }
+                    if (found_ff[k]) {
+                        if (ff->ffInfo.ce != ce)
+                            return false;
+                    } else {
+                        ce = ff->ffInfo.ce;
+                    }
+                    found_ff[k] = true;
+                }
+            }
+            lts.halfs[i].valid = true;
+        } else if (!lts.halfs[i].valid) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool Arch::isBelLocationValid(BelId bel) const
 {
     IdString belTileType = getBelTileType(bel);
@@ -49,245 +512,10 @@ bool Arch::isBelLocationValid(BelId bel) const
         if (!tileStatus[bel.tile].lts)
             return true;
         LogicTileStatus &lts = *(tileStatus[bel.tile].lts);
-        bool is_slicem = (belTileType == id_CLEM) || (belTileType == id_CLEM_R);
-        bool tile_is_memory = false;
-        if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
-            tile_is_memory = true;
-        // Check eight-tiles (mostly LUT-related validity)
-        for (int i = 0; i < 8; i++) {
-            if (lts.eights[i].dirty) {
-                lts.eights[i].dirty = false;
-                lts.eights[i].valid = false;
-
-                CellInfo *lut6 = lts.cells[(i << 4) | BEL_6LUT];
-                CellInfo *lut5 = lts.cells[(i << 4) | BEL_5LUT];
-
-                // Check 6LUT
-                if (lut6 != nullptr) {
-                    if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    if (lut5 != nullptr) {
-                        // Can't mix memory and non-memory
-                        if (lut6->lutInfo.is_memory != lut5->lutInfo.is_memory ||
-                            lut6->lutInfo.is_srl != lut5->lutInfo.is_srl)
-                            return false;
-                        // If all 6 inputs or 2 outputs are used, 5LUT can't also be present
-                        if (lut6->lutInfo.input_count == 6 || lut6->lutInfo.output_count == 2)
-                            return false;
-                        // If more than 5 total inputs are used, need to check number of shared input
-                        if ((lut6->lutInfo.input_count + lut5->lutInfo.input_count) > 5) {
-                            int shared = 0, need_shared = (lut6->lutInfo.input_count + lut5->lutInfo.input_count - 5);
-                            for (int j = 0; j < lut6->lutInfo.input_count; j++) {
-                                for (int k = 0; k < lut5->lutInfo.input_count; k++) {
-                                    if (lut6->lutInfo.input_sigs[j] == lut5->lutInfo.input_sigs[k])
-                                        shared++;
-                                    if (shared >= need_shared)
-                                        break;
-                                }
-                            }
-                            if (shared < need_shared) {
-                                DBG();
-                                return false;
-                            }
-                        }
-                    }
-                }
-                if (lut5 != nullptr) {
-                    if (!is_slicem && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl)) {
-                        DBG();
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    }
-                    // 5LUT can use at most 5 inputs and 1 output
-                    if (lut5->lutInfo.input_count > 5 || lut5->lutInfo.output_count == 2) {
-                        DBG();
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    }
-                }
-
-                // Check (over)usage of DI and X inputs
-                NetInfo *i_net = nullptr, *x_net = nullptr;
-                if (lut6 != nullptr) {
-                    i_net = lut6->lutInfo.di1_net;
-                    x_net = lut6->lutInfo.di2_net;
-                }
-                if (lut5 != nullptr) {
-                    if (lut5->lutInfo.di1_net != nullptr) {
-                        if (i_net == nullptr)
-                            i_net = lut5->lutInfo.di1_net;
-                        else if (i_net != lut5->lutInfo.di1_net) {
-                            DBG();
-                            return false; // Memory and SRLs only valid in SLICEMs
-                        }
-                    }
-                    // DI2 not available for 5LUT
-                    if (lut5->lutInfo.di2_net != nullptr) {
-                        DBG();
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    }
-                }
-
-                CellInfo *mux = nullptr;
-                // Eights A, C, E, G: F7MUX uses X input
-                if (i == 0 || i == 2 || i == 4 || i == 6)
-                    mux = lts.cells[i << 4 | BEL_F7MUX];
-                // Eights B, F: F8MUX uses X input
-                if (i == 1 || i == 5)
-                    mux = lts.cells[(i - 1) << 4 | BEL_F8MUX];
-                // Eights D: F9MUX uses X input
-                if (i == 3)
-                    mux = lts.cells[BEL_F9MUX];
-
-                if (mux != nullptr) {
-                    if (x_net == nullptr)
-                        x_net = mux->muxInfo.sel;
-                    else if (x_net != mux->muxInfo.sel) {
-                        DBG();
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    }
-                }
-
-                CellInfo *out_fmux = nullptr;
-                // Eights B, D, F, H: F7MUX connects to F7F8 out
-                if (i == 1 || i == 3 || i == 5 || i == 7)
-                    out_fmux = lts.cells[(i - 1) << 4 | BEL_F7MUX];
-                // Eights C, G: F8MUX connects to F7F8 out
-                if (i == 2 || i == 6)
-                    out_fmux = lts.cells[(i - 2) << 4 | BEL_F8MUX];
-                // Eights E: F9MUX connects to F7F8 out
-                if (i == 4)
-                    out_fmux = lts.cells[BEL_F9MUX];
-
-                CellInfo *carry8 = lts.cells[BEL_CARRY8];
-                // CARRY8 might use X
-                if (carry8 != nullptr && carry8->carryInfo.x_sigs[i] != nullptr) {
-                    if (x_net == nullptr)
-                        x_net = carry8->carryInfo.x_sigs[i];
-                    else if (x_net != carry8->carryInfo.x_sigs[i]) {
-                        DBG();
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    }
-                }
-
-                // FF1 might use X, if it isn't driven directly
-                CellInfo *ff1 = lts.cells[i << 4 | BEL_FF];
-                if (ff1 != nullptr && ff1->ffInfo.d != nullptr && ff1->ffInfo.d->driver.cell != nullptr) {
-                    auto &drv = ff1->ffInfo.d->driver;
-                    if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
-                        // Direct, OK
-                        // FIXME: CARRY8 direct
-                    } else {
-                        // Indirect, must use X input
-                        if (x_net == nullptr)
-                            x_net = ff1->ffInfo.d;
-                        else if (x_net != ff1->ffInfo.d) {
-                            DBG();
-                            return false; // Memory and SRLs only valid in SLICEMs
-                        }
-                    }
-                }
-
-                // FF2 might use I, if it isn't driven directly
-                CellInfo *ff2 = lts.cells[i << 4 | BEL_FF2];
-                if (ff2 != nullptr && ff2->ffInfo.d != nullptr && ff2->ffInfo.d->driver.cell != nullptr) {
-                    auto &drv = ff2->ffInfo.d->driver;
-                    if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
-                        // Direct, OK
-                        // FIXME: CARRY8 direct
-                    } else {
-                        // Indirect, must use X input
-                        if (i_net == nullptr)
-                            i_net = ff2->ffInfo.d;
-                        else if (i_net != ff2->ffInfo.d) {
-                            DBG();
-                            return false; // Memory and SRLs only valid in SLICEMs
-                        }
-                    }
-                }
-
-                if ((i == 3) || (i == 5) || (i == 6))
-                    if (tile_is_memory && x_net != nullptr)
-                        return false; // collision with top address bits
-
-                bool mux_output_used = false;
-                NetInfo *out5 = nullptr;
-                if (lut6 != nullptr && lut6->lutInfo.output_count == 2)
-                    out5 = lut6->lutInfo.output_sigs[1];
-                else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
-                    out5 = lut5->lutInfo.output_sigs[0];
-                if (out5 != nullptr && (out5->users.size() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
-                                                                   (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
-                    mux_output_used = true;
-                }
-
-                if (carry8 != nullptr && carry8->carryInfo.out_sigs[i] != nullptr) {
-                    // FIXME: direct connections to FF
-                    if (mux_output_used) {
-                        DBG();
-                        return false; // Memory and SRLs only valid in SLICEMs
-                    }
-                    mux_output_used = true;
-                }
-                if (out_fmux != nullptr) {
-                    NetInfo *f7f8 = out_fmux->muxInfo.out;
-                    if (f7f8 != nullptr && (f7f8->users.size() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d) &&
-                                                                       (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
-                        if (mux_output_used) {
-                            DBG();
-                            return false; // Memory and SRLs only valid in SLICEMs
-                        }
-                        mux_output_used = true;
-                    }
-                }
-
-                lts.eights[i].valid = true;
-            } else if (!lts.eights[i].valid) {
-                return false;
-            }
-        }
-        // Check half-tiles
-        for (int i = 0; i < 2; i++) {
-            if (lts.halfs[i].dirty) {
-                lts.halfs[i].valid = false;
-                bool found_ff[2] = {false, false};
-                NetInfo *clk = nullptr, *sr = nullptr, *ce[2] = {nullptr};
-                bool clkinv = false, srinv = false, islatch = false;
-                for (int z = 4 * i; z < 4 * (i + 1); z++) {
-                    for (int k = 0; k < 2; k++) {
-                        CellInfo *ff = lts.cells[z << 4 | (BEL_FF + k)];
-                        if (ff == nullptr)
-                            continue;
-                        if (found_ff[0] || found_ff[1]) {
-                            if (ff->ffInfo.clk != clk)
-                                return false;
-                            if (ff->ffInfo.sr != sr)
-                                return false;
-                            if (ff->ffInfo.is_clkinv != clkinv)
-                                return false;
-                            if (ff->ffInfo.is_srinv != srinv)
-                                return false;
-                            if (ff->ffInfo.is_latch != islatch)
-                                return false;
-                        } else {
-                            clk = ff->ffInfo.clk;
-                            sr = ff->ffInfo.sr;
-                            clkinv = ff->ffInfo.is_clkinv;
-                            srinv = ff->ffInfo.is_srinv;
-                            islatch = ff->ffInfo.is_latch;
-                        }
-                        if (found_ff[k]) {
-                            if (ff->ffInfo.ce != ce[k])
-                                return false;
-                        } else {
-                            ce[k] = ff->ffInfo.ce;
-                        }
-                        found_ff[k] = true;
-                    }
-                }
-                lts.halfs[i].valid = true;
-            } else if (!lts.halfs[i].valid) {
-                return false;
-            }
-        }
+        if (xc7)
+            return xc7_logic_tile_valid(belTileType, lts);
+        else
+            return xcu_logic_tile_valid(belTileType, lts);
     } else if (belTileType == id_BRAM) {
         if (!tileStatus[bel.tile].bts)
             return true;
