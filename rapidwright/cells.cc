@@ -112,6 +112,29 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("REFCLK", PORT_IN);
         add_port("RST", PORT_IN);
         add_port("RDY", PORT_OUT);
+    } else if (type == ctx->id("IBUF")) {
+        add_port("I", PORT_IN);
+        add_port("O", PORT_OUT);
+    } else if (type == ctx->id("IBUF_INTERMDISABLE")) {
+        add_port("I", PORT_IN);
+        add_port("IBUFDISABLE", PORT_IN);
+        add_port("INTERMDISABLE", PORT_IN);
+        add_port("O", PORT_OUT);
+    } else if (type == ctx->id("IBUFDS_INTERMDISABLE_INT")) {
+        add_port("I", PORT_IN);
+        add_port("IB", PORT_IN);
+        add_port("IBUFDISABLE", PORT_IN);
+        add_port("INTERMDISABLE", PORT_IN);
+        add_port("O", PORT_OUT);
+    } else if (type == ctx->id("CARRY4")) {
+        add_port("CI", PORT_IN);
+        add_port("CYINIT", PORT_IN);
+        for (int i = 0; i < 4; i++) {
+            add_port("DI[" + std::to_string(i) + "]", PORT_IN);
+            add_port("S[" + std::to_string(i) + "]", PORT_IN);
+            add_port("CO[" + std::to_string(i) + "]", PORT_OUT);
+            add_port("O[" + std::to_string(i) + "]", PORT_OUT);
+        }
     }
     return cell;
 }
