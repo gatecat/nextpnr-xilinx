@@ -12,7 +12,7 @@ module top (input clk_p, clk_n, output [3:0] led);
         .O(clk)
     );
 
-`define BLINKY
+//`define BLINKY
 `ifdef BLINKY
     reg clkdiv;
     reg [21:0] ctr;

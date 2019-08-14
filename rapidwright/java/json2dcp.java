@@ -116,19 +116,28 @@ public class json2dcp {
                 return "32'h" + Integer.toHexString(p);
             } else {
                 String s = prim.getAsString();
-                boolean is_binary = true;
+                int state = 0;
                 for (char c : s.toCharArray()) {
-                    if (c != '0' && c != '1' && c != 'x') {
-                        is_binary = false;
-                        break;
+                    if (state == 0) {
+                        if (c == ' ') {
+                            state = 1;
+                        } else if (c != '0' && c != '1' && c != 'x') {
+                            state = 2;
+                        }
+                    } else if (state == 1) {
+                        if (c != ' ')
+                            state = 2;
                     }
                 }
-                if (is_binary) {
+                if (state == 0) {
                     s = s.replace('x', '0');
                     BigInteger bi = new BigInteger(s, 2);
                     return s.length() + "'h" + bi.toString(16);
+                } else if (state == 1) {
+                    return s.substring(0, s.length() - 1);
+                } else {
+                    return s;
                 }
-                return s;
             }
         }
 
