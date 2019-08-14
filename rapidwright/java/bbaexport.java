@@ -806,11 +806,14 @@ public class bbaexport {
                         seenNodes.add(flatIndex);
 
                         String wn = n.getWireName();
-                        if (n.isTiedToGnd() && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) {
+                        //System.out.println(t.getName() + " " + n.getWireName());
+                        if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R
+                             && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) &&
+                                n.isTiedToGnd()) {
                             gndNodes.add(n);
                             continue;
                         }
-                        if (n.isTiedToVcc()) {
+                        if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R) && n.isTiedToVcc()) {
                             vccNodes.add(n);
                             continue;
                         }
