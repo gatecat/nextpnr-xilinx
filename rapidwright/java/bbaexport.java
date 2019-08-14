@@ -490,7 +490,7 @@ public class bbaexport {
             }
         }
 
-        if (b.getSiteTypeEnum() == SiteTypeEnum.SLICEL && b.getSiteTypeEnum() == SiteTypeEnum.SLICEM) {
+        if (b.getSiteTypeEnum() == SiteTypeEnum.SLICEL || b.getSiteTypeEnum() == SiteTypeEnum.SLICEM) {
             if (xc7_flag) {
                 boolean is_upper_site = false;
                 for (Site s2 : t.getSites()) {

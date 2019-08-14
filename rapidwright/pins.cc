@@ -341,7 +341,7 @@ void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vecto
 {
     BelId spec_bel;
     for (auto bel : ctx->getBels()) {
-        if (ctx->getBelType(bel) == id_RAMB36E2_RAMB36E2) {
+        if (ctx->getBelType(bel) == (ctx->xc7 ? id_RAMB36E1_RAMB36E1 : id_RAMB36E2_RAMB36E2)) {
             spec_bel = bel;
             break;
         }
