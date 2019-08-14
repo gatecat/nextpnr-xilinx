@@ -629,6 +629,8 @@ struct Arch : BaseCtx
     ArchArgs args;
     Arch(ArchArgs args);
 
+    bool xc7;
+
     std::string getChipName() const;
 
     IdString archId() const { return id("ice40"); }

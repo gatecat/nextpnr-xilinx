@@ -17,6 +17,8 @@ import java.util.*;
 
 public class bbaexport {
 
+    static boolean xc7_flag = false;
+
     public static String sitePinToGlobalWire(HashSet<Node> discoveredWires, Device d, Site s, String pinname) {
         String tw = s.getTileWireNameFromPinName(pinname);
         Wire w = d.getWire(s.getTile().getName() + "/" + tw);
@@ -147,8 +149,11 @@ public class bbaexport {
         private NextpnrBel addBel(SiteInst s, int siteVariant, BEL b) {
             if (b.getBELClass() == BELClass.PORT)
                 return null;
+            int z = getBelZoverride(s.getTile(), s.getSite(), b);
+            if (z == -1)
+                return null;
             NextpnrBel nb = new NextpnrBel(b.getName(),
-                    bels.size(), getBelTypeOverride(b.getBELType()), b.getBELType(), s.getSite().getSiteIndexInTile(), siteVariant, getBelZoverride(s.getTile(), s.getSite(), b),
+                    bels.size(), getBelTypeOverride(b.getBELType()), b.getBELType(), s.getSite().getSiteIndexInTile(), siteVariant, z,
                     (b.getBELClass() == BELClass.RBEL) ? 1 : 0);
             bels.add(nb);
             belsInTile.put(s.getTile(), belsInTile.getOrDefault(s.getTile(), 0) + 1);
@@ -216,6 +221,17 @@ public class bbaexport {
                                     0, NextpnrPipType.LUT_PERMUTATION);
                             // extra data: eigth[3:0]; from[3:0]; to[3:0]
                             pp.extra_data = ("ABCDEFGH".indexOf(pn.substring(0,1)) << 8) | ((j - 1) << 4) | (i - 1);
+                            if (xc7_flag) {
+                                boolean is_upper_site = false;
+                                for (Site s2 : s.getTile().getSites()) {
+                                    if (s2.getInstanceY() < s.getInstanceY()) {
+                                        is_upper_site = true;
+                                        break;
+                                    }
+                                }
+                                if (is_upper_site)
+                                    pp.extra_data |= (4 << 8);
+                            }
                             wires.get(pp.from).pips_dh.add(pp.index);
                             wires.get(pp.to).pips_uh.add(pp.index);
                             pips.add(pp);
@@ -325,9 +341,12 @@ public class bbaexport {
             }
             TileTypeEnum tt = t.getTileTypeEnum();
             boolean isLogic = (tt == TileTypeEnum.CLEM || tt == TileTypeEnum.CLEM_R || tt == TileTypeEnum.CLEL_L || tt == TileTypeEnum.CLEL_R);
+            boolean isxc7Logic = (tt == TileTypeEnum.CLBLL_L || tt == TileTypeEnum.CLBLL_R || tt == TileTypeEnum.CLBLM_L || tt == TileTypeEnum.CLBLM_R);
             for (PIP p : t.getPIPs()) {
                 if (p.isRouteThru() && p.getStartWireName().endsWith("_CE_INT"))
                     continue; // these route through pips seem to cause antenna issues
+                if (p.isRouteThru() && isxc7Logic)
+                    continue; // fixme
                 NextpnrPip np = addPIP(p, false);
                 if (p.isRouteThru() && isLogic) {
                     np.type = NextpnrPipType.LUT_ROUTETHRU;
@@ -365,13 +384,15 @@ public class bbaexport {
     }
 
     private static String getBelTypeOverride(String type) {
-        if (type.endsWith("6LUT"))
+        if (type.endsWith("6LUT") || type.equals("LUT_OR_MEM6") || type.equals("LUT6"))
             return "SLICE_LUTX";
-        if (type.endsWith("5LUT"))
+        if (type.endsWith("5LUT") || type.equals("LUT_OR_MEM5") || type.equals("LUT5"))
             return "SLICE_LUTX";
         if (type.length() == 4 && type.endsWith("FF2"))
             return "SLICE_FFX";
         if (type.length() == 3 && type.endsWith("FF"))
+            return "SLICE_FFX";
+        if (type.equals("FF_INIT") || type.equals("REG_INIT"))
             return "SLICE_FFX";
         String[] iobParts = {"_PAD_", "_PULL_", "_IBUFCTRL_", "_INBUF_", "_OUTBUF_"};
         for (String p : iobParts) {
@@ -439,61 +460,114 @@ public class bbaexport {
                 case "FIFO18E2_FIFO18E2":
                     return 10;
             }
-        }
-
-        if (b.getSiteTypeEnum() != SiteTypeEnum.SLICEL && b.getSiteTypeEnum() != SiteTypeEnum.SLICEM)
-            return belsInTile.getOrDefault(t, 0);
-
-        // LUTs, FFs, and default muxes follow a regular pattern
-        // z[6..4] = z-index (A-H)
-        // z[3..0] = type
-        // Types: [6LUT, 5LUT, FF, FF2, FFMUX1, FFMUX2, OUTMUX, F7MUX, F8MUX, F9MUX, CARRY8, CLKINV, RSTINV, HARD0]
-        String subslices = "ABCDEFGH";
-        String name = b.getName();
-        String[] postfixes = {"6LUT", "5LUT", "FF", "FF2"};
-        for (int i = 0; i < postfixes.length; i++) {
-            if (name.length() == postfixes[i].length() + 1 && name.substring(1).equals(postfixes[i])) {
-                return subslices.indexOf(name.charAt(0)) << 4 | i;
+        } else if (t.getTileTypeEnum() == TileTypeEnum.BRAM_L || t.getTileTypeEnum() == TileTypeEnum.BRAM_R) {
+            boolean is_top18 = false;
+            if (s.getSiteTypeEnum() == SiteTypeEnum.FIFO18E1 || s.getSiteTypeEnum() == SiteTypeEnum.FIFO36E1) {
+                for (Site s2 : t.getSites()) {
+                    if ((s2.getSiteTypeEnum() == SiteTypeEnum.FIFO18E1 || s2.getSiteTypeEnum() == SiteTypeEnum.FIFO36E1) && (s2.getInstanceY() < s.getInstanceY()))
+                        is_top18 = true;
+                }
+            }
+            switch(b.getBELType()) {
+                case "RAMBFIFO36E1_RAMBFIFO36E1":
+                    return 0;
+                case "RAMB36E1_RAMB36E1":
+                    return 1;
+                case "FIFO36E1_FIFO36E1":
+                    return 2;
+                case "RAMB18E1_RAMB18E1":
+                    return is_top18 ? 5 : 9;
+                case "FIFO18E1_FIFO18E1":
+                    return 10;
             }
         }
-        if (name.startsWith("FFMUX"))
-            return subslices.indexOf(name.charAt(5)) << 4 | (name.charAt(6) == '2' ? 5 : 4);
-        if (name.startsWith("OUTMUX"))
-            return subslices.indexOf(name.charAt(6)) << 4 | 6;
 
-        // More special features
-        switch (name) {
-            case "F7MUX_AB":
-                return 0x07;
-            case "F7MUX_CD":
-                return 0x27;
-            case "F7MUX_EF":
-                return 0x47;
-            case "F7MUX_GH":
-                return 0x67;
-            case "F8MUX_BOT":
-                return 0x08;
-            case "F8MUX_TOP":
-                return 0x48;
-            case "F9MUX":
-                return 0x09;
-            case "CARRY8":
-                return 0x0A;
-            case "CLK1INV":
-                return 0x0B;
-            case "CLK2INV":
-                return 0x4B;
-            case "LCLKINV":
-                return 0x1B;
-            case "RST_ABCDINV":
-                return 0x0C;
-            case "RST_EFGHINV":
-                return 0x4C;
-            case "HARD0":
-                return 0x0D;
+        if (b.getSiteTypeEnum() == SiteTypeEnum.SLICEL && b.getSiteTypeEnum() == SiteTypeEnum.SLICEM) {
+            if (xc7_flag) {
+                boolean is_upper_site = false;
+                for (Site s2 : t.getSites()) {
+                    if (s2.getInstanceY() < s.getInstanceY()) {
+                        is_upper_site = true;
+                        break;
+                    }
+                }
+                String subslices = "ABCD";
+                String name = b.getName();
+                String[] postfixes = {"6LUT", "5LUT", "FF", "5FF"};
+                for (int i = 0; i < postfixes.length; i++) {
+                    if (name.length() == postfixes[i].length() + 1 && name.substring(1).equals(postfixes[i])) {
+                        return (is_upper_site ? 64 : 0) | subslices.indexOf(name.charAt(0)) << 4 | i;
+                    }
+                }
+                switch (name) {
+                    case "F7AMUX":
+                        return is_upper_site ? 0x47 : 0x07;
+                    case "F7BMUX":
+                        return is_upper_site ? 0x67 : 0x27;
+                    case "F8MUX":
+                        return is_upper_site ? 0x48 : 0x08;
+                    case "CARRY4":
+                        return is_upper_site ? 0x4F : 0x0F;
+                }
+
+            } else {
+                // LUTs, FFs, and default muxes follow a regular pattern
+                // z[6..4] = z-index (A-H)
+                // z[3..0] = type
+                // Types: [6LUT, 5LUT, FF, FF2, FFMUX1, FFMUX2, OUTMUX, F7MUX, F8MUX, F9MUX, CARRY8, CLKINV, RSTINV, HARD0]
+                String subslices = "ABCDEFGH";
+                String name = b.getName();
+                String[] postfixes = {"6LUT", "5LUT", "FF", "FF2"};
+                for (int i = 0; i < postfixes.length; i++) {
+                    if (name.length() == postfixes[i].length() + 1 && name.substring(1).equals(postfixes[i])) {
+                        return subslices.indexOf(name.charAt(0)) << 4 | i;
+                    }
+                }
+                if (name.startsWith("FFMUX"))
+                    return subslices.indexOf(name.charAt(5)) << 4 | (name.charAt(6) == '2' ? 5 : 4);
+                if (name.startsWith("OUTMUX"))
+                    return subslices.indexOf(name.charAt(6)) << 4 | 6;
+
+                // More special features
+                switch (name) {
+                    case "F7MUX_AB":
+                        return 0x07;
+                    case "F7MUX_CD":
+                        return 0x27;
+                    case "F7MUX_EF":
+                        return 0x47;
+                    case "F7MUX_GH":
+                        return 0x67;
+                    case "F8MUX_BOT":
+                        return 0x08;
+                    case "F8MUX_TOP":
+                        return 0x48;
+                    case "F9MUX":
+                        return 0x09;
+                    case "CARRY8":
+                        return 0x0A;
+                    case "CLK1INV":
+                        return 0x0B;
+                    case "CLK2INV":
+                        return 0x4B;
+                    case "LCLKINV":
+                        return 0x1B;
+                    case "RST_ABCDINV":
+                        return 0x0C;
+                    case "RST_EFGHINV":
+                        return 0x4C;
+                    case "HARD0":
+                        return 0x0D;
+                }
+            }
+
+
+            // Other bels (e.g. extra xc7 routing bels) can be ignored for nextpnr porpoises
+            return -1;
+        } else {
+            return belsInTile.getOrDefault(t, 0);
         }
-        assert(false);
-        return -1;
+
     }
 
     public static ArrayList<NextpnrTileType> tileTypes = new ArrayList<>();
@@ -516,6 +590,10 @@ public class bbaexport {
 
         // Seems like we need to use a Design to create SiteInsts to probe alternate site types...
         Design des = new Design("top",  args[0]);
+
+        if (args[0].contains("xc7"))
+            xc7_flag = true;
+
         //Design des = new Design("top", "xczu2cg-sbva484-1-e");
         Device d = des.getDevice();
         // Known constids
