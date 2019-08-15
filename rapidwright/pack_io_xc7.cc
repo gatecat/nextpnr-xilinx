@@ -141,4 +141,21 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
     }
 }
 
+void XC7Packer::pack_io() {
+    std::unordered_map<IdString, XFormRule> hrio_rules;
+    hrio_rules[ctx->id("PAD")].new_type = ctx->id("PAD");
+    hrio_rules[ctx->id("OUTBUF")].new_type = ctx->id("IOB33_OUTBUF");
+    hrio_rules[ctx->id("OUTBUF")].port_xform[ctx->id("I")] = ctx->id("IN");
+    hrio_rules[ctx->id("OUTBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
+    hrio_rules[ctx->id("OUTBUF")].port_xform[ctx->id("T")] = ctx->id("TRI");
+    hrio_rules[ctx->id("IBUF")].new_type = ctx->id("IOB33_INBUF_EN");
+    hrio_rules[ctx->id("IBUF")].port_xform[ctx->id("I")] = ctx->id("PAD");
+    hrio_rules[ctx->id("IBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
+    hrio_rules[ctx->id("IBUF_INTERMDISABLE")] = hrio_rules[ctx->id("IBUF")];
+    hrio_rules[ctx->id("IBUF_IBUFDISABLE")] = hrio_rules[ctx->id("IBUF")];
+    hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")] = hrio_rules[ctx->id("IBUF")];
+    hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFF_IN");
+
+}
+
 NEXTPNR_NAMESPACE_END
