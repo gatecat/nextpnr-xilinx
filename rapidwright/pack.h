@@ -128,7 +128,12 @@ struct XilinxPacker
     void pack_constants();
 
     // IO
+    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
     NetInfo *invert_net(NetInfo *toinv);
+    CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr);
+    CellInfo *insert_outinv(IdString name, NetInfo *i, NetInfo *o);
+    std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io);
+    CellInfo *create_iobuf(CellInfo *npnr_io, IdString &top_port);
 
     // Clocking
     std::unordered_set<BelId> used_bels;
@@ -148,12 +153,8 @@ struct USPacker : public XilinxPacker
     // IO
     CellInfo *insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o);
     CellInfo *insert_inbuf(IdString name, NetInfo *pad, NetInfo *o);
-    CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr);
     CellInfo *insert_diffinbuf(IdString name, const std::array<NetInfo *, 2> &i, NetInfo *o);
-    CellInfo *insert_outinv(IdString name, NetInfo *i, NetInfo *o);
 
-    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
-    std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io);
     CellInfo *create_iobuf(CellInfo *npnr_io, IdString &top_port);
     void decompose_iob(CellInfo *xil_iob, const std::string &iostandard);
     void pack_io();
@@ -181,10 +182,10 @@ struct USPacker : public XilinxPacker
 struct XC7Packer : public XilinxPacker
 {
     // IO
-    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
-    std::pair<CellInfo *, PortRef> insert_pad_and_buf(CellInfo *npnr_io);
-    CellInfo *create_iobuf(CellInfo *npnr_io, IdString &top_port);
-    void decompose_iob(CellInfo *xil_iob, const std::string &iostandard);
+    CellInfo *insert_ibuf(IdString name, IdString type, NetInfo *i, NetInfo *o);
+    CellInfo *insert_diffibuf(IdString name, IdString type, const std::array<NetInfo *, 2> &i, NetInfo *o);
+
+    void decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &iostandard);
     void pack_io();
 
     // IOLOGIC

@@ -52,7 +52,7 @@ CellInfo *USPacker::insert_inbuf(IdString name, NetInfo *pad, NetInfo *o)
     return inbuf_ptr;
 }
 
-CellInfo *USPacker::insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri)
+CellInfo *XilinxPacker::insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri)
 {
     auto obuf = create_cell(ctx, type, name);
     connect_port(ctx, i, obuf.get(), ctx->id("I"));
@@ -74,7 +74,7 @@ CellInfo *USPacker::insert_diffinbuf(IdString name, const std::array<NetInfo *, 
     return dibuf_ptr;
 }
 
-CellInfo *USPacker::insert_outinv(IdString name, NetInfo *i, NetInfo *o)
+CellInfo *XilinxPacker::insert_outinv(IdString name, NetInfo *i, NetInfo *o)
 {
     auto inv = create_cell(ctx, ctx->id("INV"), name);
     connect_port(ctx, i, inv.get(), ctx->id("I"));
@@ -331,7 +331,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     }
 }
 
-CellInfo *USPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
+CellInfo *XilinxPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
 {
     std::unique_ptr<CellInfo> cell;
     CellInfo *tbuf = nullptr;
@@ -388,7 +388,7 @@ CellInfo *USPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
     return iob_ptr;
 }
 
-std::pair<CellInfo *, PortRef> USPacker::insert_pad_and_buf(CellInfo *npnr_io)
+std::pair<CellInfo *, PortRef> XilinxPacker::insert_pad_and_buf(CellInfo *npnr_io)
 {
     // Given a nextpnr IO buffer, create a PAD instance and insert an IO buffer if one isn't already present
     std::pair<CellInfo *, PortRef> result;
