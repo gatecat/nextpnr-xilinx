@@ -18,6 +18,7 @@
  */
 
 #include <boost/algorithm/string.hpp>
+#include <boost/range/adaptor/reversed.hpp>
 #include "nextpnr.h"
 #include "util.h"
 
@@ -27,6 +28,40 @@ struct FasmBackend
 {
     Context *ctx;
     std::ostream &out;
+    std::vector<std::string> fasm_ctx;
+
+    void push(const std::string &x) { fasm_ctx.push_back(x); }
+
+    void pop() { fasm_ctx.pop_back(); }
+
+    void pop(int N)
+    {
+        for (int i = 0; i < N; i++)
+            fasm_ctx.pop_back();
+    }
+
+    void write_prefix()
+    {
+        for (auto &x : fasm_ctx)
+            out << x << ".";
+    }
+
+    void write_bit(const std::string &name, bool value = true)
+    {
+        if (value) {
+            write_prefix();
+            out << name << std::endl;
+        }
+    }
+
+    void write_vector(const std::string &name, const std::vector<bool> &value)
+    {
+        write_prefix();
+        out << name << " = " << int(value.size()) << "'b";
+        for (auto bit : boost::adaptors::reverse(value))
+            out << (bit ? '1' : '0');
+        out << std::endl;
+    }
 
     std::unordered_map<std::string, std::pair<std::string, std::string>> used_sitepips;
 
@@ -115,12 +150,12 @@ struct FasmBackend
 
     std::string get_tile_name(int tile) { return ctx->chip_info->tile_insts[tile].name.get(); }
 
-    void write_routing_bel(const std::string &prefix, WireId dst_wire)
+    void write_routing_bel(WireId dst_wire)
     {
         for (auto pip : ctx->getPipsUphill(dst_wire)) {
             if (ctx->getBoundPipNet(pip) != nullptr) {
-                out << prefix;
                 auto &pd = ctx->locInfo(pip).pip_data[pip.index];
+                write_prefix();
                 out << IdString(pd.bel).c_str(ctx) << "." << IdString(pd.extra_data).c_str(ctx);
                 out << std::endl;
             }
@@ -128,7 +163,7 @@ struct FasmBackend
     }
 
     // Process flipflops in a half-tile
-    void process_ffs(int tile, int half)
+    void write_ffs_config(int tile, int half)
     {
         bool found_ff = false;
         bool is_latch = false;
@@ -143,9 +178,9 @@ struct FasmBackend
         else                                                                                                           \
             dst = (src);                                                                                               \
     } while (0)
-
         std::string tname = get_tile_name(tile);
-        std::string hname = get_half_name(half, tname.find("CLBLM") != std::string::npos);
+        push(tname);
+        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
@@ -158,7 +193,7 @@ struct FasmBackend
                 CellInfo *ff = (j == 1) ? ff2 : ff1;
                 if (ff == nullptr)
                     continue;
-                std::string bname = get_bel_name(ff->bel);
+                push(get_bel_name(ff->bel));
                 bool zrst = false, zinit = false;
                 zinit = (int_or_default(ff->params, ctx->id("INIT"), 0) != 1);
                 IdString srsig;
@@ -186,31 +221,77 @@ struct FasmBackend
                     NPNR_ASSERT_FALSE("unsupported FF type");
                 }
 
-                if (zinit)
-                    out << tname << "." << hname << "." << bname << ".ZINIT" << std::endl;
-                if (zrst)
-                    out << tname << "." << hname << "." << bname << ".ZRST" << std::endl;
+                write_bit("ZINIT", zinit);
+                write_bit("ZRST", zrst);
 
+                pop();
                 SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
                 SET_CHECK(is_srused, get_net_or_empty(ff, srsig) != nullptr);
                 SET_CHECK(is_ceused, get_net_or_empty(ff, ctx->id("E")) != nullptr);
 
                 // Input mux
-                write_routing_bel(tname + "." + hname, ctx->getBelPinWire(ff->bel, ctx->id("D")));
+                write_routing_bel(ctx->getBelPinWire(ff->bel, ctx->id("D")));
 
                 found_ff = true;
             }
         }
-        if (is_latch)
-            out << tname << "." << hname << ".LATCH";
-        if (is_sync)
-            out << tname << "." << hname << ".FFSYNC";
-        if (is_clkinv)
-            out << tname << "." << hname << ".CLKINV";
-        if (is_srused)
-            out << tname << "." << hname << ".SRUSED";
-        if (is_ceused)
-            out << tname << "." << hname << ".CEUSED";
+        write_bit("LATCH", is_latch);
+        write_bit("FFSYNC", is_sync);
+        write_bit("CLKINV", is_clkinv);
+        write_bit("SRUSED", is_srused);
+        write_bit("CEUSED", is_ceused);
+        pop(2);
+    }
+
+    // Process LUTs and associated functionality in a half
+    void write_luts_config(int tile, int half)
+    {
+        bool wa7_used = false, wa8_used = false;
+
+        std::string tname = get_tile_name(tile);
+        push(tname);
+        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
+
+        auto lts = ctx->tileStatus[tile].lts;
+        if (lts == nullptr)
+            return;
+
+        for (int i = 0; i < 4; i++) {
+            std::string lutname = std::string("") + ("ABCD"[i]) + std::string("LUT");
+            push(lutname);
+            CellInfo *lut6 = lts->cells[(half << 7) | (i << 4) | BEL_6LUT];
+            CellInfo *lut5 = lts->cells[(half << 7) | (i << 4) | BEL_5LUT];
+            if (lut6 == nullptr && lut5 == nullptr)
+                continue;
+            // Write LUT initialisation
+            write_vector("INIT", get_lut_init(lut6, lut5));
+
+            // Write LUT mode config
+            bool is_small = false, is_ram = false, is_srl = false;
+            for (int j = 0; j < 2; j++) {
+                CellInfo *lut = (j == 1) ? lut5 : lut6;
+                if (lut->type == ctx->id("RAMD64E") || lut->type == ctx->id("RAMS64E")) {
+                    is_ram = true;
+                } else if (lut->type == ctx->id("RAMD32E") || lut->type == ctx->id("RAMS32E")) {
+                    is_ram = true;
+                    is_small = true;
+                } else if (lut->type == ctx->id("SRL16E")) {
+                    is_srl = true;
+                    is_small = true;
+                } else if (lut->type == ctx->id("SRLC32E")) {
+                    is_srl = true;
+                }
+                wa7_used |= (get_net_or_empty(lut, ctx->id("WA7")) != nullptr);
+                wa8_used |= (get_net_or_empty(lut, ctx->id("WA8")) != nullptr);
+            }
+            write_bit("SMALL", is_small);
+            write_bit("RAM", is_ram);
+            write_bit("SRL", is_srl);
+            pop();
+        }
+        write_bit("WA7USED", wa7_used);
+        write_bit("WA8USED", wa8_used);
+        pop(2);
     }
 };
 } // namespace
