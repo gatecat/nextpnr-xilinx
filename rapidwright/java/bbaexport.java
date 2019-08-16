@@ -195,6 +195,7 @@ public class bbaexport {
             np.bel = makeConstId(sp.getBELName());
             np.site = s.getSite().getSiteIndexInTile();
             np.siteVariant = siteVariant;
+            np.extra_data = makeConstId(sp.getInputPinName());
 
             pips.add(np);
             return np;

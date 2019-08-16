@@ -100,6 +100,118 @@ struct FasmBackend
         }
         return bits;
     };
+
+    // Return the name for a half-logic-tile
+    std::string get_half_name(int half, bool is_m)
+    {
+        if (is_m)
+            return half ? "SLICEL_X1" : "SLICEM_X0";
+        else
+            return half ? "SLICEL_X1" : "SLICEL_X0";
+    }
+
+    // Return the final part of a bel name
+    std::string get_bel_name(BelId bel) { return IdString(ctx->locInfo(bel).bel_data[bel.index].name).str(ctx); }
+
+    std::string get_tile_name(int tile) { return ctx->chip_info->tile_insts[tile].name.get(); }
+
+    void write_routing_bel(const std::string &prefix, WireId dst_wire)
+    {
+        for (auto pip : ctx->getPipsUphill(dst_wire)) {
+            if (ctx->getBoundPipNet(pip) != nullptr) {
+                out << prefix;
+                auto &pd = ctx->locInfo(pip).pip_data[pip.index];
+                out << IdString(pd.bel).c_str(ctx) << "." << IdString(pd.extra_data).c_str(ctx);
+                out << std::endl;
+            }
+        }
+    }
+
+    // Process flipflops in a half-tile
+    void process_ffs(int tile, int half)
+    {
+        bool found_ff = false;
+        bool is_latch = false;
+        bool is_sync = false;
+        bool is_clkinv = false;
+        bool is_srused = false;
+        bool is_ceused = false;
+#define SET_CHECK(dst, src)                                                                                            \
+    do {                                                                                                               \
+        if (found_ff)                                                                                                  \
+            NPNR_ASSERT(dst == (src));                                                                                 \
+        else                                                                                                           \
+            dst = (src);                                                                                               \
+    } while (0)
+
+        std::string tname = get_tile_name(tile);
+        std::string hname = get_half_name(half, tname.find("CLBLM") != std::string::npos);
+
+        auto lts = ctx->tileStatus[tile].lts;
+        if (lts == nullptr)
+            return;
+
+        for (int i = 0; i < 4; i++) {
+            CellInfo *ff1 = lts->cells[(half << 7) | (i << 4) | BEL_FF];
+            CellInfo *ff2 = lts->cells[(half << 7) | (i << 4) | BEL_FF2];
+            for (int j = 0; j < 2; j++) {
+                CellInfo *ff = (j == 1) ? ff2 : ff1;
+                if (ff == nullptr)
+                    continue;
+                std::string bname = get_bel_name(ff->bel);
+                bool zrst = false, zinit = false;
+                zinit = (int_or_default(ff->params, ctx->id("INIT"), 0) != 1);
+                IdString srsig;
+                if (ff->type == ctx->id("FDRE")) {
+                    zrst = true;
+                    srsig = ctx->id("R");
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, true);
+                } else if (ff->type == ctx->id("FDSE")) {
+                    zrst = false;
+                    srsig = ctx->id("S");
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, true);
+                } else if (ff->type == ctx->id("FDCE")) {
+                    zrst = true;
+                    srsig = ctx->id("CLR");
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, false);
+                } else if (ff->type == ctx->id("FDPE")) {
+                    zrst = false;
+                    srsig = ctx->id("PRE");
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, false);
+                } else {
+                    NPNR_ASSERT_FALSE("unsupported FF type");
+                }
+
+                if (zinit)
+                    out << tname << "." << hname << "." << bname << ".ZINIT" << std::endl;
+                if (zrst)
+                    out << tname << "." << hname << "." << bname << ".ZRST" << std::endl;
+
+                SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
+                SET_CHECK(is_srused, get_net_or_empty(ff, srsig) != nullptr);
+                SET_CHECK(is_ceused, get_net_or_empty(ff, ctx->id("E")) != nullptr);
+
+                // Input mux
+                write_routing_bel(tname + "." + hname, ctx->getBelPinWire(ff->bel, ctx->id("D")));
+
+                found_ff = true;
+            }
+        }
+        if (is_latch)
+            out << tname << "." << hname << ".LATCH";
+        if (is_sync)
+            out << tname << "." << hname << ".FFSYNC";
+        if (is_clkinv)
+            out << tname << "." << hname << ".CLKINV";
+        if (is_srused)
+            out << tname << "." << hname << ".SRUSED";
+        if (is_ceused)
+            out << tname << "." << hname << ".CEUSED";
+    }
 };
 } // namespace
 
