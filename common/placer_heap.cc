@@ -228,7 +228,8 @@ class HeAPPlacer
                 std::unordered_set<IdString> logic_types;
                 logic_types.insert(id_SLICE_LUTX);
                 logic_types.insert(id_SLICE_FFX);
-                logic_types.insert(id_CARRY8);
+                if (!ctx->xc7)
+                    logic_types.insert(id_CARRY8);
                 CutSpreader(this, logic_types).run();
 
                 for (auto type : sorted(run))
