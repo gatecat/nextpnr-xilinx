@@ -168,7 +168,7 @@ void XC7Packer::pack_io()
                 log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n", pad->name.c_str(ctx),
                           loc.c_str());
             log_info("    Constraining '%s' to site '%s'\n", pad->name.c_str(ctx), site.c_str());
-            pad->attrs[ctx->id("BEL")] = std::string(site + "/PAD");
+            pad->attrs[ctx->id("BEL")] = std::string(site + "/IOB33/PAD");
         }
         if (pad->attrs.count(ctx->id("BEL"))) {
             used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")).as_string())));
