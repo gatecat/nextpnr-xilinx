@@ -712,7 +712,7 @@ struct BaseCtx
     template <typename T> const char *nameOf(const T *obj) const
     {
         if (obj == nullptr)
-            return "";
+            return "<nullptr>";
         return obj->name.c_str(this);
     }
 

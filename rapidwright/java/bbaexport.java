@@ -238,7 +238,7 @@ public class bbaexport {
                             if (xc7_flag) {
                                 boolean is_upper_site = false;
                                 for (Site s2 : s.getTile().getSites()) {
-                                    if (s2.getInstanceY() < s.getInstanceY()) {
+                                    if (s2.getInstanceX() < s.getInstanceX()) {
                                         is_upper_site = true;
                                         break;
                                     }
@@ -504,7 +504,7 @@ public class bbaexport {
             if (xc7_flag) {
                 boolean is_upper_site = false;
                 for (Site s2 : t.getSites()) {
-                    if (s2.getInstanceY() < s.getInstanceY()) {
+                    if (s2.getInstanceX() < s.getInstanceX()) {
                         is_upper_site = true;
                         break;
                     }

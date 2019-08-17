@@ -36,7 +36,7 @@ inline NetInfo *port_or_nullptr(const CellInfo *cell, IdString name)
 
 //#define DEBUG_VALIDITY
 #ifdef DEBUG_VALIDITY
-#define DBG() log_info("invalid: %s %s %d\n", getCtx()->nameOfBel(bel), __FILE__, __LINE__)
+#define DBG() log_info("invalid: %s %d\n", __FILE__, __LINE__)
 #else
 #define DBG()
 #endif
@@ -403,6 +403,10 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                     if (x_net == nullptr)
                         x_net = ff2->ffInfo.d;
                     else if (x_net != ff2->ffInfo.d) {
+#ifdef DEBUG_VALIDITY
+                        log_info("%s %s %s %s %s\n", nameOf(lut6), nameOf(ff1), nameOf(lut5), nameOf(ff2),
+                                 nameOf(drv.cell));
+#endif
                         DBG();
                         return false;
                     }
@@ -507,7 +511,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
 bool Arch::isBelLocationValid(BelId bel) const
 {
     IdString belTileType = getBelTileType(bel);
-    if (belTileType == id_CLEL_L || belTileType == id_CLEL_R || belTileType == id_CLEM || belTileType == id_CLEM_R) {
+    if (isLogicTile(bel)) {
         // Logic Tile
         if (!tileStatus[bel.tile].lts)
             return true;
