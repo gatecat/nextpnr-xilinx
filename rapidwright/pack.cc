@@ -179,22 +179,22 @@ void XilinxPacker::pack_ffs()
 
     std::unordered_map<IdString, XFormRule> ff_rules;
     ff_rules[ctx->id("FDCE")].new_type = id_SLICE_FFX;
-    ff_rules[ctx->id("FDCE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDCE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDCE")].port_xform[ctx->id("CLR")] = id_SR;
     // ff_rules[ctx->id("FDCE")].param_xform[ctx->id("IS_CLR_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
     ff_rules[ctx->id("FDPE")].new_type = id_SLICE_FFX;
-    ff_rules[ctx->id("FDPE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDPE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDPE")].port_xform[ctx->id("PRE")] = id_SR;
     // ff_rules[ctx->id("FDPE")].param_xform[ctx->id("IS_PRE_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
     ff_rules[ctx->id("FDRE")].new_type = id_SLICE_FFX;
-    ff_rules[ctx->id("FDRE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDRE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDRE")].port_xform[ctx->id("R")] = id_SR;
     // ff_rules[ctx->id("FDRE")].param_xform[ctx->id("IS_R_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
     ff_rules[ctx->id("FDSE")].new_type = id_SLICE_FFX;
-    ff_rules[ctx->id("FDSE")].port_xform[ctx->id("C")] = id_CLK;
+    ff_rules[ctx->id("FDSE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDSE")].port_xform[ctx->id("S")] = id_SR;
     // ff_rules[ctx->id("FDSE")].param_xform[ctx->id("IS_S_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
@@ -544,7 +544,7 @@ void Arch::assignCellInfo(CellInfo *cell)
             cell->lutInfo.only_drives_carry = true;
     } else if (cell->type == id_SLICE_FFX) {
         cell->ffInfo.d = get_net_or_empty(cell, id_D);
-        cell->ffInfo.clk = get_net_or_empty(cell, id_CLK);
+        cell->ffInfo.clk = get_net_or_empty(cell, xc7 ? id_CK : id_CLK);
         cell->ffInfo.ce = get_net_or_empty(cell, id_CE);
         cell->ffInfo.sr = get_net_or_empty(cell, id_SR);
         cell->ffInfo.is_clkinv = bool_or_default(cell->params, id("IS_CLK_INVERTED"), false);

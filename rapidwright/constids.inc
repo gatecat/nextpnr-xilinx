@@ -39,6 +39,7 @@ X(O5)
 X(O6)
 
 X(CE)
+X(CK)
 X(D)
 X(SR)
 X(Q)

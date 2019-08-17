@@ -822,7 +822,7 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
         else if (port == id_O5 || port == id_O6)
             return TMG_COMB_OUTPUT;
     } else if (cell->type == id_SLICE_FFX) {
-        if (port == id_CLK)
+        if (port == (xc7 ? id_CK : id_CLK))
             return TMG_CLOCK_INPUT;
         else if (port == id_Q) {
             clockInfoCount = 1;
@@ -852,7 +852,7 @@ TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port
     info.setup = getDelayFromNS(0.1);
     info.hold = getDelayFromNS(0.1);
     info.clockToQ = getDelayFromNS(0.1);
-    info.clock_port = id_CLK;
+    info.clock_port = xc7 ? id_CK : id_CLK;
     info.edge = RISING_EDGE;
     return info;
 }
