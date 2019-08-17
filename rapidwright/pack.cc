@@ -475,22 +475,42 @@ void USPacker::pack_bram()
 
 bool Arch::pack()
 {
-    USPacker packer;
-    packer.ctx = getCtx();
-    packer.pack_constants();
-    packer.pack_io();
-    packer.prepare_iologic();
-    packer.prepare_clocking();
-    packer.pack_constants();
-    packer.pack_iologic();
-    packer.pack_idelayctrl();
-    packer.pack_clocking();
-    packer.pack_carries();
-    packer.pack_luts();
-    packer.pack_dram();
-    packer.pack_bram();
-    packer.pack_ffs();
-    packer.pack_lutffs();
+    if (xc7) {
+        XC7Packer packer;
+        packer.ctx = getCtx();
+        packer.pack_constants();
+        packer.pack_io();
+        // packer.prepare_iologic();
+        packer.prepare_clocking();
+        packer.pack_constants();
+        // packer.pack_iologic();
+        // packer.pack_idelayctrl();
+        packer.pack_clocking();
+        // packer.pack_carries();
+        packer.pack_luts();
+        // packer.pack_dram();
+        // packer.pack_bram();
+        packer.pack_ffs();
+        packer.pack_lutffs();
+    } else {
+        USPacker packer;
+        packer.ctx = getCtx();
+        packer.pack_constants();
+        packer.pack_io();
+        packer.prepare_iologic();
+        packer.prepare_clocking();
+        packer.pack_constants();
+        packer.pack_iologic();
+        packer.pack_idelayctrl();
+        packer.pack_clocking();
+        packer.pack_carries();
+        packer.pack_luts();
+        packer.pack_dram();
+        packer.pack_bram();
+        packer.pack_ffs();
+        packer.pack_lutffs();
+    }
+
     assignArchInfo();
     attrs[id("step")] = std::string("pack");
     archInfoToAttributes();

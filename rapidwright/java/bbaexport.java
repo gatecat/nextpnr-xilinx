@@ -152,7 +152,14 @@ public class bbaexport {
             int z = getBelZoverride(s.getTile(), s.getSite(), b);
             if (z == -1)
                 return null;
-            NextpnrBel nb = new NextpnrBel(b.getName(),
+
+            String name = b.getName();
+
+            if (s.getPrimarySiteTypeEnum() == SiteTypeEnum.IOB33M || s.getPrimarySiteTypeEnum() == SiteTypeEnum.IOB33S) {
+                name = s.getSiteTypeEnum().toString() + "/" + name;
+            }
+
+            NextpnrBel nb = new NextpnrBel(name,
                     bels.size(), getBelTypeOverride(b.getBELType()), b.getBELType(), s.getSite().getSiteIndexInTile(), siteVariant, z,
                     (b.getBELClass() == BELClass.RBEL) ? 1 : 0);
             bels.add(nb);
@@ -403,10 +410,12 @@ public class bbaexport {
             return "SLICE_FFX";
         if (type.equals("FF_INIT") || type.equals("REG_INIT"))
             return "SLICE_FFX";
-        String[] iobParts = {"_PAD_", "_PULL_", "_IBUFCTRL_", "_INBUF_", "_OUTBUF_"};
-        for (String p : iobParts) {
-            if (type.contains(p))
-                return "IOB_" + p.replace("_", "");
+        if (!xc7_flag) {
+            String[] iobParts = {"_PAD_", "_PULL_", "_IBUFCTRL_", "_INBUF_", "_OUTBUF_"};
+            for (String p : iobParts) {
+                if (type.contains(p))
+                    return "IOB_" + p.replace("_", "");
+            }
         }
 
         String[] iolParts = {"COMBUF_", "IDDR_", "IPFF_", "OPFF_", "OPTFF_", "TFF_"};

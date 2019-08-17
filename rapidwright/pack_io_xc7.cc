@@ -93,7 +93,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
             ibuf_type = ctx->id("IBUF_INTERMDISABLE");
 
         CellInfo *inbuf = insert_ibuf(int_name(xil_iob->name, "IBUF", is_se_iobuf), ibuf_type, pad_net, top_out);
-        inbuf->attrs[ctx->id("BEL")] = site + "/INBUF_EN";
+        inbuf->attrs[ctx->id("BEL")] = site + "/IOB33/INBUF_EN";
         replace_port(xil_iob, ctx->id("IBUFDISABLE"), inbuf, ctx->id("IBUFDISABLE"));
         replace_port(xil_iob, ctx->id("INTERMDISABLE"), inbuf, ctx->id("INTERMDISABLE"));
 
@@ -112,7 +112,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
                          !is_se_obuf),
                 is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
                 get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
-        obuf->attrs[ctx->id("BEL")] = site + "/OUTBUF";
+        obuf->attrs[ctx->id("BEL")] = site + "/IOB33/OUTBUF";
         replace_port(xil_iob, ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
         if (is_se_iobuf)
             subcells.push_back(obuf);
@@ -143,12 +143,77 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
 void XC7Packer::pack_io()
 {
+
+    log_info("Inserting IO buffers..\n");
+
+    get_top_level_pins(ctx, toplevel_ports);
+    // Insert PAD cells on top level IO, and IO buffers where one doesn't exist already
+    std::vector<std::pair<CellInfo *, PortRef>> pad_and_buf;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf") ||
+            ci->type == ctx->id("$nextpnr_obuf"))
+            pad_and_buf.push_back(insert_pad_and_buf(ci));
+    }
+    flush_cells();
+    std::unordered_set<BelId> used_io_bels;
+    int unconstr_io_count = 0;
+    for (auto &iob : pad_and_buf) {
+        CellInfo *pad = iob.first;
+        // Process location constraints
+        if (pad->attrs.count(ctx->id("LOC"))) {
+            std::string loc = pad->attrs.at(ctx->id("LOC")).as_string();
+            std::string site = ctx->getPackagePinSite(loc);
+            if (site.empty())
+                log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n", pad->name.c_str(ctx),
+                          loc.c_str());
+            log_info("    Constraining '%s' to site '%s'\n", pad->name.c_str(ctx), site.c_str());
+            pad->attrs[ctx->id("BEL")] = std::string(site + "/PAD");
+        }
+        if (pad->attrs.count(ctx->id("BEL"))) {
+            used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")).as_string())));
+        } else {
+            ++unconstr_io_count;
+        }
+    }
+    std::queue<BelId> available_io_bels;
+    IdString pad_id = ctx->id("IOB_PAD");
+    for (auto bel : ctx->getBels()) {
+        if (int(available_io_bels.size()) >= unconstr_io_count)
+            break;
+        if (ctx->getBelType(bel) != pad_id)
+            continue;
+        if (ctx->getBelPackagePin(bel) == ".")
+            continue;
+        if (used_io_bels.count(bel))
+            continue;
+        available_io_bels.push(bel);
+    }
+    // Constrain unconstrained IO
+    for (auto &iob : pad_and_buf) {
+        CellInfo *pad = iob.first;
+        if (!pad->attrs.count(ctx->id("BEL"))) {
+            pad->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(available_io_bels.front()));
+            available_io_bels.pop();
+        }
+    }
+    // Decompose macro IO primitives to smaller primitives that map logically to the actual IO Bels
+    for (auto &iob : pad_and_buf) {
+        if (packed_cells.count(iob.second.cell->name))
+            continue;
+        decompose_iob(iob.second.cell, true, str_or_default(iob.first->attrs, ctx->id("IOSTANDARD"), ""));
+        packed_cells.insert(iob.second.cell->name);
+    }
+    flush_cells();
+
     std::unordered_map<IdString, XFormRule> hrio_rules;
     hrio_rules[ctx->id("PAD")].new_type = ctx->id("PAD");
-    hrio_rules[ctx->id("OUTBUF")].new_type = ctx->id("IOB33_OUTBUF");
-    hrio_rules[ctx->id("OUTBUF")].port_xform[ctx->id("I")] = ctx->id("IN");
-    hrio_rules[ctx->id("OUTBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
-    hrio_rules[ctx->id("OUTBUF")].port_xform[ctx->id("T")] = ctx->id("TRI");
+    hrio_rules[ctx->id("OBUF")].new_type = ctx->id("IOB33_OUTBUF");
+    hrio_rules[ctx->id("OBUF")].port_xform[ctx->id("I")] = ctx->id("IN");
+    hrio_rules[ctx->id("OBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
+    hrio_rules[ctx->id("OBUF")].port_xform[ctx->id("T")] = ctx->id("TRI");
+    hrio_rules[ctx->id("OBUFT")] = hrio_rules[ctx->id("OBUF")];
+
     hrio_rules[ctx->id("IBUF")].new_type = ctx->id("IOB33_INBUF_EN");
     hrio_rules[ctx->id("IBUF")].port_xform[ctx->id("I")] = ctx->id("PAD");
     hrio_rules[ctx->id("IBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
@@ -156,6 +221,8 @@ void XC7Packer::pack_io()
     hrio_rules[ctx->id("IBUF_IBUFDISABLE")] = hrio_rules[ctx->id("IBUF")];
     hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")] = hrio_rules[ctx->id("IBUF")];
     hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFF_IN");
+
+    generic_xform(hrio_rules, true);
 }
 
 NEXTPNR_NAMESPACE_END
