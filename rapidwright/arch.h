@@ -193,6 +193,7 @@ NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
     RelPtr<char> name;
     RelPtr<char> pin;
     int32_t site_x, site_y;
+    int32_t rel_x, rel_y;
     int32_t inter_x, inter_y;
 });
 
@@ -1415,6 +1416,17 @@ struct Arch : BaseCtx
                 wireTileType == id_CLEM_R || wireTileType == id_CLBLL_L || wireTileType == id_CLBLL_R ||
                 wireTileType == id_CLBLM_L || wireTileType == id_CLBLM_R);
     }
+
+    Loc getSiteLocInTile(BelId bel) const
+    {
+        Loc l;
+        auto &site = chip_info->tile_insts[bel.tile].site_insts[locInfo(bel).bel_data[bel.index].site];
+        l.x = site.rel_x;
+        l.y = site.rel_y;
+        l.z = locInfo(bel).bel_data[bel.index].site_variant;
+        return l;
+    }
+
     // -------------------------------------------------
     // Assign architecure-specific arguments to nets and cells, which must be
     // called between packing or further

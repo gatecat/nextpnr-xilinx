@@ -388,9 +388,59 @@ struct FasmBackend
         }
     }
 
+    void write_io_config(CellInfo *pad)
+    {
+        NetInfo *pad_net = get_net_or_empty(pad, ctx->id("PAD"));
+        NPNR_ASSERT(pad_net != nullptr);
+        std::string iostandard = str_or_default(pad->attrs, ctx->id("IOSTANDARD"), "LVCMOS33");
+        std::string pulltype = str_or_default(pad->attrs, ctx->id("PULLTYPE"), "NONE");
+        std::string slew = str_or_default(pad->attrs, ctx->id("SLEW"), "SLOW");
+
+        Loc ioLoc = ctx->getSiteLocInTile(pad->bel);
+        bool is_output = false, is_input = false;
+        if (pad_net->driver.cell != nullptr)
+            is_output = true;
+        for (auto &usr : pad_net->users)
+            if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
+                is_input = true;
+        push(get_tile_name(pad->bel.tile));
+        push("IOB_Y" + std::to_string(ioLoc.y));
+        if (is_output) {
+            if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
+                write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+
+            if (slew == "SLOW")
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.SLEW.SLOW");
+            else if (iostandard == "SSTL135")
+                write_bit("SSTL135.SLEW.FAST");
+            else
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
+        }
+        if (is_input) {
+            if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
+                write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+            if (!is_output)
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
+        }
+        write_bit("PULLTYPE." + pulltype);
+        pop(2);
+    }
+
+    void write_io()
+    {
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == ctx->id("PAD")) {
+                write_io_config(ci);
+                out << std::endl;
+            }
+        }
+    }
+
     void write_fasm()
     {
         write_logic();
+        write_io();
         write_routing();
     }
 };

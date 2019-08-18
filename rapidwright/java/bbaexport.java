@@ -387,6 +387,7 @@ public class bbaexport {
         public String name;
         public String packagePin;
         public int site_x, site_y;
+        public int rel_x, rel_y;
         public int inter_x, inter_y;
     }
     static class NextpnrTileInst {
@@ -657,6 +658,19 @@ public class bbaexport {
                 nti.type = tileTypeIndices.get(t.getTileTypeEnum());
                 nti.index = tileInsts.size();
                 nti.sites = new ArrayList<>();
+
+                HashMap<String, Integer> site_offset_x = new HashMap<>(), site_offset_y = new HashMap<>();
+
+                for (Site s : t.getSites()) {
+                    String type = s.getSiteTypeEnum().toString();
+                    site_offset_x.putIfAbsent(type, s.getInstanceX());
+                    site_offset_y.putIfAbsent(type, s.getInstanceY());
+                    if (site_offset_x.get(type) > s.getInstanceX())
+                        site_offset_x.put(type, s.getInstanceX());
+                    if (site_offset_y.get(type) > s.getInstanceY())
+                        site_offset_y.put(type, s.getInstanceY());
+                }
+
                 for (Site s : t.getSites()) {
                     NextpnrSiteInst nsi = new NextpnrSiteInst();
                     nsi.name = s.getName();
@@ -666,7 +680,8 @@ public class bbaexport {
                         nsi.packagePin = "."; // fixme: empty strings in bba
                     nsi.site_x = s.getInstanceX();
                     nsi.site_y = s.getInstanceY();
-
+                    nsi.rel_x = s.getInstanceX() - site_offset_x.get(s.getSiteTypeEnum().toString());
+                    nsi.rel_y = s.getInstanceY() - site_offset_y.get(s.getSiteTypeEnum().toString());
                     Tile intert = null;
                     try {
                         intert = s.getIntTile();
@@ -909,6 +924,8 @@ public class bbaexport {
                 bba.printf("str |%s|\n", si.packagePin);
                 bba.printf("u32 %d\n", si.site_x); //X nominal coordinate
                 bba.printf("u32 %d\n", si.site_y); //Y nominal coordinate
+                bba.printf("u32 %d\n", si.rel_x); //X nominal coordinate inside tile
+                bba.printf("u32 %d\n", si.rel_y); //Y nominal coordinate inside tile
                 bba.printf("u32 %d\n", si.inter_x); //X intercon tile coordinate
                 bba.printf("u32 %d\n", si.inter_y); //Y intercon coordinate
             }
