@@ -1427,6 +1427,15 @@ struct Arch : BaseCtx
         return l;
     }
 
+    std::vector<std::pair<std::string, std::string>> getTilesAndTypes() const
+    {
+        std::vector<std::pair<std::string, std::string>> tt;
+        for (int i = 0; i < chip_info->num_tiles; i++)
+            tt.emplace_back(chip_info->tile_insts[i].name.get(),
+                            IdString(chip_info->tile_types[chip_info->tile_insts[i].type].type).str(this));
+        return tt;
+    }
+
     // -------------------------------------------------
     // Assign architecure-specific arguments to nets and cells, which must be
     // called between packing or further

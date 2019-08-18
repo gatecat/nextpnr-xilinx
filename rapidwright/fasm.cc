@@ -31,6 +31,7 @@ struct FasmBackend
     Context *ctx;
     std::ostream &out;
     std::vector<std::string> fasm_ctx;
+    std::unordered_map<int, std::vector<PipId>> pips_by_tile;
 
     FasmBackend(Context *ctx, std::ostream &out) : ctx(ctx), out(out){};
 
@@ -43,11 +44,19 @@ struct FasmBackend
         for (int i = 0; i < N; i++)
             fasm_ctx.pop_back();
     }
+    bool last_was_blank = true;
+    void blank()
+    {
+        if (!last_was_blank)
+            out << std::endl;
+        last_was_blank = true;
+    }
 
     void write_prefix()
     {
         for (auto &x : fasm_ctx)
             out << x << ".";
+        last_was_blank = false;
     }
 
     void write_bit(const std::string &name, bool value = true)
@@ -107,6 +116,8 @@ struct FasmBackend
 
     void write_pip(PipId pip, NetInfo *net)
     {
+        pips_by_tile[pip.tile].push_back(pip);
+
         auto src_intent = ctx->wireIntent(ctx->getPipSrcWire(pip));
         if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC)
             return;
@@ -124,10 +135,13 @@ struct FasmBackend
             auto &pp = pp_config.at(ppk);
             for (auto &c : pp)
                 out << get_tile_name(pip.tile) << "." << c << std::endl;
+            if (!pp.empty())
+                last_was_blank = false;
         } else {
             out << get_tile_name(pip.tile) << ".";
             out << IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx) << ".";
             out << IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx) << std::endl;
+            last_was_blank = false;
         }
     };
 
@@ -393,7 +407,7 @@ struct FasmBackend
             write_luts_config(tile, 1);
             write_ffs_config(tile, 0);
             write_ffs_config(tile, 1);
-            out << std::endl;
+            blank();
         }
     }
 
@@ -406,7 +420,7 @@ struct FasmBackend
                 if (w.second.pip != PipId())
                     write_pip(w.second.pip, ni);
             }
-            out << std::endl;
+            blank();
         }
     }
 
@@ -454,8 +468,42 @@ struct FasmBackend
             CellInfo *ci = cell.second;
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
-                out << std::endl;
+                blank();
             }
+        }
+    }
+
+    std::vector<std::string> used_wires_starting_with(int tile, const std::string &prefix, bool is_source)
+    {
+        std::vector<std::string> wires;
+        if (!pips_by_tile.count(tile))
+            return wires;
+        for (auto pip : pips_by_tile[tile]) {
+            auto &pd = ctx->locInfo(pip).pip_data[pip.index];
+            int wire_index = is_source ? pd.src_index : pd.dst_index;
+            std::string wire = IdString(ctx->locInfo(pip).wire_data[wire_index].name).str(ctx);
+            if (boost::starts_with(wire, prefix))
+                wires.push_back(wire);
+        }
+        return wires;
+    }
+
+    void write_clocking()
+    {
+        auto tt = ctx->getTilesAndTypes();
+        std::string name, type;
+        for (int tile = 0; tile < int(tt.size()); tile++) {
+            std::tie(name, type) = tt.at(tile);
+            push(name);
+            if (type == "HCLK_L" || type == "HCLK_R") {
+                auto used_sources = used_wires_starting_with(tile, "HCLK_CK_", true);
+                push("ENABLE_BUFFER");
+                for (auto s : used_sources)
+                    write_bit(s);
+                pop();
+            }
+            pop();
+            blank();
         }
     }
 
@@ -464,6 +512,7 @@ struct FasmBackend
         write_logic();
         write_io();
         write_routing();
+        write_clocking();
     }
 };
 
