@@ -67,6 +67,44 @@ struct FasmBackend
         out << std::endl;
     }
 
+    struct PseudoPipKey
+    {
+        IdString tileType;
+        IdString dest;
+        IdString source;
+        struct Hash
+        {
+            size_t operator()(const PseudoPipKey &key) const noexcept
+            {
+                std::size_t seed = 0;
+                boost::hash_combine(seed, std::hash<IdString>()(key.tileType));
+                boost::hash_combine(seed, std::hash<IdString>()(key.source));
+                boost::hash_combine(seed, std::hash<IdString>()(key.dest));
+                return seed;
+            }
+        };
+
+        bool operator==(const PseudoPipKey &b) const
+        {
+            return std::tie(this->tileType, this->dest, this->source) == std::tie(b.tileType, b.dest, b.source);
+        }
+    };
+
+    std::unordered_map<PseudoPipKey, std::vector<std::string>, PseudoPipKey::Hash> pp_config;
+    void get_pseudo_pip_data()
+    {
+        for (std::string s : {"L", "R"})
+            for (std::string i : {"0", "1"}) {
+                pp_config[{ctx->id(s + "IOI3"), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
+                           ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
+                        "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
+                        "OLOGIC_Y" + i + ".OSERDESE.DATA_RATE_TQ.BUF"};
+                pp_config[{ctx->id(s + "IOI3"), ctx->id("IOI_ILOGIC" + i + "_O"),
+                           ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
+                                                                     "ILOGIC_Y" + i + ".ZINV_D"};
+            }
+    }
+
     void write_pip(PipId pip, NetInfo *net)
     {
         auto src_intent = ctx->wireIntent(ctx->getPipSrcWire(pip));
@@ -76,9 +114,21 @@ struct FasmBackend
         auto &pd = ctx->locInfo(pip).pip_data[pip.index];
         if (pd.flags != PIP_TILE_ROUTING)
             return;
-        out << get_tile_name(pip.tile) << ".";
-        out << IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx) << ".";
-        out << IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx) << std::endl;
+
+        IdString src = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name);
+        IdString dst = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name);
+
+        PseudoPipKey ppk{IdString(ctx->locInfo(pip).type), dst, src};
+
+        if (pp_config.count(ppk)) {
+            auto &pp = pp_config.at(ppk);
+            for (auto &c : pp)
+                out << get_tile_name(pip.tile) << "." << c << std::endl;
+        } else {
+            out << get_tile_name(pip.tile) << ".";
+            out << IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx) << ".";
+            out << IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx) << std::endl;
+        }
     };
 
     // Get the set of input signals for a LUT-type cell
@@ -327,6 +377,7 @@ struct FasmBackend
 
     void write_routing()
     {
+        get_pseudo_pip_data();
         for (auto net : sorted(ctx->nets)) {
             NetInfo *ni = net.second;
             for (auto &w : ni->wires) {
