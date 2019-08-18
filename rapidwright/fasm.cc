@@ -305,22 +305,18 @@ struct FasmBackend
                 std::string type = str_or_default(ff->attrs, ctx->id("X_ORIG_TYPE"), "");
                 if (type == "FDRE") {
                     zrst = true;
-                    srsig = ctx->id("R");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDSE") {
                     zrst = false;
-                    srsig = ctx->id("S");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDCE") {
                     zrst = true;
-                    srsig = ctx->id("CLR");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else if (type == "FDPE") {
                     zrst = false;
-                    srsig = ctx->id("PRE");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else {
@@ -332,8 +328,11 @@ struct FasmBackend
 
                 pop();
                 SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
-                SET_CHECK(is_srused, get_net_or_empty(ff, srsig) != nullptr);
-                SET_CHECK(is_ceused, get_net_or_empty(ff, ctx->id("E")) != nullptr);
+
+                NetInfo *sr = get_net_or_empty(ff, ctx->id("SR")), *ce = get_net_or_empty(ff, ctx->id("CE"));
+
+                SET_CHECK(is_srused, sr != nullptr && sr->name != ctx->id("$PACKER_GND_NET"));
+                SET_CHECK(is_ceused, ce != nullptr && ce->name != ctx->id("$PACKER_VCC_NET"));
 
                 // Input mux
                 write_routing_bel(ctx->getBelPinWire(ff->bel, ctx->id("D")));
@@ -344,8 +343,8 @@ struct FasmBackend
         write_bit("LATCH", is_latch);
         write_bit("FFSYNC", is_sync);
         write_bit("CLKINV", is_clkinv);
-        write_bit("SRUSED", is_srused);
-        write_bit("CEUSED", is_ceused);
+        write_bit("SRUSEDMUX", is_srused);
+        write_bit("CEUSEDMUX", is_ceused);
         pop(2);
     }
 
