@@ -306,6 +306,24 @@ struct FasmBackend
         pop(2);
     }
 
+    // Get a named wire in the same site as a bel
+    WireId get_site_wire(BelId site_bel, std::string name)
+    {
+        WireId ret;
+        auto &l = ctx->locInfo(site_bel);
+        auto &bd = l.bel_data[site_bel.index];
+        IdString name_id = ctx->id(name);
+        for (int i = 0; i < l.num_wires; i++) {
+            auto &wd = l.wire_data[i];
+            if (wd.site == bd.site && wd.name == name_id.index) {
+                ret.tile = site_bel.tile;
+                ret.index = i;
+                break;
+            }
+        }
+        return ret;
+    }
+
     // Process LUTs and associated functionality in a half
     void write_luts_config(int tile, int half)
     {
@@ -318,6 +336,9 @@ struct FasmBackend
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
             return;
+
+        BelId bel_in_half =
+                ctx->getBelByLocation(Loc(tile % ctx->chip_info->width, tile / ctx->chip_info->width, half << 6));
 
         for (int i = 0; i < 4; i++) {
             CellInfo *lut6 = lts->cells[(half << 6) | (i << 4) | BEL_6LUT];
@@ -353,6 +374,7 @@ struct FasmBackend
             write_bit("RAM", is_ram);
             write_bit("SRL", is_srl);
             pop();
+            write_routing_bel(get_site_wire(bel_in_half, std::string("") + ("ABCD"[i]) + std::string("MUX")));
         }
         write_bit("WA7USED", wa7_used);
         write_bit("WA8USED", wa8_used);
