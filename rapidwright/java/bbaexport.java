@@ -363,6 +363,8 @@ public class bbaexport {
                     continue; // these route through pips seem to cause antenna issues
                 if (p.isRouteThru() && isxc7Logic)
                     continue; // fixme
+                if (xc7_flag && p.isRouteThru() && p.getEndWireName().contains("TFB"))
+                    continue;
                 NextpnrPip np = addPIP(p, false);
                 if (p.isRouteThru() && isLogic) {
                     np.type = NextpnrPipType.LUT_ROUTETHRU;
