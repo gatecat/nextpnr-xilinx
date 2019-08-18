@@ -19,6 +19,8 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+#include <fstream>
+#include "log.h"
 #include "nextpnr.h"
 #include "util.h"
 
@@ -29,6 +31,8 @@ struct FasmBackend
     Context *ctx;
     std::ostream &out;
     std::vector<std::string> fasm_ctx;
+
+    FasmBackend(Context *ctx, std::ostream &out) : ctx(ctx), out(out){};
 
     void push(const std::string &x) { fasm_ctx.push_back(x); }
 
@@ -63,10 +67,18 @@ struct FasmBackend
         out << std::endl;
     }
 
-    std::unordered_map<std::string, std::pair<std::string, std::string>> used_sitepips;
+    void write_pip(PipId pip, NetInfo *net)
+    {
+        auto src_intent = ctx->wireIntent(ctx->getPipSrcWire(pip));
+        if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC)
+            return;
 
-    void write_pip(PipId pip, NetInfo *net){
-
+        auto &pd = ctx->locInfo(pip).pip_data[pip.index];
+        if (pd.flags != PIP_TILE_ROUTING)
+            return;
+        out << get_tile_name(pip.tile) << ".";
+        out << IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx) << ".";
+        out << IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx) << std::endl;
     };
 
     // Get the set of input signals for a LUT-type cell
@@ -187,8 +199,8 @@ struct FasmBackend
             return;
 
         for (int i = 0; i < 4; i++) {
-            CellInfo *ff1 = lts->cells[(half << 7) | (i << 4) | BEL_FF];
-            CellInfo *ff2 = lts->cells[(half << 7) | (i << 4) | BEL_FF2];
+            CellInfo *ff1 = lts->cells[(half << 6) | (i << 4) | BEL_FF];
+            CellInfo *ff2 = lts->cells[(half << 6) | (i << 4) | BEL_FF2];
             for (int j = 0; j < 2; j++) {
                 CellInfo *ff = (j == 1) ? ff2 : ff1;
                 if (ff == nullptr)
@@ -197,22 +209,23 @@ struct FasmBackend
                 bool zrst = false, zinit = false;
                 zinit = (int_or_default(ff->params, ctx->id("INIT"), 0) != 1);
                 IdString srsig;
-                if (ff->type == ctx->id("FDRE")) {
+                std::string type = str_or_default(ff->attrs, ctx->id("X_ORIG_TYPE"), "");
+                if (type == "FDRE") {
                     zrst = true;
                     srsig = ctx->id("R");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
-                } else if (ff->type == ctx->id("FDSE")) {
+                } else if (type == "FDSE") {
                     zrst = false;
                     srsig = ctx->id("S");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
-                } else if (ff->type == ctx->id("FDCE")) {
+                } else if (type == "FDCE") {
                     zrst = true;
                     srsig = ctx->id("CLR");
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
-                } else if (ff->type == ctx->id("FDPE")) {
+                } else if (type == "FDPE") {
                     zrst = false;
                     srsig = ctx->id("PRE");
                     SET_CHECK(is_latch, false);
@@ -221,7 +234,7 @@ struct FasmBackend
                     NPNR_ASSERT_FALSE("unsupported FF type");
                 }
 
-                write_bit("ZINIT", zinit);
+                write_bit("ZINI", zinit);
                 write_bit("ZRST", zrst);
 
                 pop();
@@ -257,19 +270,21 @@ struct FasmBackend
             return;
 
         for (int i = 0; i < 4; i++) {
-            std::string lutname = std::string("") + ("ABCD"[i]) + std::string("LUT");
-            push(lutname);
-            CellInfo *lut6 = lts->cells[(half << 7) | (i << 4) | BEL_6LUT];
-            CellInfo *lut5 = lts->cells[(half << 7) | (i << 4) | BEL_5LUT];
+            CellInfo *lut6 = lts->cells[(half << 6) | (i << 4) | BEL_6LUT];
+            CellInfo *lut5 = lts->cells[(half << 6) | (i << 4) | BEL_5LUT];
             if (lut6 == nullptr && lut5 == nullptr)
                 continue;
+            std::string lutname = std::string("") + ("ABCD"[i]) + std::string("LUT");
+            push(lutname);
             // Write LUT initialisation
-            write_vector("INIT", get_lut_init(lut6, lut5));
+            write_vector("INIT[63:0]", get_lut_init(lut6, lut5));
 
             // Write LUT mode config
             bool is_small = false, is_ram = false, is_srl = false;
             for (int j = 0; j < 2; j++) {
                 CellInfo *lut = (j == 1) ? lut5 : lut6;
+                if (lut == nullptr)
+                    continue;
                 if (lut->type == ctx->id("RAMD64E") || lut->type == ctx->id("RAMS64E")) {
                     is_ram = true;
                 } else if (lut->type == ctx->id("RAMD32E") || lut->type == ctx->id("RAMS32E")) {
@@ -293,7 +308,52 @@ struct FasmBackend
         write_bit("WA8USED", wa8_used);
         pop(2);
     }
+
+    void write_logic()
+    {
+        std::set<int> used_logic_tiles;
+        for (auto &cell : ctx->cells) {
+            if (ctx->isLogicTile(cell.second->bel))
+                used_logic_tiles.insert(cell.second->bel.tile);
+        }
+        for (int tile : used_logic_tiles) {
+            write_luts_config(tile, 0);
+            write_luts_config(tile, 1);
+            write_ffs_config(tile, 0);
+            write_ffs_config(tile, 1);
+            out << std::endl;
+        }
+    }
+
+    void write_routing()
+    {
+        for (auto net : sorted(ctx->nets)) {
+            NetInfo *ni = net.second;
+            for (auto &w : ni->wires) {
+                if (w.second.pip != PipId())
+                    write_pip(w.second.pip, ni);
+            }
+            out << std::endl;
+        }
+    }
+
+    void write_fasm()
+    {
+        write_logic();
+        write_routing();
+    }
 };
+
 } // namespace
+
+void Arch::writeFasm(const std::string &filename)
+{
+    std::ofstream out(filename);
+    if (!out)
+        log_error("failed to open file %s for writing (%s)\n", filename.c_str(), strerror(errno));
+
+    FasmBackend be(getCtx(), out);
+    be.write_fasm();
+}
 
 NEXTPNR_NAMESPACE_END

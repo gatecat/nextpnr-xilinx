@@ -1454,6 +1454,8 @@ struct Arch : BaseCtx
     {
         return chip_info->tile_types[chip_info->tile_insts[id.tile].type];
     }
+    // -------------------------------------------------
+    void writeFasm(const std::string &filename);
 };
 
 void ice40DelayFuzzerMain(Context *ctx);

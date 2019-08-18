@@ -49,11 +49,14 @@ po::options_description UspCommandHandler::getArchOptions()
     po::options_description specific("Architecture specific options");
     specific.add_options()("chipdb", po::value<std::string>(), "name of chip database binary");
     specific.add_options()("xdc", po::value<std::vector<std::string>>(), "XDC-style constraints file");
+    specific.add_options()("fasm", po::value<std::string>(), "fasm bitstream file to write");
+
     return specific;
 }
 
 void UspCommandHandler::customBitstream(Context *ctx)
 {
+#if 0
     if (ctx->debug) {
         std::ofstream out("delays.csv");
 
@@ -81,6 +84,12 @@ void UspCommandHandler::customBitstream(Context *ctx)
                     << ", " << ctx->getDelayNS(ctx->getNetinfoRouteDelay(ni, usr)) << std::endl;
             }
         }
+    }
+#endif
+
+    if (vm.count("fasm")) {
+        std::string filename = vm["fasm"].as<std::string>();
+        ctx->writeFasm(filename);
     }
 }
 
