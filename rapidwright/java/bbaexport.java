@@ -663,6 +663,8 @@ public class bbaexport {
 
                 for (Site s : t.getSites()) {
                     String type = s.getSiteTypeEnum().toString();
+                    if (type.startsWith("IOB33"))
+                        type = "IOB33";
                     site_offset_x.putIfAbsent(type, s.getInstanceX());
                     site_offset_y.putIfAbsent(type, s.getInstanceY());
                     if (site_offset_x.get(type) > s.getInstanceX())
@@ -680,8 +682,11 @@ public class bbaexport {
                         nsi.packagePin = "."; // fixme: empty strings in bba
                     nsi.site_x = s.getInstanceX();
                     nsi.site_y = s.getInstanceY();
-                    nsi.rel_x = s.getInstanceX() - site_offset_x.get(s.getSiteTypeEnum().toString());
-                    nsi.rel_y = s.getInstanceY() - site_offset_y.get(s.getSiteTypeEnum().toString());
+                    String type = s.getSiteTypeEnum().toString();
+                    if (type.startsWith("IOB33"))
+                        type = "IOB33";
+                    nsi.rel_x = s.getInstanceX() - site_offset_x.get(type);
+                    nsi.rel_y = s.getInstanceY() - site_offset_y.get(type);
                     Tile intert = null;
                     try {
                         intert = s.getIntTile();

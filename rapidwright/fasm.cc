@@ -404,7 +404,7 @@ struct FasmBackend
             if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
                 is_input = true;
         push(get_tile_name(pad->bel.tile));
-        push("IOB_Y" + std::to_string(ioLoc.y));
+        push("IOB_Y" + std::to_string(1 - ioLoc.y));
         if (is_output) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
                 write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
