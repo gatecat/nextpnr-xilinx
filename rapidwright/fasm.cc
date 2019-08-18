@@ -102,6 +102,10 @@ struct FasmBackend
     std::unordered_map<PseudoPipKey, std::vector<std::string>, PseudoPipKey::Hash> pp_config;
     void get_pseudo_pip_data()
     {
+        /*
+         * Create the mapping from pseudo pip tile type, source wire, and dest wire, to
+         * the config bits set when that pseudo pip is used
+         */
         for (std::string s : {"L", "R"})
             for (std::string i : {"0", "1"}) {
                 pp_config[{ctx->id(s + "IOI3"), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
@@ -112,6 +116,31 @@ struct FasmBackend
                            ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
                                                                      "ILOGIC_Y" + i + ".ZINV_D"};
             }
+
+        for (std::string s1 : {"TOP", "BOT"}) {
+            for (std::string s2 : {"L", "R"}) {
+                for (int i = 0; i < 8; i++) {
+                    std::string ii = std::to_string(i);
+                    std::string hck = s2 + ii;
+                    std::string buf = std::string((s2 == "R") ? "X1Y" : "X0Y") + ii;
+                    pp_config[{ctx->id("CLK_HROW_" + s1 + "_R"), ctx->id("CLK_HROW_CK_HCLK_OUT_" + hck),
+                               ctx->id("CLK_HROW_CK_MUX_OUT_" + hck)}] = {"BUFHCE.BUFHCE_" + buf + ".IN_USE",
+                                                                          "BUFHCE.BUFHCE_" + buf + ".ZINV_CE"};
+                }
+            }
+
+            for (int i = 0; i < 16; i++) {
+                std::string ii = std::to_string(i);
+                pp_config[{ctx->id("CLK_BUFG_" + s1 + "_R"), ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_O"),
+                           ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_I0")}] = {
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IN_USE", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IS_IGNORE1_INVERTED",
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE0", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S0"};
+                pp_config[{ctx->id("CLK_BUFG_" + s1 + "_R"), ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_O"),
+                           ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_I1")}] = {
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IN_USE", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IS_IGNORE0_INVERTED",
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE1", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S1"};
+            }
+        }
     }
 
     void write_pip(PipId pip, NetInfo *net)
@@ -492,6 +521,9 @@ struct FasmBackend
     {
         auto tt = ctx->getTilesAndTypes();
         std::string name, type;
+
+        std::set<std::string> all_gclk;
+
         for (int tile = 0; tile < int(tt.size()); tile++) {
             std::tie(name, type) = tt.at(tile);
             push(name);
@@ -501,6 +533,21 @@ struct FasmBackend
                 for (auto s : used_sources)
                     write_bit(s);
                 pop();
+            } else if (boost::starts_with(type, "CLK_HROW")) {
+                auto used_gclk = used_wires_starting_with(tile, "CLK_HROW_R_CK_GCLK", true);
+                auto used_ck_in = used_wires_starting_with(tile, "CLK_HROW_CK_IN", true);
+                for (auto s : used_gclk) {
+                    write_bit(s + "_ACTIVE");
+                    all_gclk.insert(s.substr(s.find("GCLK")));
+                }
+                for (auto s : used_ck_in)
+                    write_bit(s + "_ACTIVE");
+            } else if (boost::starts_with(type, "HCLK_CMT")) {
+                auto used_ccio = used_wires_starting_with(tile, "HCLK_CMT_CCIO", true);
+                for (auto s : used_ccio) {
+                    write_bit(s + "_ACTIVE");
+                    write_bit(s + "_USED");
+                }
             }
             pop();
             blank();
