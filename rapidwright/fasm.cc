@@ -107,15 +107,16 @@ struct FasmBackend
          * the config bits set when that pseudo pip is used
          */
         for (std::string s : {"L", "R"})
-            for (std::string i : {"0", "1"}) {
-                pp_config[{ctx->id(s + "IOI3"), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
-                           ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
-                        "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
-                        "OLOGIC_Y" + i + ".OSERDESE.DATA_RATE_TQ.BUF"};
-                pp_config[{ctx->id(s + "IOI3"), ctx->id("IOI_ILOGIC" + i + "_O"),
-                           ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
-                                                                     "ILOGIC_Y" + i + ".ZINV_D"};
-            }
+            for (std::string s2 : {"", "_TBYTESRC", "_TBYTETERM"})
+                for (std::string i : {"0", "1"}) {
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
+                               ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
+                            "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
+                            "OLOGIC_Y" + i + ".OSERDESE.DATA_RATE_TQ.BUF"};
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
+                               ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
+                                                                         "ILOGIC_Y" + i + ".ZINV_D"};
+                }
 
         for (std::string s1 : {"TOP", "BOT"}) {
             for (std::string s2 : {"L", "R"}) {
