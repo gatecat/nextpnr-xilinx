@@ -194,6 +194,10 @@ public class bbaexport {
         private NextpnrPip addSitePIP(SiteInst s, int siteVariant, SitePIP sp) {
             if (sp.getBEL().getBELType().contains("LUT"))
                 return null; // Ignore LUT route-through pips for now
+            if ((sp.getBELName().equals("ADI1MUX") && sp.getInputPinName().equals("BDI1")) ||
+                (sp.getBELName().equals("BDI1MUX") && sp.getInputPinName().equals("DI")) ||
+                (sp.getBELName().equals("CDI1MUX") && sp.getInputPinName().equals("DI")))
+                return null;
             NextpnrPip np = new NextpnrPip(pips.size(), siteWireToWire(s.getSite(), sp.getInputPin().getSiteWireName()),
                     siteWireToWire(s.getSite(), sp.getOutputPin().getSiteWireName()), 0, NextpnrPipType.SITE_INTERNAL);
             wires.get(np.from).pips_dh.add(np.index);

@@ -488,7 +488,7 @@ bool Arch::pack()
         packer.pack_clocking();
         // packer.pack_carries();
         packer.pack_luts();
-        // packer.pack_dram();
+        packer.pack_dram();
         // packer.pack_bram();
         packer.pack_ffs();
         packer.pack_lutffs();

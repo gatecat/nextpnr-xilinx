@@ -107,8 +107,9 @@ struct FasmBackend
          * the config bits set when that pseudo pip is used
          */
         for (std::string s : {"L", "R"})
-            for (std::string s2 : {"", "_TBYTESRC", "_TBYTETERM"})
-                for (std::string i : {"0", "1"}) {
+            for (std::string s2 : {"", "_TBYTESRC", "_TBYTETERM", "_SING"})
+                for (std::string i :
+                     (s2 == "_SING") ? std::vector<std::string>{""} : std::vector<std::string>{"0", "1"}) {
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
                                ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
                             "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
@@ -197,6 +198,9 @@ struct FasmBackend
             return {ctx->id("I0"), ctx->id("I1"), ctx->id("I2"), ctx->id("I3"), ctx->id("I4")};
         else if (type == ctx->id("LUT6"))
             return {ctx->id("I0"), ctx->id("I1"), ctx->id("I2"), ctx->id("I3"), ctx->id("I4"), ctx->id("I5")};
+        else if (type == ctx->id("RAMD64E"))
+            return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"),
+                    ctx->id("RADR3"), ctx->id("RADR4"), ctx->id("RADR5")};
         else
             NPNR_ASSERT_FALSE("unsupported LUT-type cell");
     }
@@ -267,8 +271,19 @@ struct FasmBackend
         for (auto pip : ctx->getPipsUphill(dst_wire)) {
             if (ctx->getBoundPipNet(pip) != nullptr) {
                 auto &pd = ctx->locInfo(pip).pip_data[pip.index];
+                std::string belname = IdString(pd.bel).str(ctx);
+                std::string pinname = IdString(pd.extra_data).str(ctx);
+
+                // Ignore modes with no associated bit (X-ray omission??)
+                if (belname == "WEMUX" && pinname == "WE")
+                    continue;
+
+                if (belname.substr(1) == "DI1MUX") {
+                    belname = "DI1MUX";
+                }
+
                 write_prefix();
-                out << IdString(pd.bel).c_str(ctx) << "." << IdString(pd.extra_data).c_str(ctx);
+                out << belname << "." << pinname;
                 out << std::endl;
             }
         }
@@ -379,8 +394,10 @@ struct FasmBackend
         bool wa7_used = false, wa8_used = false;
 
         std::string tname = get_tile_name(tile);
+        bool is_mtile = tname.find("CLBLM") != std::string::npos;
+        bool is_slicem = is_mtile && (half == 0);
         push(tname);
-        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
+        push(get_half_name(half, is_mtile));
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
@@ -404,19 +421,24 @@ struct FasmBackend
                     CellInfo *lut = (j == 1) ? lut5 : lut6;
                     if (lut == nullptr)
                         continue;
-                    if (lut->type == ctx->id("RAMD64E") || lut->type == ctx->id("RAMS64E")) {
+                    std::string type = str_or_default(lut->attrs, ctx->id("X_ORIG_TYPE"));
+                    if (type == "RAMD64E" || type == "RAMS64E") {
                         is_ram = true;
-                    } else if (lut->type == ctx->id("RAMD32E") || lut->type == ctx->id("RAMS32E")) {
+                    } else if (type == "RAMD32E" || type == "RAMS32E") {
                         is_ram = true;
                         is_small = true;
-                    } else if (lut->type == ctx->id("SRL16E")) {
+                    } else if (type == "SRL16E") {
                         is_srl = true;
                         is_small = true;
-                    } else if (lut->type == ctx->id("SRLC32E")) {
+                    } else if (type == "SRLC32E") {
                         is_srl = true;
                     }
                     wa7_used |= (get_net_or_empty(lut, ctx->id("WA7")) != nullptr);
                     wa8_used |= (get_net_or_empty(lut, ctx->id("WA8")) != nullptr);
+                }
+                if (is_slicem && i != 3) {
+                    write_routing_bel(
+                            get_site_wire(bel_in_half, std::string("") + ("ABCD"[i]) + std::string("DI1MUX_OUT")));
                 }
                 write_bit("SMALL", is_small);
                 write_bit("RAM", is_ram);
@@ -427,6 +449,9 @@ struct FasmBackend
         }
         write_bit("WA7USED", wa7_used);
         write_bit("WA8USED", wa8_used);
+        if (is_slicem)
+            write_routing_bel(get_site_wire(bel_in_half, "WEMUX_OUT"));
+
         pop(2);
     }
 

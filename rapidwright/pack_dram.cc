@@ -157,10 +157,12 @@ void XilinxPacker::pack_dram()
         dram_groups[dcs].push_back(ci);
     }
 
+    int height = ctx->xc7 ? 4 : 8;
+
     for (auto &group : dram_groups) {
         auto &cs = group.first;
         if (cs.memtype == ctx->id("RAM64X1D")) {
-            int z = 7;
+            int z = height - 1;
             CellInfo *base = nullptr;
             for (auto cell : group.second) {
                 NPNR_ASSERT(cell->type == ctx->id("RAM64X1D")); // FIXME
@@ -171,8 +173,8 @@ void XilinxPacker::pack_dram()
                 if (get_net_or_empty(cell, ctx->id("DPO")) != nullptr)
                     z_size++;
 
-                if (z == 7 || (z - z_size + 1) < 0) {
-                    z = 7;
+                if (z == (height - 1) || (z - z_size + 1) < 0) {
+                    z = (height - 1);
                     // Topmost cell is the write address input
                     std::vector<NetInfo *> address(cs.wa.begin(), cs.wa.begin() + std::min<size_t>(cs.wa.size(), 6));
                     base = create_dram_lut(cell->name.str(ctx) + "/ADDR", nullptr, cs, address, nullptr, nullptr, z);
@@ -186,7 +188,7 @@ void XilinxPacker::pack_dram()
 
                 NetInfo *di = get_net_or_empty(cell, ctx->id("D"));
                 if (spo != nullptr) {
-                    if (z == 6) {
+                    if (z == (height - 2)) {
                         // Can fold DPO into address buffer
                         connect_port(ctx, spo, base, ctx->id("O"));
                         connect_port(ctx, di, base, ctx->id("I"));
@@ -215,7 +217,7 @@ void XilinxPacker::pack_dram()
                 packed_cells.insert(cell->name);
             }
         } else if (cs.memtype == ctx->id("RAM32X1D")) {
-            int z = 7;
+            int z = (height - 1);
             CellInfo *base = nullptr;
             for (auto cell : group.second) {
                 NPNR_ASSERT(cell->type == ctx->id("RAM32X1D"));
@@ -226,8 +228,8 @@ void XilinxPacker::pack_dram()
                 if (get_net_or_empty(cell, ctx->id("DPO")) != nullptr)
                     z_size++;
 
-                if (z == 7 || (z - z_size + 1) < 0) {
-                    z = 7;
+                if (z == (height - 1) || (z - z_size + 1) < 0) {
+                    z = (height - 1);
                     // Topmost cell is the write address input
                     std::vector<NetInfo *> address(cs.wa.begin(), cs.wa.begin() + std::min<size_t>(cs.wa.size(), 5));
                     address.push_back(ctx->nets[ctx->id("$PACKER_GND_NET")].get());
@@ -242,7 +244,7 @@ void XilinxPacker::pack_dram()
 
                 NetInfo *di = get_net_or_empty(cell, ctx->id("D"));
                 if (spo != nullptr) {
-                    if (z == 5) {
+                    if (z == (height - 2)) {
                         // Can fold DPO into address buffer
                         connect_port(ctx, spo, base, ctx->id("O"));
                         connect_port(ctx, di, base, ctx->id("I"));
