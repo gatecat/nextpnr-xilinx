@@ -148,8 +148,8 @@ struct FasmBackend
     {
         pips_by_tile[pip.tile].push_back(pip);
 
-        auto src_intent = ctx->wireIntent(ctx->getPipSrcWire(pip));
-        if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC)
+        auto dst_intent = ctx->wireIntent(ctx->getPipDstWire(pip));
+        if (dst_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
             return;
 
         auto &pd = ctx->locInfo(pip).pip_data[pip.index];
@@ -168,6 +168,12 @@ struct FasmBackend
             if (!pp.empty())
                 last_was_blank = false;
         } else {
+
+            if (pd.extra_data == 1)
+                log_warning("Unprocessed route-thru %s.%s.%s\n!", get_tile_name(pip.tile).c_str(),
+                            IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).c_str(ctx),
+                            IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).c_str(ctx));
+
             out << get_tile_name(pip.tile) << ".";
             out << IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx) << ".";
             out << IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx) << std::endl;

@@ -365,6 +365,8 @@ public class bbaexport {
                     continue; // fixme
                 if (xc7_flag && p.isRouteThru() && p.getEndWireName().contains("TFB"))
                     continue;
+                if (xc7_flag && p.getStartWireName().startsWith("CLK_BUFG_R_FBG_OUT"))
+                    continue;
                 NextpnrPip np = addPIP(p, false);
                 if (p.isRouteThru() && isLogic) {
                     np.type = NextpnrPipType.LUT_ROUTETHRU;
@@ -372,6 +374,8 @@ public class bbaexport {
                     String fromPin = p.getStartWireName(), toPin = p.getEndWireName();
                     fromPin = fromPin.substring(fromPin.length() - 2);
                     np.extra_data = ("ABCDEFGH".indexOf(fromPin.substring(0,1)) << 8) | ("123456".indexOf(fromPin.substring(1, 2)) << 4) | (toPin.endsWith("MUX") ? 1 : 0);
+                } else {
+                    np.extra_data = p.isRouteThru() ? 1 : 0;
                 }
                 if (p.isBidirectional())
                     addPIP(p, true);
