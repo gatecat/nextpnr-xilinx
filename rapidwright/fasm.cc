@@ -392,37 +392,37 @@ struct FasmBackend
         for (int i = 0; i < 4; i++) {
             CellInfo *lut6 = lts->cells[(half << 6) | (i << 4) | BEL_6LUT];
             CellInfo *lut5 = lts->cells[(half << 6) | (i << 4) | BEL_5LUT];
-            if (lut6 == nullptr && lut5 == nullptr)
-                continue;
-            std::string lutname = std::string("") + ("ABCD"[i]) + std::string("LUT");
-            push(lutname);
             // Write LUT initialisation
-            write_vector("INIT[63:0]", get_lut_init(lut6, lut5));
+            if (lut6 != nullptr || lut5 != nullptr) {
+                std::string lutname = std::string("") + ("ABCD"[i]) + std::string("LUT");
+                push(lutname);
+                write_vector("INIT[63:0]", get_lut_init(lut6, lut5));
 
-            // Write LUT mode config
-            bool is_small = false, is_ram = false, is_srl = false;
-            for (int j = 0; j < 2; j++) {
-                CellInfo *lut = (j == 1) ? lut5 : lut6;
-                if (lut == nullptr)
-                    continue;
-                if (lut->type == ctx->id("RAMD64E") || lut->type == ctx->id("RAMS64E")) {
-                    is_ram = true;
-                } else if (lut->type == ctx->id("RAMD32E") || lut->type == ctx->id("RAMS32E")) {
-                    is_ram = true;
-                    is_small = true;
-                } else if (lut->type == ctx->id("SRL16E")) {
-                    is_srl = true;
-                    is_small = true;
-                } else if (lut->type == ctx->id("SRLC32E")) {
-                    is_srl = true;
+                // Write LUT mode config
+                bool is_small = false, is_ram = false, is_srl = false;
+                for (int j = 0; j < 2; j++) {
+                    CellInfo *lut = (j == 1) ? lut5 : lut6;
+                    if (lut == nullptr)
+                        continue;
+                    if (lut->type == ctx->id("RAMD64E") || lut->type == ctx->id("RAMS64E")) {
+                        is_ram = true;
+                    } else if (lut->type == ctx->id("RAMD32E") || lut->type == ctx->id("RAMS32E")) {
+                        is_ram = true;
+                        is_small = true;
+                    } else if (lut->type == ctx->id("SRL16E")) {
+                        is_srl = true;
+                        is_small = true;
+                    } else if (lut->type == ctx->id("SRLC32E")) {
+                        is_srl = true;
+                    }
+                    wa7_used |= (get_net_or_empty(lut, ctx->id("WA7")) != nullptr);
+                    wa8_used |= (get_net_or_empty(lut, ctx->id("WA8")) != nullptr);
                 }
-                wa7_used |= (get_net_or_empty(lut, ctx->id("WA7")) != nullptr);
-                wa8_used |= (get_net_or_empty(lut, ctx->id("WA8")) != nullptr);
+                write_bit("SMALL", is_small);
+                write_bit("RAM", is_ram);
+                write_bit("SRL", is_srl);
+                pop();
             }
-            write_bit("SMALL", is_small);
-            write_bit("RAM", is_ram);
-            write_bit("SRL", is_srl);
-            pop();
             write_routing_bel(get_site_wire(bel_in_half, std::string("") + ("ABCD"[i]) + std::string("MUX")));
         }
         write_bit("WA7USED", wa7_used);
