@@ -120,7 +120,7 @@ struct FasmBackend
 
         for (std::string s1 : {"TOP", "BOT"}) {
             for (std::string s2 : {"L", "R"}) {
-                for (int i = 0; i < 8; i++) {
+                for (int i = 0; i < 12; i++) {
                     std::string ii = std::to_string(i);
                     std::string hck = s2 + ii;
                     std::string buf = std::string((s2 == "R") ? "X1Y" : "X0Y") + ii;
@@ -523,6 +523,26 @@ struct FasmBackend
         std::string name, type;
 
         std::set<std::string> all_gclk;
+        std::unordered_map<int, std::set<std::string>> hclk_by_row;
+
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == ctx->id("BUFGCTRL")) {
+                push(get_tile_name(ci->bel.tile));
+                auto xy = ctx->getSiteLocInTile(ci->bel);
+                push("BUFGCTRL.BUFGCTRL_X" + std::to_string(xy.x) + "Y" + std::to_string(xy.y));
+                write_bit("IN_USE");
+                write_bit("INIT_OUT", bool_or_default(ci->params, ctx->id("INIT_OUT")));
+                write_bit("IS_IGNORE0_INVERTED", bool_or_default(ci->params, ctx->id("IS_IGNORE0_INVERTED")));
+                write_bit("IS_IGNORE1_INVERTED", bool_or_default(ci->params, ctx->id("IS_IGNORE1_INVERTED")));
+                write_bit("ZINV_CE0", !bool_or_default(ci->params, ctx->id("IS_CE0_INVERTED")));
+                write_bit("ZINV_CE1", !bool_or_default(ci->params, ctx->id("IS_CE1_INVERTED")));
+                write_bit("ZINV_S0", !bool_or_default(ci->params, ctx->id("IS_S0_INVERTED")));
+                write_bit("ZINV_S1", !bool_or_default(ci->params, ctx->id("IS_S1_INVERTED")));
+                pop(2);
+            }
+            blank();
+        }
 
         for (int tile = 0; tile < int(tt.size()); tile++) {
             std::tie(name, type) = tt.at(tile);
@@ -530,8 +550,10 @@ struct FasmBackend
             if (type == "HCLK_L" || type == "HCLK_R") {
                 auto used_sources = used_wires_starting_with(tile, "HCLK_CK_", true);
                 push("ENABLE_BUFFER");
-                for (auto s : used_sources)
+                for (auto s : used_sources) {
                     write_bit(s);
+                    hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
+                }
                 pop();
             } else if (boost::starts_with(type, "CLK_HROW")) {
                 auto used_gclk = used_wires_starting_with(tile, "CLK_HROW_R_CK_GCLK", true);
@@ -547,6 +569,23 @@ struct FasmBackend
                 for (auto s : used_ccio) {
                     write_bit(s + "_ACTIVE");
                     write_bit(s + "_USED");
+                }
+            }
+            pop();
+            blank();
+        }
+
+        for (int tile = 0; tile < int(tt.size()); tile++) {
+            std::tie(name, type) = tt.at(tile);
+            push(name);
+            if (type == "CLK_BUFG_REBUF") {
+                for (auto &gclk : all_gclk) {
+                    write_bit(gclk + "_ENABLE_ABOVE");
+                    write_bit(gclk + "_ENABLE_BELOW");
+                }
+            } else if (boost::starts_with(type, "HCLK_CMT")) {
+                for (auto &hclk : hclk_by_row[tile / ctx->chip_info->width]) {
+                    write_bit("HCLK_CMT_CK_" + hclk + "_USED");
                 }
             }
             pop();
