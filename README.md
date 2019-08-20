@@ -15,7 +15,7 @@ Currently two flows are supported:
 
  - Follow the [RapidWright manual install instructions](https://www.rapidwright.io/docs/Manual_Install.html)
  - Make sure `$RAPIDWRIGHT_PATH` is set correctly for all further steps
- - Download a JAR of recent [GSON](https://repo1.maven.org/maven2/com/google/code/gson/gson/2.8.5/
+ - Download a JAR of recent [GSON](https://repo1.maven.org/maven2/com/google/code/gson/gson/2.8.5/)
  - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
  - Use [this branch](https://github.com/daveshah1/yosys/tree/nextpnr_rw_usp) of Yosys **FIXME: upstream Yosys is currently unsupported, even for xc7**
 
@@ -28,7 +28,11 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
  - Run `make` (with -jN as appropriate)
 
 ## Building the Arty example
- - FIXME
+ - Build the xc7a35t database using RapidWright:
+  - Make sure `RAPIDWRIGHT_PATH` is set
+  - Run `java -Xmx36G  -jar rapidwright_bbaexport.jar xc7a35tcsg324-1 ./rapidwright/constids.inc ./rapidwright/xc7a35t.bba`
+  - Run `./bbasm ./rapidwright/xc7a35t.bba rapidwright/xc7a35t.bin`
+ - Run `attosoc.sh` in `rapidwright/examples/arty-a35`.
 
 ## Creating chip database from RapidWright
 

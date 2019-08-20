@@ -198,6 +198,8 @@ public class bbaexport {
                 (sp.getBELName().equals("BDI1MUX") && sp.getInputPinName().equals("DI")) ||
                 (sp.getBELName().equals("CDI1MUX") && sp.getInputPinName().equals("DI")))
                 return null;
+            if (sp.getBELName().startsWith("TFBUSED"))
+                return null;
             NextpnrPip np = new NextpnrPip(pips.size(), siteWireToWire(s.getSite(), sp.getInputPin().getSiteWireName()),
                     siteWireToWire(s.getSite(), sp.getOutputPin().getSiteWireName()), 0, NextpnrPipType.SITE_INTERNAL);
             wires.get(np.from).pips_dh.add(np.index);
