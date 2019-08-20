@@ -181,6 +181,10 @@ struct USPacker : public XilinxPacker
 
 struct XC7Packer : public XilinxPacker
 {
+    // Carries
+    bool has_illegal_fanout(NetInfo *carry);
+    void pack_carries();
+
     // IO
     CellInfo *insert_ibuf(IdString name, IdString type, NetInfo *i, NetInfo *o);
     CellInfo *insert_diffibuf(IdString name, IdString type, const std::array<NetInfo *, 2> &i, NetInfo *o);

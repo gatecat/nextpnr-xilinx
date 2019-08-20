@@ -486,7 +486,7 @@ bool Arch::pack()
         // packer.pack_iologic();
         // packer.pack_idelayctrl();
         packer.pack_clocking();
-        // packer.pack_carries();
+        packer.pack_carries();
         packer.pack_luts();
         packer.pack_dram();
         // packer.pack_bram();
@@ -538,10 +538,18 @@ void Arch::assignCellInfo(CellInfo *cell)
         cell->lutInfo.is_srl = cell->attrs.count(id("X_LUT_AS_SRL"));
         cell->lutInfo.is_memory = cell->attrs.count(id("X_LUT_AS_DRAM"));
         cell->lutInfo.only_drives_carry = false;
-        if (cell->constr_parent != nullptr && cell->lutInfo.output_sigs[0] != nullptr &&
-            cell->lutInfo.output_sigs[0]->users.size() == 1 &&
-            cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
-            cell->lutInfo.only_drives_carry = true;
+        if (xc7) {
+            if (cell->constr_parent != nullptr && cell->lutInfo.output_sigs[0] != nullptr &&
+                cell->lutInfo.output_sigs[0]->users.size() == 1 &&
+                cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY4)
+                cell->lutInfo.only_drives_carry = true;
+        } else {
+            if (cell->constr_parent != nullptr && cell->lutInfo.output_sigs[0] != nullptr &&
+                cell->lutInfo.output_sigs[0]->users.size() == 1 &&
+                cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
+                cell->lutInfo.only_drives_carry = true;
+        }
+
     } else if (cell->type == id_SLICE_FFX) {
         cell->ffInfo.d = get_net_or_empty(cell, id_D);
         cell->ffInfo.clk = get_net_or_empty(cell, xc7 ? id_CK : id_CLK);
@@ -562,6 +570,13 @@ void Arch::assignCellInfo(CellInfo *cell)
             cell->carryInfo.cout_sigs[i] = get_net_or_empty(cell, id("CO" + std::to_string(i)));
             cell->carryInfo.x_sigs[i] = get_net_or_empty(cell, id(std::string(1, 'A' + i) + "X"));
         }
+    } else if (cell->type == id_CARRY4) {
+        for (int i = 0; i < 4; i++) {
+            cell->carryInfo.out_sigs[i] = get_net_or_empty(cell, id("O" + std::to_string(i)));
+            cell->carryInfo.cout_sigs[i] = get_net_or_empty(cell, id("CO" + std::to_string(i)));
+            cell->carryInfo.x_sigs[i] = nullptr;
+        }
+        cell->carryInfo.x_sigs[0] = get_net_or_empty(cell, id("CYINIT"));
     }
 }
 

@@ -708,6 +708,10 @@ struct Arch : BaseCtx
             for (int i = 0; i < 8; i++)
                 ts.eights[i].dirty = true;
             break;
+        case BEL_CARRY4:
+            for (int i = ((z >> 4) / 4) * 4; i < (((z >> 4) / 4) + 1) * 4; i++)
+                ts.eights[i].dirty = true;
+            break;
         }
     }
 

@@ -273,7 +273,7 @@ struct FasmBackend
                 auto &pd = ctx->locInfo(pip).pip_data[pip.index];
                 std::string belname = IdString(pd.bel).str(ctx);
                 std::string pinname = IdString(pd.extra_data).str(ctx);
-
+                bool skip_pinname = false;
                 // Ignore modes with no associated bit (X-ray omission??)
                 if (belname == "WEMUX" && pinname == "WE")
                     continue;
@@ -282,8 +282,17 @@ struct FasmBackend
                     belname = "DI1MUX";
                 }
 
+                if (belname.substr(1) == "CY0") {
+                    if (pinname.substr(1) == "5")
+                        skip_pinname = true;
+                    else
+                        continue;
+                }
+
                 write_prefix();
-                out << belname << "." << pinname;
+                out << belname;
+                if (!skip_pinname)
+                    out << "." << pinname;
                 out << std::endl;
             }
         }
@@ -306,12 +315,13 @@ struct FasmBackend
             dst = (src);                                                                                               \
     } while (0)
         std::string tname = get_tile_name(tile);
-        push(tname);
-        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
             return;
+
+        push(tname);
+        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
 
         for (int i = 0; i < 4; i++) {
             CellInfo *ff1 = lts->cells[(half << 6) | (i << 4) | BEL_FF];
@@ -396,12 +406,13 @@ struct FasmBackend
         std::string tname = get_tile_name(tile);
         bool is_mtile = tname.find("CLBLM") != std::string::npos;
         bool is_slicem = is_mtile && (half == 0);
-        push(tname);
-        push(get_half_name(half, is_mtile));
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
             return;
+
+        push(tname);
+        push(get_half_name(half, is_mtile));
 
         BelId bel_in_half =
                 ctx->getBelByLocation(Loc(tile % ctx->chip_info->width, tile / ctx->chip_info->width, half << 6));
@@ -455,6 +466,31 @@ struct FasmBackend
         pop(2);
     }
 
+    void write_carry_config(int tile, int half)
+    {
+        std::string tname = get_tile_name(tile);
+        bool is_mtile = tname.find("CLBLM") != std::string::npos;
+
+        auto lts = ctx->tileStatus[tile].lts;
+        if (lts == nullptr)
+            return;
+
+        CellInfo *carry = lts->cells[half << 6 | BEL_CARRY4];
+        if (carry == nullptr)
+            return;
+
+        push(tname);
+        push(get_half_name(half, is_mtile));
+
+        write_routing_bel(get_site_wire(carry->bel, "PRECYINIT_OUT"));
+        if (get_net_or_empty(carry, ctx->id("CIN")) != nullptr)
+            write_bit("PRECYINIT.CIN");
+        push("CARRY4");
+        for (char c : {'A', 'B', 'C', 'D'})
+            write_routing_bel(get_site_wire(carry->bel, std::string("") + c + std::string("CY0_OUT")));
+        pop(3);
+    }
+
     void write_logic()
     {
         std::set<int> used_logic_tiles;
@@ -467,6 +503,8 @@ struct FasmBackend
             write_luts_config(tile, 1);
             write_ffs_config(tile, 0);
             write_ffs_config(tile, 1);
+            write_carry_config(tile, 0);
+            write_carry_config(tile, 1);
             blank();
         }
     }

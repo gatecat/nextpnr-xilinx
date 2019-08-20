@@ -373,7 +373,16 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             if (i == 2 || i == 6)
                 out_fmux = lts.cells[(i - 2) << 4 | BEL_F8MUX];
 
-            CellInfo *carry4 = lts.cells[BEL_CARRY4];
+            CellInfo *carry4 = lts.cells[((i / 4) << 6) | BEL_CARRY4];
+
+            if (carry4 != nullptr && carry4->carryInfo.x_sigs[i % 4] != nullptr) {
+                if (x_net == nullptr)
+                    x_net = carry4->carryInfo.x_sigs[i % 4];
+                else if (x_net != carry4->carryInfo.x_sigs[i % 4]) {
+                    DBG();
+                    return false;
+                }
+            }
 
             // FF1 might use X, if it isn't driven directly
             CellInfo *ff1 = lts.cells[i << 4 | BEL_FF];
@@ -428,7 +437,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                 mux_output_used = true;
             }
 
-            if (carry4 != nullptr && carry4->carryInfo.out_sigs[i] != nullptr) {
+            if (carry4 != nullptr && carry4->carryInfo.out_sigs[i % 4] != nullptr) {
                 // FIXME: direct connections to FF
                 if (mux_output_used) {
                     DBG();
