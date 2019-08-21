@@ -742,6 +742,11 @@ struct FasmBackend
                 if (mode != "WRITE_FIRST")
                     write_bit(std::string(wrmode) + "_" + mode);
             }
+            write_vector("ZINIT_A[17:0]", std::vector<bool>(18, true));
+            write_vector("ZINIT_B[17:0]", std::vector<bool>(18, true));
+            write_vector("ZSRVAL_A[17:0]", std::vector<bool>(18, true));
+            write_vector("ZSRVAL_B[17:0]", std::vector<bool>(18, true));
+
             write_bram_init(half, ci, is_36);
         }
         pop();
