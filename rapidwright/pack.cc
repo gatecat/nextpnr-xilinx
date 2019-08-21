@@ -612,6 +612,32 @@ void XC7Packer::pack_bram()
                 }
                 connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, p);
             }
+            if (int_or_default(ci->params, ctx->id("WRITE_WIDTH_A"), 0) == 1) {
+                disconnect_port(ctx, ci, ctx->id("DIADI1"));
+                connect_port(ctx, get_net_or_empty(ci, ctx->id("DIADI0")), ci, ctx->id("DIADI1"));
+                ci->attrs[ctx->id("X_ORIG_PORT_DIADI1")] = std::string("DIADI[0]");
+                disconnect_port(ctx, ci, ctx->id("DIPADIP0"));
+                disconnect_port(ctx, ci, ctx->id("DIPADIP1"));
+            }
+            if (int_or_default(ci->params, ctx->id("WRITE_WIDTH_B"), 0) == 1) {
+                disconnect_port(ctx, ci, ctx->id("DIBDI1"));
+                connect_port(ctx, get_net_or_empty(ci, ctx->id("DIBDI0")), ci, ctx->id("DIBDI1"));
+                ci->attrs[ctx->id("X_ORIG_PORT_DIBDI1")] = std::string("DIBDI[0]");
+                disconnect_port(ctx, ci, ctx->id("DIPBDIP0"));
+                disconnect_port(ctx, ci, ctx->id("DIPBDIP1"));
+            }
+            if (int_or_default(ci->params, ctx->id("WRITE_WIDTH_B"), 0) != 72) {
+                for (std::string s : {"L", "U"}) {
+                    for (int i = 4; i < 8; i++) {
+                        IdString port = ctx->id("WEBWE" + s + std::to_string(i));
+                        if (!ci->ports.count(port)) {
+                            ci->ports[port].name = port;
+                            ci->ports[port].type = PORT_IN;
+                            connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                        }
+                    }
+                }
+            }
         }
     }
 }
