@@ -493,6 +493,8 @@ void XC7Packer::pack_bram()
         for (auto &bp : ul.second)
             bram_rules[ctx->id("RAMB36E1")].port_multixform[ul.first].push_back(ctx->id(bp));
     }
+    bram_rules[ctx->id("RAMB36E1")].port_multixform[ctx->id("ADDRARDADDR[15]")].push_back(ctx->id("ADDRARDADDRL15"));
+    bram_rules[ctx->id("RAMB36E1")].port_multixform[ctx->id("ADDRBWRADDR[15]")].push_back(ctx->id("ADDRBWRADDRL15"));
 
     // Special rules for SDP rules, relating to WE connectivity
     std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
@@ -599,6 +601,16 @@ void XC7Packer::pack_bram()
                     ci->ports[port].type = PORT_IN;
                     connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
                 }
+            }
+        } else if (ci->type == id_RAMB36E1_RAMB36E1) {
+            for (auto p : {ctx->id("ADDRARDADDRL15"), ctx->id("ADDRBWRADDRL15")}) {
+                if (!ci->ports.count(p)) {
+                    ci->ports[p].name = p;
+                    ci->ports[p].type = PORT_IN;
+                } else {
+                    disconnect_port(ctx, ci, p);
+                }
+                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, p);
             }
         }
     }
