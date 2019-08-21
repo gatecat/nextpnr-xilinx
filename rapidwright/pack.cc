@@ -473,6 +473,137 @@ void USPacker::pack_bram()
     }
 }
 
+void XC7Packer::pack_bram()
+{
+    log_info("Packing BRAM..\n");
+
+    // Rules for normal TDP BRAM
+    std::unordered_map<IdString, XFormRule> bram_rules;
+    bram_rules[ctx->id("RAMB18E1")].new_type = id_RAMB18E1_RAMB18E1;
+    bram_rules[ctx->id("RAMB18E1")].port_multixform[ctx->id(std::string("WEA[0]"))] = {ctx->id("WEA0"),
+                                                                                       ctx->id("WEA1")};
+    bram_rules[ctx->id("RAMB18E1")].port_multixform[ctx->id(std::string("WEA[1]"))] = {ctx->id("WEA2"),
+                                                                                       ctx->id("WEA3")};
+    bram_rules[ctx->id("RAMB36E1")].new_type = id_RAMB36E1_RAMB36E1;
+
+    // Some ports have upper/lower bel pins in 36-bit mode
+    std::vector<std::pair<IdString, std::vector<std::string>>> ul_pins;
+    get_bram36_ul_pins(ctx, ul_pins);
+    for (auto &ul : ul_pins) {
+        for (auto &bp : ul.second)
+            bram_rules[ctx->id("RAMB36E1")].port_multixform[ul.first].push_back(ctx->id(bp));
+    }
+
+    // Special rules for SDP rules, relating to WE connectivity
+    std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
+    for (int i = 0; i < 2; i++) {
+        // Connects to two WEBWE bel pins
+        sdp_bram_rules[ctx->id("RAMB18E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWE" + std::to_string(i * 2)));
+        sdp_bram_rules[ctx->id("RAMB18E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWE" + std::to_string(i * 2 + 1)));
+        // Not used in SDP mode
+        sdp_bram_rules[ctx->id("RAMB18E1")]
+                .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
+    }
+    for (int i = 0; i < 2; i++) {
+        // Connects to two WEA bel pins
+        sdp_bram_rules[ctx->id("RAMB18E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
+                .push_back(ctx->id("WEA" + std::to_string(i * 2)));
+        sdp_bram_rules[ctx->id("RAMB18E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
+                .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
+    }
+
+    for (int i = 0; i < 4; i++) {
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .clear();
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                .clear();
+        // Connects to two WEBWE bel pins
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWEL" + std::to_string(i)));
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
+                .push_back(ctx->id("WEBWEU" + std::to_string(i)));
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                .push_back(ctx->id("WEAL" + std::to_string(i)));
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
+                .push_back(ctx->id("WEAU" + std::to_string(i)));
+        // Not used in SDP mode
+        sdp_bram_rules[ctx->id("RAMB36E1")]
+                .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
+    }
+
+    // 72-bit BRAMs: drop upper bits of WEB in TDP mode
+    for (int i = 4; i < 8; i++)
+        bram_rules[ctx->id("RAMB36E1")].port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))] = {};
+
+    // Process SDP BRAM first
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if ((ci->type == ctx->id("RAMB18E1") &&
+             int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36) ||
+            (ci->type == ctx->id("RAMB36E1") &&
+             int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 72))
+            xform_cell(sdp_bram_rules, ci);
+    }
+
+    // Rewrite byte enables according to data width
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("RAMB18E1") || ci->type == ctx->id("RAMB36E1")) {
+            for (char port : {'A', 'B'}) {
+                int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
+                int we_width;
+                if (ci->type == ctx->id("RAMB36E1"))
+                    we_width = 4;
+                else
+                    we_width = (port == 'B') ? 4 : 2;
+                if (write_width >= (9 * we_width))
+                    continue;
+                int used_we_width = std::max(write_width / 9, 1);
+                for (int i = used_we_width; i < we_width; i++) {
+                    NetInfo *low_we = get_net_or_empty(ci, ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
+                                                                   std::to_string(i % used_we_width) + "]"));
+                    IdString curr_we = ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") + std::to_string(i) + "]");
+                    if (!ci->ports.count(curr_we)) {
+                        ci->ports[curr_we].type = PORT_IN;
+                        ci->ports[curr_we].name = curr_we;
+                    }
+                    disconnect_port(ctx, ci, curr_we);
+                    connect_port(ctx, low_we, ci, curr_we);
+                }
+            }
+        }
+    }
+
+    generic_xform(bram_rules, false);
+
+    // These pins have no logical mapping, so must be tied after transformation
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == id_RAMB18E1_RAMB18E1) {
+            for (int i = 2; i < 4; i++) {
+                IdString port = ctx->id("WEA" + std::to_string(i));
+                if (!ci->ports.count(port)) {
+                    ci->ports[port].name = port;
+                    ci->ports[port].type = PORT_IN;
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
+                }
+            }
+        }
+    }
+}
+
 bool Arch::pack()
 {
     if (xc7) {
@@ -489,7 +620,7 @@ bool Arch::pack()
         packer.pack_carries();
         packer.pack_luts();
         packer.pack_dram();
-        // packer.pack_bram();
+        packer.pack_bram();
         packer.pack_ffs();
         packer.pack_lutffs();
     } else {

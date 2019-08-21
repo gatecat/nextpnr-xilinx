@@ -22,6 +22,7 @@
 #include <fstream>
 #include "log.h"
 #include "nextpnr.h"
+#include "pins.h"
 #include "util.h"
 
 NEXTPNR_NAMESPACE_BEGIN
@@ -32,6 +33,8 @@ struct FasmBackend
     std::ostream &out;
     std::vector<std::string> fasm_ctx;
     std::unordered_map<int, std::vector<PipId>> pips_by_tile;
+
+    std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
 
     FasmBackend(Context *ctx, std::ostream &out) : ctx(ctx), out(out){};
 
@@ -67,12 +70,12 @@ struct FasmBackend
         }
     }
 
-    void write_vector(const std::string &name, const std::vector<bool> &value)
+    void write_vector(const std::string &name, const std::vector<bool> &value, bool invert = false)
     {
         write_prefix();
         out << name << " = " << int(value.size()) << "'b";
         for (auto bit : boost::adaptors::reverse(value))
-            out << (bit ? '1' : '0');
+            out << ((bit ^ invert) ? '1' : '0');
         out << std::endl;
     }
 
@@ -662,11 +665,89 @@ struct FasmBackend
         }
     }
 
+    void write_bram_width(CellInfo *ci, const std::string &name, bool is_36)
+    {
+        int width = int_or_default(ci->params, ctx->id(name), 0);
+        if (width == 0)
+            return;
+        int actual_width = width;
+        if (is_36) {
+            if (width == 1)
+                actual_width = 1;
+            else
+                actual_width = width / 2;
+        }
+        if (actual_width == 36) {
+            write_bit("SDP_" + name.substr(0, name.length() - 2) + "_36");
+        } else {
+            write_bit(name + "_" + std::to_string(actual_width));
+        }
+    }
+
+    void write_bram_half(int tile, int half, CellInfo *ci)
+    {
+        push(get_tile_name(tile));
+        push("RAMB18_Y" + std::to_string(half));
+        if (ci != nullptr) {
+            bool is_36 = ci->type == id_RAMB36E1_RAMB36E1;
+            write_bit("IN_USE");
+            write_bram_width(ci, "READ_WIDTH_A", is_36);
+            write_bram_width(ci, "READ_WIDTH_B", is_36);
+            write_bram_width(ci, "WRITE_WIDTH_A", is_36);
+            write_bram_width(ci, "WRITE_WIDTH_B", is_36);
+            write_bit("DOA_REG", bool_or_default(ci->params, ctx->id("DOA_REG"), false));
+            write_bit("DOB_REG", bool_or_default(ci->params, ctx->id("DOB_REG"), false));
+            for (auto &invpin : invertible_pins[ctx->id(ci->attrs[ctx->id("X_ORIG_TYPE")].as_string())])
+                write_bit("ZINV_" + invpin.str(ctx),
+                          !bool_or_default(ci->params, ctx->id("IS_" + invpin.str(ctx) + "_INVERTED"), false));
+            for (auto wrmode : {"WRITE_MODE_A", "WRITE_MODE_B"}) {
+                std::string mode = str_or_default(ci->params, ctx->id(wrmode), "WRITE_FIRST");
+                if (mode != "WRITE_FIRST")
+                    write_bit(std::string(wrmode) + "_" + mode);
+            }
+        }
+        pop();
+        if (half == 0) {
+            auto used_rdaddrcasc = used_wires_starting_with(tile, "BRAM_CASCOUT_ADDRARDADDR", false);
+            auto used_wraddrcasc = used_wires_starting_with(tile, "BRAM_CASCOUT_ADDRBWRADDR", false);
+            write_bit("CASCOUT_ARD_ACTIVE", !used_rdaddrcasc.empty());
+            write_bit("CASCOUT_BWR_ACTIVE", !used_wraddrcasc.empty());
+        }
+        pop();
+    }
+
+    void write_bram()
+    {
+        auto tt = ctx->getTilesAndTypes();
+        std::string name, type;
+        for (int tile = 0; tile < int(tt.size()); tile++) {
+            std::tie(name, type) = tt.at(tile);
+            if (type == "BRAM_L" || type == "BRAM_R") {
+                CellInfo *l = nullptr, *u = nullptr;
+                auto bts = ctx->tileStatus[tile].bts;
+                if (bts != nullptr) {
+                    if (bts->cells[BEL_RAM36] != nullptr) {
+                        l = bts->cells[BEL_RAM36];
+                        u = bts->cells[BEL_RAM36];
+                    } else {
+                        l = bts->cells[BEL_RAM18_L];
+                        u = bts->cells[BEL_RAM18_U];
+                    }
+                }
+                write_bram_half(tile, 0, l);
+                write_bram_half(tile, 1, u);
+                blank();
+            }
+        }
+    }
+
     void write_fasm()
     {
+        get_invertible_pins(ctx, invertible_pins);
         write_logic();
         write_io();
         write_routing();
+        write_bram();
         write_clocking();
     }
 };

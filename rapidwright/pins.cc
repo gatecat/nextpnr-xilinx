@@ -409,6 +409,30 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         }
     }
 
+    for (IdString ram : {ctx->id("RAMB18E1"), ctx->id("RAMB36E1")}) {
+        // based on UG573 p37
+
+        int wea_width = (ram == ctx->id("RAMB18E1") ? 2 : 4);
+        int web_width = 4;
+
+        for (int i = 0; i < wea_width; i++)
+            tied_pins[ram][ctx->id(std::string("WEA[") + std::to_string(i) + "]")] = true;
+        for (int i = 0; i < web_width; i++)
+            tied_pins[ram][ctx->id(std::string("WEBWE[") + std::to_string(i) + "]")] = true;
+
+        tied_pins[ram][ctx->id("CLKARDCLK")] = false;
+        tied_pins[ram][ctx->id("CLKBWRCLK")] = false;
+        tied_pins[ram][ctx->id("ENARDEN")] = false;
+        tied_pins[ram][ctx->id("ENBWREN")] = false;
+        tied_pins[ram][ctx->id("REGCEAREGCE")] = true;
+        tied_pins[ram][ctx->id("REGCEB")] = true;
+
+        tied_pins[ram][ctx->id("RSTRAMARSTRAM")] = false;
+        tied_pins[ram][ctx->id("RSTRAMB")] = false;
+        tied_pins[ram][ctx->id("RSTREGARSTREG")] = false;
+        tied_pins[ram][ctx->id("RSTREGB")] = false;
+    }
+
     // BUFGCTRL (by experiment)
     for (int i = 0; i < 2; i++) {
         tied_pins[ctx->id("BUFGCTRL")][ctx->id("S" + std::to_string(i))] = false;

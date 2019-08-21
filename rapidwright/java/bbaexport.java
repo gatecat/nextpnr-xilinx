@@ -493,11 +493,8 @@ public class bbaexport {
             }
         } else if (t.getTileTypeEnum() == TileTypeEnum.BRAM_L || t.getTileTypeEnum() == TileTypeEnum.BRAM_R) {
             boolean is_top18 = false;
-            if (s.getSiteTypeEnum() == SiteTypeEnum.FIFO18E1 || s.getSiteTypeEnum() == SiteTypeEnum.FIFO36E1) {
-                for (Site s2 : t.getSites()) {
-                    if ((s2.getSiteTypeEnum() == SiteTypeEnum.FIFO18E1 || s2.getSiteTypeEnum() == SiteTypeEnum.FIFO36E1) && (s2.getInstanceY() < s.getInstanceY()))
-                        is_top18 = true;
-                }
+            if (s.getSiteTypeEnum() == SiteTypeEnum.RAMB18E1) {
+                is_top18 = true;
             }
             switch(b.getBELType()) {
                 case "RAMBFIFO36E1_RAMBFIFO36E1":
