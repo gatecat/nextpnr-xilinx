@@ -684,6 +684,43 @@ struct FasmBackend
         }
     }
 
+    void write_bram_init(int half, CellInfo *ci, bool is_36)
+    {
+        for (std::string mode : {"", "P"}) {
+            for (int i = 0; i < (mode == "P" ? 8 : 64); i++) {
+                bool has_init = false;
+                std::vector<bool> init_data(256, false);
+                if (is_36) {
+                    for (int j = 0; j < 2; j++) {
+                        IdString param = ctx->id(stringf("INIT%s_%02X", mode.c_str(), i * 2 + j));
+                        if (ci->params.count(param)) {
+                            auto &init0 = ci->params.at(param);
+                            has_init = true;
+                            for (int k = half; k < 256; k += 2) {
+                                if (k >= int(init0.str.size()))
+                                    break;
+                                init_data[j * 128 + (k / 2)] = init0.str[k] == Property::S1;
+                            }
+                        }
+                    }
+                } else {
+                    IdString param = ctx->id(stringf("INIT%s_%02X", mode.c_str(), i));
+                    if (ci->params.count(param)) {
+                        auto &init = ci->params.at(param);
+                        has_init = true;
+                        for (int k = 0; k < 256; k++) {
+                            if (k >= int(init.str.size()))
+                                break;
+                            init_data[k] = init.str[k] == Property::S1;
+                        }
+                    }
+                }
+                if (has_init)
+                    write_vector(stringf("INIT%s_%02X[255:0]", mode.c_str(), i), init_data);
+            }
+        }
+    }
+
     void write_bram_half(int tile, int half, CellInfo *ci)
     {
         push(get_tile_name(tile));
@@ -705,6 +742,7 @@ struct FasmBackend
                 if (mode != "WRITE_FIRST")
                     write_bit(std::string(wrmode) + "_" + mode);
             }
+            write_bram_init(half, ci, is_36);
         }
         pop();
         if (half == 0) {
