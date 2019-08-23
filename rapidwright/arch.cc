@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 #include <cmath>
 #include <cstring>
@@ -83,6 +84,9 @@ Arch::Arch(ArchArgs args) : args(args)
         tileStatus[i].boundcells.resize(chip_info->tile_types[chip_info->tile_insts[i].type].num_bels);
         tileStatus[i].sitevariant.resize(chip_info->tile_insts[i].num_sites);
     }
+
+    if (xc7)
+        setup_pip_blacklist();
 }
 
 // -----------------------------------------------------------------------
@@ -224,6 +228,36 @@ IdString Arch::getPipName(PipId pip) const
         return id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
                   std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
                   std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
+    }
+}
+
+void Arch::setup_pip_blacklist()
+{
+    for (int i = 0; i < chip_info->num_tiletypes; i++) {
+        auto &td = chip_info->tile_types[i];
+        std::string type = IdString(td.type).str(this);
+        if (boost::starts_with(type, "HCLK_CMT")) {
+            for (int j = 0; j < td.num_pips; j++) {
+                auto &pd = td.pip_data[j];
+                std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
+                if (dest_name.find("FREQ_REF") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
+            }
+        } else if (boost::starts_with(type, "CMT_TOP_L_LOWER")) {
+            for (int j = 0; j < td.num_pips; j++) {
+                blacklist_pips[td.type].insert(j);
+            }
+        } else if (boost::starts_with(type, "HCLK_IOI3")) {
+            for (int j = 0; j < td.num_pips; j++) {
+                auto &pd = td.pip_data[j];
+                std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
+                std::string src_name = IdString(td.wire_data[pd.src_index].name).str(this);
+
+                if (dest_name.find("RCLK_BEFORE_DIV") != std::string::npos &&
+                    src_name.find("IMUX") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
+            }
+        }
     }
 }
 

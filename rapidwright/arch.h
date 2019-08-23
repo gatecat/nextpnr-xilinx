@@ -1028,8 +1028,13 @@ struct Arch : BaseCtx
         refreshUiWire(dst);
     }
 
+    std::unordered_map<int, std::unordered_set<int>> blacklist_pips;
+    void setup_pip_blacklist();
+
     bool usp_pip_hard_unavail(PipId pip) const
     {
+        if (blacklist_pips.count(locInfo(pip).type) && blacklist_pips.at(locInfo(pip).type).count(pip.index))
+            return true;
         if (locInfo(pip).pip_data[pip.index].flags == PIP_SITE_ENTRY) {
             WireId dst = getPipDstWire(pip);
             if (dst.tile != -1) {

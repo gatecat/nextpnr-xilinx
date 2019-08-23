@@ -163,6 +163,15 @@ struct FasmBackend
                        ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii)}] = {"BUFR_Y" + yy + ".IN_USE",
                                                                      "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"};
         }
+
+        // FIXME: shouldn't these be in the X-RAY ppips database?
+        for (std::string s : {"L", "R"}) {
+            for (int i = 0; i < 24; i++) {
+                std::string ii = std::to_string(i);
+                pp_config[{ctx->id("INT_INTERFACE_" + s), ctx->id("INT_INTERFACE_LOGIC_OUTS_" + s + ii),
+                           ctx->id("INT_INTERFACE_LOGIC_OUTS_" + s + "_B" + ii)}];
+            }
+        }
     }
 
     void write_pip(PipId pip, NetInfo *net)
@@ -879,11 +888,13 @@ struct FasmBackend
         push(get_tile_name(ci->bel.tile));
         push("PLLE2");
         write_bit("IN_USE");
-        write_bit("ZINV_PWRDWN", !bool_or_default(ci->params, ctx->id("IS_PWRDWN_INVERTED"), false));
-        write_bit("ZINV_RST", !bool_or_default(ci->params, ctx->id("IS_RST_INVERTED"), false));
+        // FIXME: should be INV not ZINV (XRay error?)
+        write_bit("ZINV_PWRDWN", bool_or_default(ci->params, ctx->id("IS_PWRDWN_INVERTED"), false));
+        write_bit("ZINV_RST", bool_or_default(ci->params, ctx->id("IS_RST_INVERTED"), false));
         write_bit("INV_CLKINSEL", bool_or_default(ci->params, ctx->id("IS_CLKINSEL_INVERTED"), false));
         write_pll_clkout("DIVCLK", ci);
-        write_pll_clkout("CLKOUTFB", ci);
+        write_pll_clkout("CLKFBOUT", ci);
+        write_pll_clkout("CLKOUT0", ci);
         write_pll_clkout("CLKOUT1", ci);
         write_pll_clkout("CLKOUT2", ci);
         write_pll_clkout("CLKOUT3", ci);
