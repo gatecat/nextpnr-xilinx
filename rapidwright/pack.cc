@@ -341,6 +341,21 @@ void XilinxPacker::rename_net(IdString old, IdString newname)
     ctx->nets[newname] = std::move(ni);
 }
 
+void XilinxPacker::tie_port(CellInfo *ci, const std::string &port, bool value, bool inv)
+{
+    IdString p = ctx->id(port);
+    if (!ci->ports.count(p)) {
+        ci->ports[p].name = p;
+        ci->ports[p].type = PORT_IN;
+    }
+    if (value || inv)
+        connect_port(ctx, ctx->nets.at(ctx->id("$PACKER_VCC_NET")).get(), ci, p);
+    else
+        connect_port(ctx, ctx->nets.at(ctx->id("$PACKER_GND_NET")).get(), ci, p);
+    if (!value && inv)
+        ci->params[ctx->id("IS_" + port + "_INVERTED")] = Property(1);
+}
+
 void USPacker::pack_bram()
 {
     log_info("Packing BRAM..\n");

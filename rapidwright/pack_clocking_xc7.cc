@@ -44,6 +44,20 @@ void XC7Packer::prepare_clocking()
         if (upgrade.count(ci->type)) {
             IdString new_type = upgrade.at(ci->type);
             ci->type = new_type;
+        } else if (ci->type == ctx->id("BUFG")) {
+            ci->type = ctx->id("BUFGCTRL");
+            rename_port(ctx, ci, ctx->id("I"), ctx->id("I0"));
+            tie_port(ci, "CE0", true, true);
+            tie_port(ci, "S0", true, true);
+            tie_port(ci, "S1", false, true);
+            tie_port(ci, "IGNORE0", true, true);
+        } else if (ci->type == ctx->id("BUFGCE")) {
+            ci->type = ctx->id("BUFGCTRL");
+            rename_port(ctx, ci, ctx->id("I"), ctx->id("I0"));
+            rename_port(ctx, ci, ctx->id("CE"), ctx->id("CE0"));
+            tie_port(ci, "S0", true, true);
+            tie_port(ci, "S1", false, true);
+            tie_port(ci, "IGNORE0", true, true);
         }
         if (ci->attrs.count(ctx->id("BEL")))
             used_bels.insert(ctx->getBelByName(ctx->id(ci->attrs.at(ctx->id("BEL")).as_string())));
@@ -60,8 +74,8 @@ void XC7Packer::pack_plls()
     };
 
     std::unordered_map<IdString, XFormRule> pll_rules;
-    pll_rules[ctx->id("MMCME4_ADV")].new_type = id_MMCM_MMCM_TOP;
-    pll_rules[ctx->id("PLLE4_ADV")].new_type = id_PLL_PLL_TOP;
+    pll_rules[ctx->id("MMCME2_ADV")].new_type = ctx->id("MMCME2_ADV_MMCME2_ADV");
+    pll_rules[ctx->id("PLLE2_ADV")].new_type = ctx->id("PLLE2_ADV_PLLE2_ADV");
     generic_xform(pll_rules);
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -95,7 +109,6 @@ void XC7Packer::pack_gbs()
     log_info("Packing global buffers...\n");
     std::unordered_map<IdString, XFormRule> gb_rules;
     gb_rules[id_BUFGCTRL].new_type = id_BUFGCTRL;
-    gb_rules[ctx->id("BUFG")].new_type = ctx->id("BUFG_BUFG");
     gb_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
 
     generic_xform(gb_rules);

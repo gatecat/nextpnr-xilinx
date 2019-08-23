@@ -79,6 +79,14 @@ struct FasmBackend
         out << std::endl;
     }
 
+    void write_int_vector(const std::string &name, uint64_t value, int width, bool invert = false)
+    {
+        std::vector<bool> bits(width, false);
+        for (int i = 0; i < width; i++)
+            bits[i] = (value & (1ULL << i)) != 0;
+        write_vector(name, bits, invert);
+    }
+
     struct PseudoPipKey
     {
         IdString tileType;
@@ -146,6 +154,15 @@ struct FasmBackend
                         "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE1", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S1"};
             }
         }
+
+        int rclk_y_to_i[4] = {2, 3, 0, 1};
+        for (int y = 0; y < 4; y++) {
+            std::string yy = std::to_string(y);
+            std::string ii = std::to_string(rclk_y_to_i[y]);
+            pp_config[{ctx->id("HCLK_IOI3"), ctx->id("HCLK_IOI_RCLK_OUT" + ii),
+                       ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii)}] = {"BUFR_Y" + yy + ".IN_USE",
+                                                                     "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"};
+        }
     }
 
     void write_pip(PipId pip, NetInfo *net)
@@ -178,9 +195,20 @@ struct FasmBackend
                             IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).c_str(ctx),
                             IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).c_str(ctx));
 
-            out << get_tile_name(pip.tile) << ".";
-            out << IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx) << ".";
-            out << IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx) << std::endl;
+            std::string tile_name = get_tile_name(pip.tile);
+            std::string dst_name = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx);
+            std::string src_name = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx);
+
+            if (boost::starts_with(tile_name, "CMT_TOP_R_UPPER") || boost::starts_with(tile_name, "CMT_TOP_L_UPPER")) {
+                if (!((boost::ends_with(dst_name, "PLLE2_CLKIN1") && boost::ends_with(src_name, "PLLE2_CLK_IN1_INT")) ||
+                      (boost::ends_with(dst_name, "PLLE2_CLKIN2") && boost::ends_with(src_name, "PLLE2_CLK_IN2_INT")) ||
+                      (boost::ends_with(dst_name, "PLLE2_CLKFBIN") && boost::ends_with(src_name, "PLLE2_CLK_FB_INT"))))
+                    return;
+            }
+
+            out << tile_name << ".";
+            out << dst_name << ".";
+            out << src_name << std::endl;
             last_was_blank = false;
         }
     };
@@ -612,6 +640,8 @@ struct FasmBackend
                 write_bit("ZINV_S0", !bool_or_default(ci->params, ctx->id("IS_S0_INVERTED")));
                 write_bit("ZINV_S1", !bool_or_default(ci->params, ctx->id("IS_S1_INVERTED")));
                 pop(2);
+            } else if (ci->type == ctx->id("PLLE2_ADV_PLLE2_ADV")) {
+                write_pll(ci);
             }
             blank();
         }
@@ -623,8 +653,10 @@ struct FasmBackend
                 auto used_sources = used_wires_starting_with(tile, "HCLK_CK_", true);
                 push("ENABLE_BUFFER");
                 for (auto s : used_sources) {
-                    write_bit(s);
-                    hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
+                    if (s.find("BUFHCLK") != std::string::npos) {
+                        write_bit(s);
+                        hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
+                    }
                 }
                 pop();
             } else if (boost::starts_with(type, "CLK_HROW")) {
@@ -782,6 +814,98 @@ struct FasmBackend
                 blank();
             }
         }
+    }
+
+    double float_or_default(CellInfo *ci, const std::string &name, double def)
+    {
+        IdString p = ctx->id(name);
+        if (!ci->params.count(p))
+            return def;
+        auto &prop = ci->params.at(p);
+        if (prop.is_string)
+            return std::stod(prop.as_string());
+        else
+            return prop.as_int64();
+    }
+
+    void write_pll_clkout(const std::string &name, CellInfo *ci)
+    {
+        // FIXME: variable duty cycle
+        int high = 1, low = 1, phasemux = 0, delaytime = 0, frac = 0;
+        bool no_count = false, edge = false;
+        double divide = float_or_default(ci, name + "_DIVIDE", 1);
+        double phase = float_or_default(ci, name + "_PHASE", 1);
+        if (divide <= 1) {
+            no_count = true;
+        } else {
+            high = floor(divide / 2);
+            low = int(floor(divide) - high);
+            if (high != low)
+                edge = true;
+            if (name == "CLKOUT1" || name == "CLKFBOUT")
+                frac = floor(divide * 8) - floor(divide) * 8;
+            int phase_eights = floor((phase / 360) * divide * 8);
+            phasemux = phase_eights % 8;
+            delaytime = phase_eights / 8;
+        }
+        bool used = false;
+        if (name == "DIVCLK" || name == "CLKFBOUT") {
+            used = true;
+        } else {
+            used = get_net_or_empty(ci, ctx->id(name)) != nullptr;
+        }
+        if (name == "DIVCLK") {
+            write_int_vector("DIVCLK_DIVCLK_HIGH_TIME[5:0]", high, 6);
+            write_int_vector("DIVCLK_DIVCLK_LOW_TIME[5:0]", low, 6);
+            write_bit("DIVCLK_DIVCLK_EDGE[0]", edge);
+            write_bit("DIVCLK_DIVCLK_NO_COUNT[0]", no_count);
+        } else if (used) {
+            write_bit(name + "_CLKOUT1_OUTPUT_ENABLE[0]");
+            write_int_vector(name + "_CLKOUT1_HIGH_TIME[5:0]", high, 6);
+            write_int_vector(name + "_CLKOUT1_LOW_TIME[5:0]", low, 6);
+            write_int_vector(name + "_CLKOUT1_PHASE_MUX[2:0]", phasemux, 3);
+            write_bit(name + "_CLKOUT2_EDGE[0]", edge);
+            write_bit(name + "_CLKOUT2_NO_COUNT[0]", no_count);
+            write_int_vector(name + "_CLKOUT2_DELAY_TIME[5:0]", delaytime, 6);
+            if (frac != 0) {
+                write_bit(name + "_CLKOUT2_FRAC_EN[0]", edge);
+                write_int_vector(name + "_CLKOUT2_FRAC[2:0]", frac, 3);
+            }
+        }
+    }
+
+    void write_pll(CellInfo *ci)
+    {
+        push(get_tile_name(ci->bel.tile));
+        push("PLLE2");
+        write_bit("IN_USE");
+        write_bit("ZINV_PWRDWN", !bool_or_default(ci->params, ctx->id("IS_PWRDWN_INVERTED"), false));
+        write_bit("ZINV_RST", !bool_or_default(ci->params, ctx->id("IS_RST_INVERTED"), false));
+        write_bit("INV_CLKINSEL", bool_or_default(ci->params, ctx->id("IS_CLKINSEL_INVERTED"), false));
+        write_pll_clkout("DIVCLK", ci);
+        write_pll_clkout("CLKOUTFB", ci);
+        write_pll_clkout("CLKOUT1", ci);
+        write_pll_clkout("CLKOUT2", ci);
+        write_pll_clkout("CLKOUT3", ci);
+        write_pll_clkout("CLKOUT4", ci);
+        write_pll_clkout("CLKOUT5", ci);
+
+        std::string comp = str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL");
+        push("COMPENSATION");
+        if (comp == "INTERNAL") {
+            write_bit("INTERNAL");
+            write_bit("Z_ZHOLD_OR_CLKIN_BUF");
+        } else {
+            NPNR_ASSERT_FALSE("unsupported compensation type");
+        }
+        pop();
+
+        // FIXME: should these be calculated somehow?
+        write_int_vector("FILTREG1_RESERVED[11:0]", 0x8, 12);
+        write_int_vector("LKTABLE[39:0]", 0xB5BE8FA401ULL, 40);
+        write_bit("LOCKREG3_RESERVED[0]");
+        write_int_vector("TABLE[9:0]", 0x3B4, 10);
+        pop(2);
     }
 
     void write_fasm()
