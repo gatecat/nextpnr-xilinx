@@ -86,6 +86,11 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("I", PORT_IN);
         add_port("T", PORT_IN);
         add_port("O", PORT_OUT);
+    } else if (type == ctx->id("IOBUF")) {
+        add_port("I", PORT_IN);
+        add_port("T", PORT_IN);
+        add_port("O", PORT_OUT);
+        add_port("IO", PORT_INOUT);
     } else if (type == ctx->id("OBUFT_DCIEN")) {
         add_port("I", PORT_IN);
         add_port("T", PORT_IN);

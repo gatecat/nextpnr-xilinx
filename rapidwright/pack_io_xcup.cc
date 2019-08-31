@@ -103,9 +103,11 @@ NetInfo *XilinxPacker::invert_net(NetInfo *toinv)
     } else {
         std::unique_ptr<NetInfo> inv{new NetInfo};
         IdString inv_name = ctx->id(toinv->name.str(ctx) + "$inverted$" + std::to_string(autoidx++));
+        inv->name = inv_name;
         auto lut = create_lut(ctx, inv_name.str(ctx) + "$lut", {toinv}, inv.get(), Property(1));
         NetInfo *inv_ptr = inv.get();
         ctx->nets[inv_name] = std::move(inv);
+        new_cells.push_back(std::move(lut));
         return inv_ptr;
     }
 }
