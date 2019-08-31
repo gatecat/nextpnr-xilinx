@@ -718,6 +718,7 @@ void Arch::assignCellInfo(CellInfo *cell)
         }
         cell->lutInfo.di1_net = get_net_or_empty(cell, id_DI1);
         cell->lutInfo.di2_net = get_net_or_empty(cell, id_DI2);
+        cell->lutInfo.wclk = get_net_or_empty(cell, id_CLK);
         cell->lutInfo.memory_group = 0; // fixme
         cell->lutInfo.is_srl = cell->attrs.count(id("X_LUT_AS_SRL"));
         cell->lutInfo.is_memory = cell->attrs.count(id("X_LUT_AS_DRAM"));

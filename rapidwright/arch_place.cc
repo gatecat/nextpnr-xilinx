@@ -289,8 +289,9 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
 {
     bool is_slicem = (tileType == id_CLBLM_L) || (tileType == id_CLBLM_R);
     bool tile_is_memory = false;
-    if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
+    if (lts.cells[(3 << 4) | BEL_6LUT] != nullptr && lts.cells[(3 << 4) | BEL_6LUT]->lutInfo.is_memory)
         tile_is_memory = true;
+    NetInfo *wclk = nullptr;
     // Check eight-tiles (mostly LUT-related validity)
     for (int i = 0; i < 8; i++) {
         if (lts.eights[i].dirty) {
@@ -304,6 +305,14 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             if (lut6 != nullptr) {
                 if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
                     return false; // Memory and SRLs only valid in SLICEMs
+                if (lut6->lutInfo.is_memory) {
+                    if (wclk == nullptr)
+                        wclk = lut6->lutInfo.wclk;
+                    else if (lut6->lutInfo.wclk != wclk) {
+                        DBG();
+                        return false;
+                    }
+                }
                 if (lut5 != nullptr) {
                     // Can't mix memory and non-memory
                     if (lut6->lutInfo.is_memory != lut5->lutInfo.is_memory ||
@@ -497,6 +506,8 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                             return false;
                     } else {
                         clk = ff->ffInfo.clk;
+                        if (i == 0 && wclk != nullptr && clk != wclk)
+                            return false;
                         sr = ff->ffInfo.sr;
                         ce = ff->ffInfo.ce;
                         clkinv = ff->ffInfo.is_clkinv;

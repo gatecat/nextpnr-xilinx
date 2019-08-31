@@ -673,12 +673,14 @@ struct Arch : BaseCtx
         if (tts.lts == nullptr)
             tts.lts = new LogicTileStatus();
         auto &ts = *(tts.lts);
-        if (z == ((7 << 4) | BEL_6LUT)) {
+        if (z == (((xc7 ? 3 : 7) << 4) | BEL_6LUT)) {
             if ((cell != nullptr && cell->lutInfo.is_memory) ||
                 (ts.cells[z] != nullptr && ts.cells[z]->lutInfo.is_memory)) {
                 // Special case - memory write port invalidates everything
                 for (int i = 0; i < 8; i++)
                     ts.eights[i].dirty = true;
+                if (xc7)
+                    ts.halfs[0].dirty = true; // WCLK and CLK0 shared
             }
         }
         ts.cells[z] = cell;
@@ -687,6 +689,8 @@ struct Arch : BaseCtx
         case BEL_FF:
         case BEL_FF2:
             ts.halfs[(z >> 4) / 4].dirty = true;
+            if ((((z >> 4) / 4) == 0) && xc7)
+                ts.eights[3].dirty = true;
         /* fall-through */
         case BEL_6LUT:
         case BEL_5LUT:
