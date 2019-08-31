@@ -513,7 +513,7 @@ void XC7Packer::pack_bram()
 
     // Special rules for SDP rules, relating to WE connectivity
     std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         // Connects to two WEBWE bel pins
         sdp_bram_rules[ctx->id("RAMB18E1")]
                 .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
@@ -524,15 +524,6 @@ void XC7Packer::pack_bram()
         // Not used in SDP mode
         sdp_bram_rules[ctx->id("RAMB18E1")]
                 .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
-    }
-    for (int i = 0; i < 2; i++) {
-        // Connects to two WEA bel pins
-        sdp_bram_rules[ctx->id("RAMB18E1")]
-                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
-                .push_back(ctx->id("WEA" + std::to_string(i * 2)));
-        sdp_bram_rules[ctx->id("RAMB18E1")]
-                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 2) + "]"))]
-                .push_back(ctx->id("WEA" + std::to_string(i * 2 + 1)));
     }
 
     for (int i = 0; i < 4; i++) {
@@ -614,7 +605,11 @@ void XC7Packer::pack_bram()
                 if (!ci->ports.count(port)) {
                     ci->ports[port].name = port;
                     ci->ports[port].type = PORT_IN;
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
+                    connect_port(ctx,
+                                 (int_or_default(ci->params, ctx->id("WRITE_WIDTH_A"), 0) == 0)
+                                         ? ctx->nets[ctx->id("$PACKER_GND_NET")].get()
+                                         : ctx->nets[ctx->id("$PACKER_VCC_NET")].get(),
+                                 ci, port);
                 }
             }
         } else if (ci->type == id_RAMB36E1_RAMB36E1) {
