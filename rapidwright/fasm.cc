@@ -842,7 +842,7 @@ struct FasmBackend
         // FIXME: variable duty cycle
         int high = 1, low = 1, phasemux = 0, delaytime = 0, frac = 0;
         bool no_count = false, edge = false;
-        double divide = float_or_default(ci, name + "_DIVIDE", 1);
+        double divide = float_or_default(ci, name + ((name == "CLKFBOUT") ? "_MULT" : "_DIVIDE"), 1);
         double phase = float_or_default(ci, name + "_PHASE", 1);
         if (divide <= 1) {
             no_count = true;
