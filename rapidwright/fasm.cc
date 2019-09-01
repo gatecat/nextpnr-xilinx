@@ -720,6 +720,12 @@ struct FasmBackend
         }
         if (actual_width == 36) {
             write_bit("SDP_" + name.substr(0, name.length() - 2) + "_36");
+            if (name.find("WRITE") == 0) {
+                write_bit(name.substr(0, name.size() - 1) + "A_18");
+                write_bit(name.substr(0, name.size() - 1) + "B_18");
+            } else if (name.find("READ") == 0) {
+                write_bit(name.substr(0, name.size() - 1) + "B_18");
+            }
         } else {
             write_bit(name + "_" + std::to_string(actual_width));
         }

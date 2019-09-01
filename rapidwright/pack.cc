@@ -600,17 +600,24 @@ void XC7Packer::pack_bram()
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
         if (ci->type == id_RAMB18E1_RAMB18E1) {
-            for (int i = 2; i < 4; i++) {
+            int wwa = int_or_default(ci->params, ctx->id("WRITE_WIDTH_A"), 0);
+            for (int i = ((wwa == 0) ? 0 : 2); i < 4; i++) {
                 IdString port = ctx->id("WEA" + std::to_string(i));
                 if (!ci->ports.count(port)) {
                     ci->ports[port].name = port;
                     ci->ports[port].type = PORT_IN;
-                    connect_port(ctx,
-                                 (int_or_default(ci->params, ctx->id("WRITE_WIDTH_A"), 0) == 0)
-                                         ? ctx->nets[ctx->id("$PACKER_GND_NET")].get()
-                                         : ctx->nets[ctx->id("$PACKER_VCC_NET")].get(),
-                                 ci, port);
+                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
                 }
+            }
+            for (auto p : {ctx->id("ADDRATIEHIGH0"), ctx->id("ADDRATIEHIGH1"), ctx->id("ADDRBTIEHIGH0"),
+                           ctx->id("ADDRBTIEHIGH1")}) {
+                if (!ci->ports.count(p)) {
+                    ci->ports[p].name = p;
+                    ci->ports[p].type = PORT_IN;
+                } else {
+                    disconnect_port(ctx, ci, p);
+                }
+                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, p);
             }
         } else if (ci->type == id_RAMB36E1_RAMB36E1) {
             for (auto p : {ctx->id("ADDRARDADDRL15"), ctx->id("ADDRBWRADDRL15")}) {
