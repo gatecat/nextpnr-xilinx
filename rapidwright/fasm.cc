@@ -128,6 +128,10 @@ struct FasmBackend
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
                                ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
                                                                          "ILOGIC_Y" + i + ".ZINV_D"};
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_TQ"),
+                               ctx->id("IOI_OLOGIC" + i + "_T1")}] = {
+                            "OLOGIC_Y" + i + ".ZINV_T1"
+                    };
                 }
 
         for (std::string s1 : {"TOP", "BOT"}) {
