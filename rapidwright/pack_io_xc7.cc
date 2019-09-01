@@ -119,6 +119,68 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
             subcells.push_back(obuf);
     }
 
+    bool is_diff_ibuf = xil_iob->type == ctx->id("IBUFDS") || xil_iob->type == ctx->id("IBUFDS_INTERMDISABLE") ||
+                        xil_iob->type == ctx->id("IBUFDS");
+    bool is_diff_out_ibuf = xil_iob->type == ctx->id("IBUFDS_DIFF_OUT") ||
+                            xil_iob->type == ctx->id("IBUFDS_DIFF_OUT_IBUFDISABLE") ||
+                            xil_iob->type == ctx->id("IBUFDS_DIFF_OUT_INTERMDISABLE");
+    bool is_diff_iobuf = xil_iob->type == ctx->id("IOBUFDS") || xil_iob->type == ctx->id("IOBUFDS_DCIEN");
+    bool is_diff_out_iobuf = xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT") ||
+                             xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT_DCIEN") ||
+                             xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT_INTERMDISABLE");
+    bool is_diff_obuf = xil_iob->type == ctx->id("OBUFDS") || xil_iob->type == ctx->id("OBUFTDS");
+
+    if (is_diff_obuf || is_diff_out_iobuf || is_diff_iobuf) {
+        // FIXME: true diff outputs
+        NetInfo *pad_p_net =
+                get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
+        NPNR_ASSERT(pad_p_net != nullptr);
+        std::string site_p = pad_site(pad_p_net);
+        NetInfo *pad_n_net =
+                get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
+        NPNR_ASSERT(pad_n_net != nullptr);
+        std::string site_n = pad_site(pad_n_net);
+
+        disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
+        disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
+
+        NetInfo *inv_i = create_internal_net(xil_iob->name, is_diff_obuf ? "I_B" : "OBUFTDS$subnet$I_B");
+        CellInfo *inv = insert_outinv(int_name(xil_iob->name, is_diff_obuf ? "INV" : "OBUFTDS$subcell$INV"),
+                                      get_net_or_empty(xil_iob, ctx->id("I")), inv_i);
+        inv->attrs[ctx->id("BEL")] = site_n + "/IOB33S/O_ININV";
+        inv->attrs[ctx->id("X_IOB_SITE_TYPE")] = std::string("IOB33S");
+
+        bool has_dci = xil_iob->type == ctx->id("IOBUFDS_DCIEN") || xil_iob->type == ctx->id("IOBUFDSE3");
+
+        CellInfo *obuf_p = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
+                                       (is_diff_iobuf || is_diff_out_iobuf || (xil_iob->type == ctx->id("OBUFTDS")))
+                                               ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
+                                               : ctx->id("OBUF"),
+                                       get_net_or_empty(xil_iob, ctx->id("I")), pad_p_net,
+                                       get_net_or_empty(xil_iob, ctx->id("T")));
+
+        obuf_p->attrs[ctx->id("BEL")] = site_p + "/IOB33M/OUTBUF";
+        obuf_p->attrs[ctx->id("X_IOB_SITE_TYPE")] = std::string("IOB33M");
+        subcells.push_back(obuf_p);
+        connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_p, ctx->id("DCITERMDISABLE"));
+
+        CellInfo *obuf_n = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "N" : "OBUFTDS$subcell$N"),
+                                       (is_diff_iobuf || is_diff_out_iobuf || (xil_iob->type == ctx->id("OBUFTDS")))
+                                               ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
+                                               : ctx->id("OBUF"),
+                                       inv_i, pad_n_net, get_net_or_empty(xil_iob, ctx->id("T")));
+
+        obuf_n->attrs[ctx->id("BEL")] = site_n + "/IOB33S/OUTBUF";
+        obuf_n->attrs[ctx->id("X_IOB_SITE_TYPE")] = std::string("IOB33S");
+        connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_n, ctx->id("DCITERMDISABLE"));
+
+        disconnect_port(ctx, xil_iob, ctx->id("DCITERMDISABLE"));
+
+        subcells.push_back(inv);
+        subcells.push_back(obuf_p);
+        subcells.push_back(obuf_n);
+    }
+
     if (!subcells.empty()) {
         for (auto sc : subcells) {
             sc->attrs[ctx->id("X_ORIG_MACRO_PRIM")] = xil_iob->type.str(ctx);
@@ -223,7 +285,22 @@ void XC7Packer::pack_io()
     hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")] = hrio_rules[ctx->id("IBUF")];
     hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFF_IN");
 
+    hrio_rules[ctx->id("INV")].new_type = ctx->id("INVERTER");
+    hrio_rules[ctx->id("INV")].port_xform[ctx->id("I")] = ctx->id("IN");
+    hrio_rules[ctx->id("INV")].port_xform[ctx->id("O")] = ctx->id("OUT");
+
     generic_xform(hrio_rules, true);
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        std::string type = ci->type.str(ctx);
+        if (!boost::starts_with(type, "IOB33"))
+            continue;
+        if (!ci->attrs.count(ctx->id("X_IOB_SITE_TYPE")))
+            continue;
+        type.replace(0, 5, ci->attrs.at(ctx->id("X_IOB_SITE_TYPE")).as_string());
+        ci->type = ctx->id(type);
+    }
 }
 
 std::string XC7Packer::get_ologic_site(const std::string &io_bel)

@@ -130,6 +130,10 @@ struct FasmBackend
                                                                          "ILOGIC_Y" + i + ".ZINV_D"};
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_TQ"),
                                ctx->id("IOI_OLOGIC" + i + "_T1")}] = {"OLOGIC_Y" + i + ".ZINV_T1"};
+                    if (i == "0") {
+                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_IN1"), ctx->id("IOB_O_OUT0")}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_OUT0"), ctx->id("IOB_O0")}] = {};
+                    }
                 }
 
         for (std::string s1 : {"TOP", "BOT"}) {
@@ -607,7 +611,12 @@ struct FasmBackend
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
         }
         write_bit("PULLTYPE." + pulltype);
-        pop(2);
+        pop();
+        std::string site = ctx->getBelSite(pad->bel);
+        BelId inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
+        if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr)
+            write_bit("OUT_DIFF");
+        pop();
     }
 
     void write_iol_config(CellInfo *ci)
