@@ -651,6 +651,42 @@ struct FasmBackend
             write_bit("SRTYPE.SYNC");
             write_bit("TSRTYPE.SYNC");
             pop();
+        } else if (ci->type == ctx->id("ISERDESE2_ISERDESE2")) {
+            write_bit("IDDR_OR_ISERDES.IN_USE");
+            write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
+            write_bit("IFF.SRTYPE.SYNC");
+            for (int i = 1; i <= 4; i++) {
+                write_bit("IFF.ZINIT_Q" + std::to_string(i),
+                          !bool_or_default(ci->params, ctx->id("INIT_Q" + std::to_string(i)), false));
+                write_bit("IFF.ZSRVAL_Q" + std::to_string(i),
+                          !bool_or_default(ci->params, ctx->id("SRVAL_Q" + std::to_string(i)), false));
+            }
+            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false));
+
+            push("ISERDES");
+            write_bit("IN_USE");
+            int width = int_or_default(ci->params, ctx->id("DATA_WIDTH"), 8);
+            if (width == 8 || width == 3)
+                write_bit("DATA_WIDTH.W" + std::to_string(width));
+            else if (width == 4 || width == 6)
+                write_bit("DATA_WIDTH.W4_6");
+            else if (width == 5 || width == 7)
+                write_bit("DATA_WIDTH.W5_7");
+            if (str_or_default(ci->params, ctx->id("DATA_RATE"), "DDR") == "SDR")
+                write_bit("DATA_RATE.SDR");
+            if (int_or_default(ci->params, ctx->id("NUM_CE"), 1) == 2)
+                write_bit("NUM_CE.N2");
+            std::string type = str_or_default(ci->params, ctx->id("INTERFACE_TYPE"), "NETWORKING");
+            if (type == "MEMORY_DDR3")
+                write_bit("INTERFACE_TYPE.MEMORY_DDR3");
+            else {
+                write_bit("INTERFACE_TYPE.Z_MEMORY");
+                write_bit("INTERFACE_TYPE.NOT_MEMORY");
+            }
+            if (type == "OVERSAMPLE")
+                write_bit("INTERFACE_TYPE.OVERSAMPLE");
+            pop();
         } else {
             NPNR_ASSERT_FALSE("unsupported IOLOGIC");
         }
@@ -664,7 +700,7 @@ struct FasmBackend
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
+            } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2")) {
                 write_iol_config(ci);
                 blank();
             }

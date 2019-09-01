@@ -196,6 +196,7 @@ struct XC7Packer : public XilinxPacker
 
     // IOLOGIC
     std::unordered_map<IdString, XFormRule> hp_iol_rules, hd_iol_rules, ioctrl_rules;
+    void fold_inverter(CellInfo *cell, std::string port);
     std::string get_ologic_site(const std::string &io_bel);
     std::string get_ilogic_site(const std::string &io_bel);
     std::string get_ioctrl_site(const std::string &iol_bel);
