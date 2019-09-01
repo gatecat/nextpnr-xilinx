@@ -129,9 +129,7 @@ struct FasmBackend
                                ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
                                                                          "ILOGIC_Y" + i + ".ZINV_D"};
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_TQ"),
-                               ctx->id("IOI_OLOGIC" + i + "_T1")}] = {
-                            "OLOGIC_Y" + i + ".ZINV_T1"
-                    };
+                               ctx->id("IOI_OLOGIC" + i + "_T1")}] = {"OLOGIC_Y" + i + ".ZINV_T1"};
                 }
 
         for (std::string s1 : {"TOP", "BOT"}) {
@@ -222,6 +220,14 @@ struct FasmBackend
             out << tile_name << ".";
             out << dst_name << ".";
             out << src_name << std::endl;
+
+            if (tile_name.find("IOI3") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
+                out << tile_name << ".";
+                dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
+                out << dst_name << ".";
+                out << src_name << std::endl;
+            }
+
             last_was_blank = false;
         }
     };
@@ -604,12 +610,62 @@ struct FasmBackend
         pop(2);
     }
 
+    void write_iol_config(CellInfo *ci)
+    {
+        push(get_tile_name(ci->bel.tile));
+        std::string site = ctx->getBelSite(ci->bel);
+        std::string sitetype = site.substr(0, site.find('_'));
+        Loc siteloc = ctx->getSiteLocInTile(ci->bel);
+        push(sitetype + "_Y" + std::to_string(1 - siteloc.y));
+        if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
+            write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
+            write_bit("OQUSED", get_net_or_empty(ci, ctx->id("OQ")) != nullptr);
+            write_bit("ZINV_CLK", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            for (std::string t : {"T1", "T2", "T3", "T4"})
+                write_bit("ZINV_" + t, (get_net_or_empty(ci, ctx->id(t)) != nullptr || t == "T1") &&
+                                               !bool_or_default(ci->params, ctx->id("IS_" + t + "_INVERTED"), false));
+            for (std::string d : {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"})
+                write_bit("IS_" + d + "_INVERTED",
+                          bool_or_default(ci->params, ctx->id("IS_" + d + "_INVERTED"), false));
+            write_bit("ZINIT_OQ", !bool_or_default(ci->params, ctx->id("INIT_OQ"), false));
+            write_bit("ZINIT_TQ", !bool_or_default(ci->params, ctx->id("INIT_TQ"), false));
+            write_bit("ZSRVAL_OQ", !bool_or_default(ci->params, ctx->id("SRVAL_OQ"), false));
+            write_bit("ZSRVAL_TQ", !bool_or_default(ci->params, ctx->id("SRVAL_TQ"), false));
+
+            push("OSERDESE");
+            write_bit("IN_USE");
+            std::string type = str_or_default(ci->params, ctx->id("DATA_RATE_OQ"), "BUF");
+            write_bit(std::string("DATA_RATE_OQ.") + ((get_net_or_empty(ci, ctx->id("OQ")) != nullptr) ? type : "BUF"));
+            write_bit(std::string("DATA_RATE_TQ.") +
+                      ((get_net_or_empty(ci, ctx->id("TQ")) != nullptr)
+                               ? str_or_default(ci->params, ctx->id("DATA_RATE_TQ"), "BUF")
+                               : "BUF"));
+            int width = int_or_default(ci->params, ctx->id("DATA_WIDTH"), 8);
+            write_bit("DATA_WIDTH.W" + std::to_string(width));
+            if (type == "DDR" && (width == 6 || width == 8)) {
+                write_bit("DATA_WIDTH.DDR.W6_8");
+                write_bit("DATA_WIDTH.SDR.W2_4_5_6");
+            } else if (type == "SDR" && (width == 2 || width == 4 || width == 5 || width == 6)) {
+                write_bit("DATA_WIDTH.SDR.W2_4_5_6");
+            }
+            write_bit("SRTYPE.SYNC");
+            write_bit("TSRTYPE.SYNC");
+            pop();
+        } else {
+            NPNR_ASSERT_FALSE("unsupported IOLOGIC");
+        }
+        pop(2);
+    }
+
     void write_io()
     {
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
+                blank();
+            } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
+                write_iol_config(ci);
                 blank();
             }
         }

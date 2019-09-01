@@ -18,6 +18,7 @@
  */
 
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
 #include <iterator>
 #include <queue>
@@ -223,6 +224,56 @@ void XC7Packer::pack_io()
     hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFF_IN");
 
     generic_xform(hrio_rules, true);
+}
+
+std::string XC7Packer::get_ologic_site(const std::string &io_bel)
+{
+    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/OUTBUF"));
+    std::queue<WireId> visit;
+    visit.push(ctx->getBelPinWire(ibc_bel, ctx->id("IN")));
+
+    while (!visit.empty()) {
+        WireId cursor = visit.front();
+        visit.pop();
+        for (auto bp : ctx->getWireBelPins(cursor)) {
+            std::string site = ctx->getBelSite(bp.bel);
+            if (boost::starts_with(site, "OLOGIC"))
+                return site;
+        }
+        for (auto pip : ctx->getPipsUphill(cursor))
+            visit.push(ctx->getPipSrcWire(pip));
+    }
+    NPNR_ASSERT_FALSE("failed to find OLOGIC");
+}
+
+void XC7Packer::pack_iologic()
+{
+    std::unordered_map<IdString, BelId> iodelay_to_io;
+    std::unordered_map<IdString, XFormRule> iologic_rules;
+    iologic_rules[ctx->id("OSERDESE2")].new_type = ctx->id("OSERDESE2_OSERDESE2");
+
+    iologic_rules[ctx->id("ISERDESE2")].new_type = ctx->id("ISERDESE2_ISERDESE2");
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("OSERDESE2")) {
+            NetInfo *q = get_net_or_empty(ci, ctx->id("OQ"));
+            if (q == nullptr || q->users.empty())
+                log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            BelId io_bel;
+            if (q->users.size() == 1 && q->users.at(0).cell->type.str(ctx).find("OUTBUF") != std::string::npos)
+                io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL")).as_string()));
+            else if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE2") &&
+                     q->users.at(0).port == ctx->id("ODATAIN"))
+                io_bel = iodelay_to_io.at(q->users.at(0).cell->name);
+            else
+                log_error("%s '%s' has illegal fanout on OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = ol_site + "/OSERDESE2";
+        }
+    }
+
+    generic_xform(iologic_rules, false);
 }
 
 NEXTPNR_NAMESPACE_END

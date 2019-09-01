@@ -344,10 +344,10 @@ void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unorder
     // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D6"));
     // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D7"));
     // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D8"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T1"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T2"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T3"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T4"));
+    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T1"));
+    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T2"));
+    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T3"));
+    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T4"));
     invertible_pins[ctx->id("PHASER_IN")].insert(ctx->id("RST"));
     invertible_pins[ctx->id("PHASER_IN_PHY")].insert(ctx->id("RST"));
     invertible_pins[ctx->id("PHASER_OUT")].insert(ctx->id("RST"));
@@ -476,6 +476,14 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     for (int i = 0; i < 9; i++)
         tied_pins[ctx->id("IDELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
     tied_pins[ctx->id("IDELAYE3")][ctx->id("LOAD")] = false;
+
+    tied_pins[ctx->id("OSERDESE2")][ctx->id("RST")] = false;
+    for (int i = 1; i <= 8; i++)
+        tied_pins[ctx->id("OSERDESE2")][ctx->id("D" + std::to_string(i))] = false;
+    for (int i = 1; i <= 4; i++)
+        tied_pins[ctx->id("OSERDESE2")][ctx->id("T" + std::to_string(i))] = false;
+    tied_pins[ctx->id("OSERDESE2")][ctx->id("OCE")] = true;
+    tied_pins[ctx->id("OSERDESE2")][ctx->id("TCE")] = true;
 
     // IO primitives
     tied_pins[ctx->id("IOBUFDSE3")][ctx->id("DCITERMDISABLE")] = false;
