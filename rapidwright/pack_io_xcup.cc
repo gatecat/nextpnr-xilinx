@@ -95,9 +95,9 @@ NetInfo *XilinxPacker::invert_net(NetInfo *toinv)
         NetInfo *preinv = get_net_or_empty(toinv->driver.cell, ctx->id("I0"));
         // If only one user, also sweep the inversion LUT to avoid packing issues
         if (toinv->users.size() == 1) {
+            packed_cells.insert(toinv->driver.cell->name);
             disconnect_port(ctx, toinv->driver.cell, ctx->id("I0"));
             disconnect_port(ctx, toinv->driver.cell, ctx->id("O"));
-            packed_cells.insert(toinv->driver.cell->name);
         }
         return preinv;
     } else {
