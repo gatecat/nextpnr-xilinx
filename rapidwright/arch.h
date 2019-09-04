@@ -1478,6 +1478,8 @@ struct Arch : BaseCtx
         return site.name.get();
     }
 
+    int getHclkForIob(BelId pad);
+
     // -------------------------------------------------
 
     static const std::string defaultPlacer;

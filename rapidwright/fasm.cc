@@ -576,6 +576,14 @@ struct FasmBackend
         }
     }
 
+    struct BankIoConfig
+    {
+        bool stepdown = false;
+        bool vref = false;
+    };
+
+    std::unordered_map<int, BankIoConfig> ioconfig_by_hclk;
+
     void write_io_config(CellInfo *pad)
     {
         NetInfo *pad_net = get_net_or_empty(pad, ctx->id("PAD"));
@@ -593,10 +601,17 @@ struct FasmBackend
                 is_input = true;
         push(get_tile_name(pad->bel.tile));
         push("IOB_Y" + std::to_string(1 - ioLoc.y));
+
+        if (boost::starts_with(iostandard, "DIFF_"))
+            iostandard.erase(0, 5);
+
+        int hclk = ctx->getHclkForIob(pad->bel);
+
         if (is_output) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
                 write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
-
+            if (iostandard == "SSTL135")
+                write_bit("SSTL135.DRIVE.I_FIXED");
             if (slew == "SLOW")
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.SLEW.SLOW");
             else if (iostandard == "SSTL135")
@@ -607,9 +622,18 @@ struct FasmBackend
         if (is_input) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
                 write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+            if (iostandard == "SSTL135") {
+                ioconfig_by_hclk[hclk].vref = true;
+                write_bit("SSTL135.IN");
+            }
             if (!is_output)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
         }
+        if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" || iostandard == "SSTL135") {
+            write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135.STEPDOWN");
+            ioconfig_by_hclk[hclk].stepdown = true;
+        }
+
         write_bit("PULLTYPE." + pulltype);
         pop();
         std::string site = ctx->getBelSite(pad->bel);
@@ -713,6 +737,12 @@ struct FasmBackend
                 write_iol_config(ci);
                 blank();
             }
+        }
+        for (auto &hclk : ioconfig_by_hclk) {
+            push(get_tile_name(hclk.first));
+            write_bit("STEPDOWN", hclk.second.stepdown);
+            write_bit("VREF.V_675_MV", hclk.second.vref);
+            pop();
         }
     }
 

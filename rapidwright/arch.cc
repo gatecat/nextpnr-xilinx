@@ -891,6 +891,32 @@ TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port
     return info;
 }
 
+int Arch::getHclkForIob(BelId pad) {
+    std::string tiletype = getBelTileType(pad).str(this);
+    int ioi = pad.tile;
+    // Find the IOI for IOB
+    if (boost::starts_with(tiletype, "LIOB"))
+        ioi += chip_info->width;
+    else if (boost::starts_with(tiletype, "RIOB"))
+        ioi -= chip_info->width;
+    else
+        NPNR_ASSERT_FALSE("unknown IOB side");
+    // Find a wire driven by the HCLK
+    WireId ioclk0;
+    auto &td = chip_info->tile_types[chip_info->tile_insts[ioi].type];
+    for (int i = 0; i < td.num_wires; i++) {
+        std::string name = IdString(td.wire_data[i].name).str(this);
+        if (name == "IOI_IOCLK0") {
+            ioclk0 = canonicalWireId(chip_info, ioi, i);
+            break;
+        }
+    }
+    NPNR_ASSERT(ioclk0 != WireId());
+    for (auto uh : getPipsUphill(ioclk0))
+        return uh.tile;
+    NPNR_ASSERT_FALSE("failed to find HCLK pips");
+}
+
 #ifdef WITH_HEAP
 const std::string Arch::defaultPlacer = "heap";
 #else
