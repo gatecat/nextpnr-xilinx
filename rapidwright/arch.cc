@@ -907,7 +907,7 @@ int Arch::getHclkForIob(BelId pad)
     auto &td = chip_info->tile_types[chip_info->tile_insts[ioi].type];
     for (int i = 0; i < td.num_wires; i++) {
         std::string name = IdString(td.wire_data[i].name).str(this);
-        if (name == "IOI_IOCLK0") {
+        if (name == "IOI_IOCLK0" || name == "IOI_SING_IOCLK0") {
             ioclk0 = canonicalWireId(chip_info, ioi, i);
             break;
         }

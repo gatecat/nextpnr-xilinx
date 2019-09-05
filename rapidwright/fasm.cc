@@ -133,6 +133,8 @@ struct FasmBackend
                     if (i == "0") {
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_IN1"), ctx->id("IOB_O_OUT0")}] = {};
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_OUT0"), ctx->id("IOB_O0")}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_IN1"), ctx->id("IOB_T_OUT0")}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_OUT0"), ctx->id("IOB_T0")}] = {};
                     }
                 }
 
@@ -219,6 +221,16 @@ struct FasmBackend
                       (boost::ends_with(dst_name, "PLLE2_CLKIN2") && boost::ends_with(src_name, "PLLE2_CLK_IN2_INT")) ||
                       (boost::ends_with(dst_name, "PLLE2_CLKFBIN") && boost::ends_with(src_name, "PLLE2_CLK_FB_INT"))))
                     return;
+            }
+
+            if(boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
+                // FIXME: PPIPs missing for SING IOI3s
+                if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
+                        (dst_name.find("CLK") == std::string::npos))
+                    return;
+                auto spos = src_name.find("_SING_");
+                if (spos != std::string::npos)
+                    src_name.erase(spos, 5);
             }
 
             out << tile_name << ".";
@@ -729,8 +741,8 @@ struct FasmBackend
                       str_or_default(ci->params, ctx->id("HIGH_PERFORMANCE_MODE"), "FALSE") == "TRUE");
             write_bit("DELAY_SRC_" + str_or_default(ci->params, ctx->id("DELAY_SRC"), "IDATAIN"));
             write_bit("IDELAY_TYPE_" + str_or_default(ci->params, ctx->id("IDELAY_TYPE"), "FIXED"));
-            write_int_vector("IDELAY_VALUE", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, false);
-            write_int_vector("ZIDELAY_VALUE", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, true);
+            write_int_vector("IDELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, false);
+            write_int_vector("ZIDELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, true);
             write_bit("IS_DATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_DATAIN_INVERTED"), false));
             write_bit("IS_IDATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_IDATAIN_INVERTED"), false));
         } else {
