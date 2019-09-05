@@ -223,14 +223,28 @@ struct FasmBackend
                     return;
             }
 
-            if(boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
+            if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
                 if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
-                        (dst_name.find("CLK") == std::string::npos))
+                    (dst_name.find("CLK") == std::string::npos))
                     return;
                 auto spos = src_name.find("_SING_");
                 if (spos != std::string::npos)
                     src_name.erase(spos, 5);
+                // Need to flip for top HCLK
+                bool is_top_sing = pip.tile < ctx->getHclkForIoi(pip.tile);
+                if (is_top_sing) {
+                    auto us0pos = dst_name.find("_0");
+                    if (us0pos != std::string::npos)
+                        dst_name.replace(us0pos, 2, "_1");
+                    auto ol0pos = dst_name.find("OLOGIC0");
+                    if (ol0pos != std::string::npos) {
+                        dst_name.replace(ol0pos, 7, "OLOGIC1");
+                        us0pos = src_name.find("_0");
+                        if (us0pos != std::string::npos)
+                            src_name.replace(us0pos, 2, "_1");
+                    }
+                }
             }
 
             out << tile_name << ".";
@@ -611,8 +625,12 @@ struct FasmBackend
         for (auto &usr : pad_net->users)
             if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
                 is_input = true;
-        push(get_tile_name(pad->bel.tile));
-        push("IOB_Y" + std::to_string(1 - ioLoc.y));
+        std::string tile = get_tile_name(pad->bel.tile);
+        push(tile);
+
+        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
+        push("IOB_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y)));
 
         if (boost::starts_with(iostandard, "DIFF_"))
             iostandard.erase(0, 5);
@@ -658,11 +676,15 @@ struct FasmBackend
 
     void write_iol_config(CellInfo *ci)
     {
-        push(get_tile_name(ci->bel.tile));
+        std::string tile = get_tile_name(ci->bel.tile);
+        push(tile);
+        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_top_sing = ci->bel.tile < ctx->getHclkForIoi(ci->bel.tile);
+
         std::string site = ctx->getBelSite(ci->bel);
         std::string sitetype = site.substr(0, site.find('_'));
         Loc siteloc = ctx->getSiteLocInTile(ci->bel);
-        push(sitetype + "_Y" + std::to_string(1 - siteloc.y));
+        push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
         if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
             write_bit("OQUSED", get_net_or_empty(ci, ctx->id("OQ")) != nullptr);

@@ -902,6 +902,11 @@ int Arch::getHclkForIob(BelId pad)
         ioi -= 1;
     else
         NPNR_ASSERT_FALSE("unknown IOB side");
+    return getHclkForIoi(ioi);
+}
+
+int Arch::getHclkForIoi(int ioi)
+{
     // Find a wire driven by the HCLK
     WireId ioclk0;
     auto &td = chip_info->tile_types[chip_info->tile_insts[ioi].type];

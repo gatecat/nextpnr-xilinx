@@ -1479,6 +1479,7 @@ struct Arch : BaseCtx
     }
 
     int getHclkForIob(BelId pad);
+    int getHclkForIoi(int tile);
 
     // -------------------------------------------------
 
