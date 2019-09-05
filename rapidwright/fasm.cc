@@ -655,6 +655,8 @@ struct FasmBackend
             if (iostandard == "SSTL135") {
                 ioconfig_by_hclk[hclk].vref = true;
                 write_bit("SSTL135.IN");
+                if (pad->attrs.count(ctx->id("IN_TERM")))
+                    write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
             }
             if (!is_output)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
@@ -730,7 +732,10 @@ struct FasmBackend
                           !bool_or_default(ci->params, ctx->id("SRVAL_Q" + std::to_string(i)), false));
             }
             write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
-            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false));
+
+            std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
+            write_bit("IFFDELMUXE3.P0", (iobdelay == "IFD"));
+            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false) && (iobdelay != "IFD"));
 
             push("ISERDES");
             write_bit("IN_USE");
@@ -780,7 +785,8 @@ struct FasmBackend
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2")) {
+            } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
+                       ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
                 write_iol_config(ci);
                 blank();
             }

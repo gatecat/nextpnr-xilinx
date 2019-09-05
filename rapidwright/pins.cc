@@ -485,6 +485,10 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     tied_pins[ctx->id("OSERDESE2")][ctx->id("OCE")] = true;
     tied_pins[ctx->id("OSERDESE2")][ctx->id("TCE")] = true;
 
+    tied_pins[ctx->id("IDELAYE2")][ctx->id("REGRST")] = false;
+    tied_pins[ctx->id("IDELAYE2")][ctx->id("LDPIPEEN")] = false;
+    tied_pins[ctx->id("IDELAYE2")][ctx->id("CINVCTRL")] = false;
+
     // IO primitives
     tied_pins[ctx->id("IOBUFDSE3")][ctx->id("DCITERMDISABLE")] = false;
     tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC_EN[0]")] = false;
