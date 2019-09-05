@@ -343,6 +343,40 @@ std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
     NPNR_ASSERT_FALSE("failed to find ILOGIC");
 }
 
+std::string XC7Packer::get_idelay_site(const std::string &io_bel)
+{
+    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
+    std::queue<WireId> visit;
+    visit.push(ctx->getBelPinWire(ibc_bel, ctx->id("OUT")));
+
+    while (!visit.empty()) {
+        WireId cursor = visit.front();
+        visit.pop();
+        for (auto bp : ctx->getWireBelPins(cursor)) {
+            std::string site = ctx->getBelSite(bp.bel);
+            if (boost::starts_with(site, "IDELAY"))
+                return site;
+        }
+        for (auto pip : ctx->getPipsDownhill(cursor))
+            visit.push(ctx->getPipDstWire(pip));
+    }
+    NPNR_ASSERT_FALSE("failed to find IDELAY");
+}
+
+std::string XC7Packer::get_ioctrl_site(const std::string &io_bel)
+{
+    BelId pad_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/PAD"));
+    int hclk_tile = ctx->getHclkForIob(pad_bel);
+    auto &td = ctx->chip_info->tile_insts[hclk_tile];
+    for (int i = 0; i < td.num_sites; i++) {
+        auto &sd = td.site_insts[i];
+        std::string sn = sd.name.get();
+        if (boost::starts_with(sn, "IDELAYCTRL"))
+            return sn;
+    }
+    NPNR_ASSERT_FALSE("failed to find IOCTRL");
+}
+
 void XC7Packer::fold_inverter(CellInfo *cell, std::string port)
 {
     IdString p = ctx->id(port);
@@ -365,8 +399,43 @@ void XC7Packer::pack_iologic()
     std::unordered_map<IdString, BelId> iodelay_to_io;
     std::unordered_map<IdString, XFormRule> iologic_rules;
     iologic_rules[ctx->id("OSERDESE2")].new_type = ctx->id("OSERDESE2_OSERDESE2");
-
+    iologic_rules[ctx->id("IDELAYE2")].new_type = ctx->id("IDELAYE2_IDELAYE2");
     iologic_rules[ctx->id("ISERDESE2")].new_type = ctx->id("ISERDESE2_ISERDESE2");
+
+    // Handles pseudo-diff output buffers without finding multiple sinks
+    auto find_p_outbuf = [&](NetInfo *net) {
+        CellInfo *outbuf = nullptr;
+        for (auto &usr : net->users) {
+            IdString type = usr.cell->type;
+            if (type == ctx->id("IOB33_OUTBUF") || type == ctx->id("IOB33M_OUTBUF")) {
+                if (outbuf != nullptr)
+                    return (CellInfo *)nullptr; // drives multiple outputs
+                outbuf = usr.cell;
+            }
+        }
+        return outbuf;
+    };
+
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYE2")) {
+            NetInfo *d = get_net_or_empty(ci, ctx->id("IDATAIN"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            BelId io_bel;
+            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+            else
+                log_error("%s '%s' has IDATAIN input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                          ctx->nameOf(ci), drv->type.c_str(ctx));
+            std::string iol_site = get_idelay_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = iol_site + "/IDELAYE2";
+            ci->attrs[ctx->id("X_IO_BEL")] = ctx->getBelName(io_bel).str(ctx);
+            iodelay_to_io[ci->name] = io_bel;
+        }
+        // FIXME: ODELAY
+    }
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -375,29 +444,44 @@ void XC7Packer::pack_iologic()
             if (q == nullptr || q->users.empty())
                 log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             BelId io_bel;
-            if (q->users.size() == 1 && q->users.at(0).cell->type.str(ctx).find("OUTBUF") != std::string::npos)
-                io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL")).as_string()));
-            else if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE2") &&
-                     q->users.at(0).port == ctx->id("ODATAIN"))
-                io_bel = iodelay_to_io.at(q->users.at(0).cell->name);
+            CellInfo *ob = find_p_outbuf(q);
+            if (ob != nullptr)
+                io_bel = ctx->getBelByName(ctx->id(ob->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has illegal fanout on OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[ctx->id("BEL")] = ol_site + "/OSERDESE2";
         } else if (ci->type == ctx->id("ISERDESE2")) {
             fold_inverter(ci, "CLKB");
-            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
-            if (d == nullptr || d->driver.cell == nullptr)
-                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
-            CellInfo *drv = d->driver.cell;
+
+            std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
             BelId io_bel;
-            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
-                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
-            else if (drv->type == ctx->id("IDELAYE2") && d->driver.port == ctx->id("DATAOUT"))
-                io_bel = iodelay_to_io.at(drv->name);
-            else
-                log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
-                          ctx->nameOf(ci), drv->type.c_str(ctx));
+
+            if (iobdelay == "IFD") {
+                NetInfo *d = get_net_or_empty(ci, ctx->id("DDLY"));
+                if (d == nullptr || d->driver.cell == nullptr)
+                    log_error("%s '%s' has disconnected DDLY input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+                CellInfo *drv = d->driver.cell;
+                if (drv->type.str(ctx).find("IDELAYE2") != std::string::npos && d->driver.port == ctx->id("DATAOUT"))
+                    io_bel = iodelay_to_io.at(drv->name);
+                else
+                    log_error("%s '%s' has DDLY input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                              ctx->nameOf(ci), drv->type.c_str(ctx));
+            } else if (iobdelay == "NONE") {
+                NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+                if (d == nullptr || d->driver.cell == nullptr)
+                    log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+                CellInfo *drv = d->driver.cell;
+                if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
+                    io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+                else
+                    log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                              ctx->nameOf(ci), drv->type.c_str(ctx));
+            } else {
+                log_error("%s '%s' has unsupported IOBDELAY value '%s'\n", ci->type.c_str(ctx), ctx->nameOf(ci),
+                          iobdelay.c_str());
+            }
+
             std::string iol_site = get_ilogic_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[ctx->id("BEL")] = iol_site + "/ISERDESE2";
         }
@@ -406,6 +490,78 @@ void XC7Packer::pack_iologic()
     flush_cells();
     generic_xform(iologic_rules, false);
     flush_cells();
+}
+
+void XC7Packer::pack_idelayctrl()
+{
+    CellInfo *idelayctrl = nullptr;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYCTRL")) {
+            if (idelayctrl != nullptr)
+                log_error("Found more than one IDELAYCTRL cell!\n");
+            idelayctrl = ci;
+        }
+    }
+    if (idelayctrl == nullptr)
+        return;
+    std::set<std::string> ioctrl_sites;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYE2_IDELAYE2") || ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
+            if (!ci->attrs.count(ctx->id("BEL")))
+                continue;
+            ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(ctx->id("X_IO_BEL")).as_string()));
+        }
+    }
+    if (ioctrl_sites.empty())
+        log_error("Found IDELAYCTRL but no I/ODELAYs\n");
+    NetInfo *rdy = get_net_or_empty(idelayctrl, ctx->id("RDY"));
+    disconnect_port(ctx, idelayctrl, ctx->id("RDY"));
+    std::vector<NetInfo *> dup_rdys;
+    int i = 0;
+    for (auto site : ioctrl_sites) {
+        auto dup_idc = create_cell(ctx, ctx->id("IDELAYCTRL"),
+                                   int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i), false));
+        connect_port(ctx, get_net_or_empty(idelayctrl, ctx->id("REFCLK")), dup_idc.get(), ctx->id("REFCLK"));
+        connect_port(ctx, get_net_or_empty(idelayctrl, ctx->id("RST")), dup_idc.get(), ctx->id("RST"));
+        if (rdy != nullptr) {
+            NetInfo *dup_rdy =
+                    (ioctrl_sites.size() == 1)
+                            ? rdy
+                            : create_internal_net(idelayctrl->name, "CTRL_DUP_" + std::to_string(i) + "_RDY", false);
+            connect_port(ctx, dup_rdy, dup_idc.get(), ctx->id("RDY"));
+            dup_rdys.push_back(dup_rdy);
+        }
+        dup_idc->attrs[ctx->id("BEL")] = site + "/IDELAYCTRL";
+        new_cells.push_back(std::move(dup_idc));
+        ++i;
+    }
+    disconnect_port(ctx, idelayctrl, ctx->id("REFCLK"));
+    disconnect_port(ctx, idelayctrl, ctx->id("RST"));
+
+    if (rdy != nullptr) {
+        // AND together all the RDY signals
+        std::vector<NetInfo *> int_anded_rdy;
+        int_anded_rdy.push_back(dup_rdys.front());
+        for (size_t j = 1; j < dup_rdys.size(); j++) {
+            NetInfo *anded_net =
+                    (j == (dup_rdys.size() - 1))
+                            ? rdy
+                            : create_internal_net(idelayctrl->name, "ANDED_RDY_" + std::to_string(j), false);
+            auto lut = create_lut(ctx, idelayctrl->name.str(ctx) + "/RDY_AND_LUT_" + std::to_string(j),
+                                  {int_anded_rdy.at(j - 1), dup_rdys.at(j)}, anded_net, Property(8));
+            int_anded_rdy.push_back(anded_net);
+            new_cells.push_back(std::move(lut));
+        }
+    }
+
+    packed_cells.insert(idelayctrl->name);
+    flush_cells();
+
+    ioctrl_rules[ctx->id("IDELAYCTRL")].new_type = ctx->id("IDELAYCTRL_IDELAYCTRL");
+
+    generic_xform(ioctrl_rules);
 }
 
 NEXTPNR_NAMESPACE_END

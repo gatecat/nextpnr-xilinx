@@ -629,7 +629,8 @@ struct FasmBackend
             if (!is_output)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
         }
-        if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" || iostandard == "SSTL135") {
+        if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" ||
+            iostandard == "SSTL135") {
             write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135.STEPDOWN");
             ioconfig_by_hclk[hclk].stepdown = true;
         }
@@ -720,6 +721,18 @@ struct FasmBackend
             if (type == "OVERSAMPLE")
                 write_bit("INTERFACE_TYPE.OVERSAMPLE");
             pop();
+        } else if (ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
+            write_bit("IN_USE");
+            write_bit("CINVCTRL_SEL", str_or_default(ci->params, ctx->id("CINVCTRL_SEL"), "FALSE") == "TRUE");
+            write_bit("PIPE_SEL", str_or_default(ci->params, ctx->id("PIPE_SEL"), "FALSE") == "TRUE");
+            write_bit("HIGH_PERFORMANCE_MODE",
+                      str_or_default(ci->params, ctx->id("HIGH_PERFORMANCE_MODE"), "FALSE") == "TRUE");
+            write_bit("DELAY_SRC_" + str_or_default(ci->params, ctx->id("DELAY_SRC"), "IDATAIN"));
+            write_bit("IDELAY_TYPE_" + str_or_default(ci->params, ctx->id("IDELAY_TYPE"), "FIXED"));
+            write_int_vector("IDELAY_VALUE", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, false);
+            write_int_vector("ZIDELAY_VALUE", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, true);
+            write_bit("IS_DATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_DATAIN_INVERTED"), false));
+            write_bit("IS_IDATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_IDATAIN_INVERTED"), false));
         } else {
             NPNR_ASSERT_FALSE("unsupported IOLOGIC");
         }

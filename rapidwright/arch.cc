@@ -891,14 +891,15 @@ TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port
     return info;
 }
 
-int Arch::getHclkForIob(BelId pad) {
+int Arch::getHclkForIob(BelId pad)
+{
     std::string tiletype = getBelTileType(pad).str(this);
     int ioi = pad.tile;
     // Find the IOI for IOB
     if (boost::starts_with(tiletype, "LIOB"))
-        ioi += chip_info->width;
+        ioi += 1;
     else if (boost::starts_with(tiletype, "RIOB"))
-        ioi -= chip_info->width;
+        ioi -= 1;
     else
         NPNR_ASSERT_FALSE("unknown IOB side");
     // Find a wire driven by the HCLK

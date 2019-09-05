@@ -199,7 +199,8 @@ struct XC7Packer : public XilinxPacker
     void fold_inverter(CellInfo *cell, std::string port);
     std::string get_ologic_site(const std::string &io_bel);
     std::string get_ilogic_site(const std::string &io_bel);
-    std::string get_ioctrl_site(const std::string &iol_bel);
+    std::string get_ioctrl_site(const std::string &io_bel);
+    std::string get_idelay_site(const std::string &io_bel);
     // Call before packing constants
     void prepare_iologic();
 
