@@ -609,6 +609,17 @@ void XC7Packer::pack_bram()
                     connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
                 }
             }
+            int wwb = int_or_default(ci->params, ctx->id("WRITE_WIDTH_B"), 0);
+            if (wwb != 36) {
+                for (int i = 4; i < 8; i++) {
+                    IdString port = ctx->id("WEBWE" + std::to_string(i));
+                    if (!ci->ports.count(port)) {
+                        ci->ports[port].name = port;
+                        ci->ports[port].type = PORT_IN;
+                        connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                    }
+                }
+            }
             for (auto p : {ctx->id("ADDRATIEHIGH0"), ctx->id("ADDRATIEHIGH1"), ctx->id("ADDRBTIEHIGH0"),
                            ctx->id("ADDRBTIEHIGH1")}) {
                 if (!ci->ports.count(p)) {

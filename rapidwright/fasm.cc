@@ -120,7 +120,7 @@ struct FasmBackend
         for (std::string s : {"L", "R"})
             for (std::string s2 : {"", "_TBYTESRC", "_TBYTETERM", "_SING"})
                 for (std::string i :
-                     (s2 == "_SING") ? std::vector<std::string>{""} : std::vector<std::string>{"0", "1"}) {
+                     (s2 == "_SING") ? std::vector<std::string>{"", "0", "1"} : std::vector<std::string>{"0", "1"}) {
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
                                ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
                             "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
