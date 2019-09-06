@@ -630,6 +630,7 @@ struct FasmBackend
 
         bool is_sing = tile.find("_SING_") != std::string::npos;
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
+        bool is_stepdown = false;
         push("IOB_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y)));
 
         if (boost::starts_with(iostandard, "DIFF_"))
@@ -665,6 +666,7 @@ struct FasmBackend
             iostandard == "SSTL135") {
             write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135.STEPDOWN");
             ioconfig_by_hclk[hclk].stepdown = true;
+            is_stepdown = true;
         }
 
         write_bit("PULLTYPE." + pulltype);
@@ -673,6 +675,8 @@ struct FasmBackend
         BelId inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
         if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr)
             write_bit("OUT_DIFF");
+        if (is_stepdown && !is_sing)
+            write_bit("IOB_Y" + std::to_string(ioLoc.y) + ".LVCMOS12_LVCMOS15_LVCMOS18_SSTL135.STEPDOWN");
         pop();
     }
 

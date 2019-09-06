@@ -257,6 +257,15 @@ void Arch::setup_pip_blacklist()
                     src_name.find("IMUX") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
             }
+        } else if (type.find("IOI3") != std::string::npos) {
+            for (int j = 0; j < td.num_pips; j++) {
+                auto &pd = td.pip_data[j];
+                std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
+                std::string src_name = IdString(td.wire_data[pd.src_index].name).str(this);
+
+                if (dest_name.find("CLKB") != std::string::npos && src_name.find("IMUX22") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
+            }
         }
     }
 }
