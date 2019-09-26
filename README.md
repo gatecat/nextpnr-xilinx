@@ -1,4 +1,4 @@
-# nextpnr-rapidwright [WIP]
+# nextpnr-xilinx
 
 nextpnr is a open-source multi-architecture place-and-route framework
 aimed at real-world FPGA silicon. This is an experiment to integrate
@@ -7,7 +7,7 @@ Project Xray, open bitstream documentation for xc7 FPGAs.
 
 Currently two flows are supported:
  - UltraScale+ with RapidWright database generation, bitstream generation
-   using RapidWight and Vivado **(please use the nextpnr-rapidwright branch)**
+   using RapidWight and Vivado
  - xc7 with RapidWright database generation, bitstream generation
    using FASM and Project Xray (no Vivado anywhere in the flow)
 
@@ -32,6 +32,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
   - Make sure `RAPIDWRIGHT_PATH` is set
   - Run `java -Xmx36G  -jar rapidwright_bbaexport.jar xc7a35tcsg324-1 ./rapidwright/constids.inc ./rapidwright/xc7a35t.bba`
   - Run `./bbasm ./rapidwright/xc7a35t.bba rapidwright/xc7a35t.bin`
+  - Note: it would be possible to prebuild databases to remove the build time dependency on RapidWright
  - Run `attosoc.sh` in `rapidwright/examples/arty-a35`.
 
 ## Creating chip database from RapidWright
@@ -48,8 +49,10 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
 
 ## Notes
 
-  - Currently LUTs (including fractured), FFs, DRAM (only RAM64X1D), and carry (XORCY and MUXCY) are supported.
-    There is limited support for manually constrained IO (see the examples) and BUFGCTRLs
+  - Currently support:
+  - xc7 and xcup: LUTs (including fractured), FFs, DRAM (only RAM64X1D), carry (XORCY and MUXCY), BRAM and IO
+  - xcup: OSERDESE3, ISERDESE3, IDDRE1, ODDRE1, IDELAYE3, ODELAYE3, IDELAYCTRL, BUFGCTRL, BUFG, BUFGCE, BUFG_PS, PLLE4_ADV, PLLE4_BASIC, MMCME4_ADV, MMCME4_BASIC
+  - xc7: OSERDESE2, ISERDESE2, IDELAYE2, IDELAYCTRL, BUFGCTRL, PLLE2_BASIC, PLLE2_ADV
 
   - Bels, tile wires and pips are deduplicated but nodes (connections between tile wires) are not. This means
-    that databases for larger devices will be several gigabytes in size.
+    that databases for larger devices will be several gigabytes in size (but significantly smaller than a fully flat database).
