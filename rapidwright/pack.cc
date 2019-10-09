@@ -142,6 +142,27 @@ std::unique_ptr<CellInfo> XilinxPacker::feed_through_lut(NetInfo *net, const std
     return lut;
 }
 
+std::unique_ptr<CellInfo> XilinxPacker::feed_through_muxf(NetInfo *net, IdString type,
+                                                          const std::vector<PortRef> &feed_users)
+{
+    std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
+    feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
+    std::unique_ptr<CellInfo> mux =
+            create_cell(ctx, type, ctx->id(net->name.str(ctx) + "$MUX$" + std::to_string(++autoidx)));
+    connect_port(ctx, net, mux.get(), ctx->id("I0"));
+    connect_port(ctx, feedthru_net.get(), mux.get(), ctx->id("O"));
+    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), mux.get(), ctx->id("S"));
+
+    for (auto &usr : feed_users) {
+        disconnect_port(ctx, usr.cell, usr.port);
+        connect_port(ctx, feedthru_net.get(), usr.cell, usr.port);
+    }
+
+    IdString netname = feedthru_net->name;
+    ctx->nets[netname] = std::move(feedthru_net);
+    return mux;
+}
+
 IdString XilinxPacker::int_name(IdString base, const std::string &postfix, bool is_hierarchy)
 {
     return ctx->id(base.str(ctx) + (is_hierarchy ? "$subcell$" : "$intcell$") + postfix);
@@ -224,6 +245,117 @@ void XilinxPacker::pack_lutffs()
         ++pairs;
     }
     log_info("Constrained %d LUTFF pairs.\n", pairs);
+}
+
+bool XilinxPacker::is_constrained(const CellInfo *cell)
+{
+    return cell->constr_x != cell->UNCONSTR || cell->constr_y != cell->UNCONSTR || cell->constr_z != cell->UNCONSTR;
+}
+
+void XilinxPacker::legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &mux_roots)
+{
+    if (curr->type.str(ctx).substr(0, 3) == "LUT")
+        return;
+    for (IdString p : {ctx->id("I0"), ctx->id("I1")}) {
+        NetInfo *pn = get_net_or_empty(curr, p);
+        if (pn == nullptr || pn->driver.cell == nullptr)
+            continue;
+        if (curr->type == ctx->id("MUXF7")) {
+            if (pn->driver.cell->type.str(ctx).substr(0, 3) != "LUT" || is_constrained(pn->driver.cell)) {
+                PortRef pr;
+                pr.cell = curr;
+                pr.port = p;
+                auto i_feed = feed_through_lut(pn, {pr});
+                new_cells.push_back(std::move(i_feed));
+                continue;
+            }
+        } else {
+            IdString next_type;
+            if (curr->type == ctx->id("MUXF9"))
+                next_type = ctx->id("MUXF8");
+            else if (curr->type == ctx->id("MUXF8"))
+                next_type = ctx->id("MUXF7");
+            else
+                NPNR_ASSERT_FALSE("bad mux type");
+            if (pn->driver.cell->type != next_type || is_constrained(pn->driver.cell) ||
+                bool_or_default(pn->driver.cell->attrs, ctx->id("MUX_TREE_ROOT"))) {
+                PortRef pr;
+                pr.cell = curr;
+                pr.port = p;
+                auto i_feed = feed_through_muxf(pn, next_type, {pr});
+                new_cells.push_back(std::move(i_feed));
+                continue;
+            }
+        }
+        legalise_muxf_tree(pn->driver.cell, mux_roots);
+    }
+}
+
+void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset)
+{
+    int base_z = 0;
+    if (base->type == ctx->id("MUXF7"))
+        base_z = BEL_F7MUX;
+    else if (base->type == ctx->id("MUXF8"))
+        base_z = BEL_F8MUX;
+    else if (base->type == ctx->id("MUXF9"))
+        base_z = BEL_F9MUX;
+    else
+        NPNR_ASSERT_FALSE("unexpected mux base type");
+    int curr_z = zoffset * 8;
+    int input_spacing = 0;
+    if (curr->type == ctx->id("MUXF7")) {
+        curr_z += BEL_F7MUX;
+        input_spacing = 1;
+    } else if (curr->type == ctx->id("MUXF8")) {
+        curr_z += BEL_F8MUX;
+        input_spacing = 2;
+    } else if (curr->type == ctx->id("MUXF9")) {
+        curr_z += BEL_F9MUX;
+        input_spacing = 4;
+    } else
+        curr_z += BEL_6LUT;
+    if (curr != base) {
+        curr->constr_x = 0;
+        curr->constr_y = 0;
+        curr->constr_z = curr_z - base_z;
+        curr->constr_abs_z = false;
+        curr->constr_parent = base;
+        base->constr_children.push_back(curr);
+    }
+    if (curr->type == ctx->id("MUFX7") || curr->type == ctx->id("MUFX8") || curr->type == ctx->id("MUFX9")) {
+        NetInfo *i0 = get_net_or_empty(curr, ctx->id("I0")), *i1 = get_net_or_empty(curr, ctx->id("I0"));
+        if (i0 != nullptr && i0->driver.cell != nullptr)
+            constrain_muxf_tree(i0->driver.cell, base, zoffset + input_spacing);
+        if (i1 != nullptr && i1->driver.cell != nullptr)
+            constrain_muxf_tree(i1->driver.cell, base, zoffset);
+    }
+}
+
+void XilinxPacker::pack_muxfs()
+{
+    std::vector<CellInfo *> mux_roots;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        ci->attrs.erase(ctx->id("MUX_TREE_ROOT"));
+        if (ci->type == ctx->id("MUXF9")) {
+            if (ctx->xc7)
+                log_error("MUXF9 is not supported on xc7!\n");
+            mux_roots.push_back(ci);
+        } else if (ci->type == ctx->id("MUXF8")) {
+            NetInfo *o = get_net_or_empty(ci, ctx->id("O"));
+            if (o == nullptr || o->users.size() != 1 || o->users.at(0).cell->type != ctx->id("MUXF9") ||
+                is_constrained(o->users.at(0).cell) || o->users.at(0).port == ctx->id("S"))
+                mux_roots.push_back(ci);
+        } else if (ci->type == ctx->id("MUXF7")) {
+            NetInfo *o = get_net_or_empty(ci, ctx->id("O"));
+            if (o == nullptr || o->users.size() != 1 || o->users.at(0).cell->type != ctx->id("MUXF8") ||
+                is_constrained(o->users.at(0).cell) || o->users.at(0).port == ctx->id("S"))
+                mux_roots.push_back(ci);
+        }
+    }
+    for (auto root : mux_roots)
+        root->attrs[ctx->id("MUX_TREE_ROOT")] = 1;
 }
 
 void XilinxPacker::pack_constants()
