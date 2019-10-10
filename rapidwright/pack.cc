@@ -334,6 +334,7 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
 
 void XilinxPacker::pack_muxfs()
 {
+    log_info("Packing MUX[789]s..\n");
     std::vector<CellInfo *> mux_roots;
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
@@ -356,6 +357,21 @@ void XilinxPacker::pack_muxfs()
     }
     for (auto root : mux_roots)
         root->attrs[ctx->id("MUX_TREE_ROOT")] = 1;
+    for (auto root : mux_roots)
+        legalise_muxf_tree(root, mux_roots);
+    for (auto root : mux_roots)
+        constrain_muxf_tree(root, root, 0);
+    std::unordered_map<IdString, XFormRule> muxf_rules;
+    muxf_rules[ctx->id("MUXF9")].new_type = id_F9MUX;
+    muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I0")] = ctx->id("0");
+    muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I1")] = ctx->id("1");
+    muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("S")] = ctx->id("S0");
+    muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("O")] = ctx->id("OUT");
+    muxf_rules[ctx->id("MUXF8")].new_type = id_F8MUX;
+    muxf_rules[ctx->id("MUXF8")].port_xform = muxf_rules[ctx->id("MUXF9")].port_xform;
+    muxf_rules[ctx->id("MUXF7")].new_type = id_F7MUX;
+    muxf_rules[ctx->id("MUXF7")].port_xform = muxf_rules[ctx->id("MUXF7")].port_xform;
+    generic_xform(muxf_rules, true);
 }
 
 void XilinxPacker::pack_constants()
@@ -815,6 +831,7 @@ bool Arch::pack()
         packer.pack_iologic();
         packer.pack_idelayctrl();
         packer.pack_clocking();
+        packer.pack_muxfs();
         packer.pack_carries();
         packer.pack_luts();
         packer.pack_dram();
@@ -832,6 +849,7 @@ bool Arch::pack()
         packer.pack_iologic();
         packer.pack_idelayctrl();
         packer.pack_clocking();
+        packer.pack_muxfs();
         packer.pack_carries();
         packer.pack_luts();
         packer.pack_dram();
