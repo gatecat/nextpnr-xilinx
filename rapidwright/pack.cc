@@ -302,7 +302,7 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         base_z = BEL_F9MUX;
     else
         NPNR_ASSERT_FALSE("unexpected mux base type");
-    int curr_z = zoffset * 8;
+    int curr_z = zoffset * 16;
     int input_spacing = 0;
     if (curr->type == ctx->id("MUXF7")) {
         curr_z += BEL_F7MUX;
@@ -323,8 +323,8 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         curr->constr_parent = base;
         base->constr_children.push_back(curr);
     }
-    if (curr->type == ctx->id("MUFX7") || curr->type == ctx->id("MUFX8") || curr->type == ctx->id("MUFX9")) {
-        NetInfo *i0 = get_net_or_empty(curr, ctx->id("I0")), *i1 = get_net_or_empty(curr, ctx->id("I0"));
+    if (curr->type == ctx->id("MUXF7") || curr->type == ctx->id("MUXF8") || curr->type == ctx->id("MUXF9")) {
+        NetInfo *i0 = get_net_or_empty(curr, ctx->id("I0")), *i1 = get_net_or_empty(curr, ctx->id("I1"));
         if (i0 != nullptr && i0->driver.cell != nullptr)
             constrain_muxf_tree(i0->driver.cell, base, zoffset + input_spacing);
         if (i1 != nullptr && i1->driver.cell != nullptr)
@@ -370,7 +370,7 @@ void XilinxPacker::pack_muxfs()
     muxf_rules[ctx->id("MUXF8")].new_type = id_F8MUX;
     muxf_rules[ctx->id("MUXF8")].port_xform = muxf_rules[ctx->id("MUXF9")].port_xform;
     muxf_rules[ctx->id("MUXF7")].new_type = id_F7MUX;
-    muxf_rules[ctx->id("MUXF7")].port_xform = muxf_rules[ctx->id("MUXF7")].port_xform;
+    muxf_rules[ctx->id("MUXF7")].port_xform = muxf_rules[ctx->id("MUXF9")].port_xform;
     generic_xform(muxf_rules, true);
 }
 
