@@ -367,9 +367,9 @@ void XilinxPacker::pack_muxfs()
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I1")] = ctx->id("1");
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("S")] = ctx->id("S0");
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("O")] = ctx->id("OUT");
-    muxf_rules[ctx->id("MUXF8")].new_type = id_F8MUX;
+    muxf_rules[ctx->id("MUXF8")].new_type = ctx->xc7 ? ctx->id("SELMUX2_1") : id_F8MUX;
     muxf_rules[ctx->id("MUXF8")].port_xform = muxf_rules[ctx->id("MUXF9")].port_xform;
-    muxf_rules[ctx->id("MUXF7")].new_type = id_F7MUX;
+    muxf_rules[ctx->id("MUXF7")].new_type = ctx->xc7 ? ctx->id("SELMUX2_1") : id_F7MUX;
     muxf_rules[ctx->id("MUXF7")].port_xform = muxf_rules[ctx->id("MUXF9")].port_xform;
     generic_xform(muxf_rules, true);
 }
@@ -909,7 +909,8 @@ void Arch::assignCellInfo(CellInfo *cell)
                                 bool_or_default(cell->params, id("IS_CLR_INVERTED"), false) ||
                                 bool_or_default(cell->params, id("IS_PRE_INVERTED"), false);
         cell->ffInfo.is_latch = cell->attrs.count(id("X_FF_AS_LATCH"));
-    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX) {
+    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
+               cell->type == id("SELMUX2_1")) {
         cell->muxInfo.sel = get_net_or_empty(cell, id_S0);
         cell->muxInfo.out = get_net_or_empty(cell, id_OUT);
     } else if (cell->type == id_CARRY8) {
