@@ -25,6 +25,7 @@
 NEXTPNR_NAMESPACE_BEGIN
 
 std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name);
+std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString name);
 std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, const std::vector<NetInfo *> &inputs,
                                      NetInfo *output, const Property &init);
 

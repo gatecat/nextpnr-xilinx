@@ -534,6 +534,50 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     tied_pins[ctx->id("BUFGCE_DIV")][ctx->id("CE")] = true;
     tied_pins[ctx->id("BUFGCE_DIV")][ctx->id("CLR")] = false;
     tied_pins[ctx->id("BUFGCE")][ctx->id("CE")] = true;
+
+    // UltraScale DSP
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTA")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTALLCARRYIN")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTALUMODE")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTB")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTC")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTCTRL")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTD")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTINMODE")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTM")] = false;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTP")] = false;
+
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CARRYIN")] = false;
+
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEA1")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEA2")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEAD")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEALUMODE")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEB1")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEB2")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEC")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CECARRYIN")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CECTRL")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CED")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEINMODE")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEM")] = true;
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CEP")] = true;
+    for (int i = 0; i < 30; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("A[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 18; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("B[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 48; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("C[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 27; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("D[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 4; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("ALUMODE[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 3; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("CARRYINSEL[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 5; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("INMODE[" + std::to_string(i) + "]")] = false;
+    for (int i = 0; i < 9; i++)
+        tied_pins[ctx->id("DSP48E2")][ctx->id("OPMODE[" + std::to_string(i) + "]")] = false;
 }
 
 // Get a list of logical pins that have both L and U bel pins that need
