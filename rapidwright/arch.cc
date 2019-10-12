@@ -845,6 +845,10 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
                 return true;
             }
         }
+    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
+               cell->type == id("SELMUX2_1")) {
+        delay.delay = 100;
+        return true;
     } else if (cell->type == id_BUFGCTRL) {
         if (fromPort == id("I0") || fromPort == id("I1"))
             if (toPort == id("O")) {
@@ -874,6 +878,12 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
             clockInfoCount = 1;
             return TMG_REGISTER_INPUT;
         }
+    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
+               cell->type == id("SELMUX2_1")) {
+        if (port == id_OUT)
+            return TMG_COMB_OUTPUT;
+        else
+            return TMG_COMB_INPUT;
     } else if (cell->type == id_IOB_IBUFCTRL) {
         if (port == id("O"))
             return TMG_STARTPOINT;

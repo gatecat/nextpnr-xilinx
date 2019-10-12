@@ -107,6 +107,8 @@ struct XilinxPacker
     void generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary = false);
 
     std::unique_ptr<CellInfo> feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users);
+    std::unique_ptr<CellInfo> feed_through_muxf(NetInfo *net, IdString type, const std::vector<PortRef> &feed_users);
+
     IdString int_name(IdString base, const std::string &postfix, bool is_hierarchy = true);
     NetInfo *create_internal_net(IdString base, const std::string &postfix, bool is_hierarchy = true);
     void rename_net(IdString old, IdString newname);
@@ -117,6 +119,11 @@ struct XilinxPacker
     void pack_luts();
     void pack_ffs();
     void pack_lutffs();
+
+    bool is_constrained(const CellInfo *cell);
+    void pack_muxfs();
+    void legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &mux_roots);
+    void constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset);
 
     // DistRAM
     std::unordered_map<IdString, XFormRule> dram_rules;
