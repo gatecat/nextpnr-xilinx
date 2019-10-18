@@ -112,6 +112,18 @@ enum BRAMBelTypeZ
     BEL_FIFO18_L = 10,
 };
 
+enum DSP48E2BelTypeZ
+{
+    BEL_DSP_PREADD_DATA = 0,
+    BEL_DSP_PREADD = 1,
+    BEL_DSP_A_B_DATA = 2,
+    BEL_DSP_MULTIPLIER = 3,
+    BEL_DSP_C_DATA = 4,
+    BEL_DSP_M_DATA = 5,
+    BEL_DSP_ALU = 6,
+    BEL_DSP_OUTPUT = 7
+};
+
 NPNR_PACKED_STRUCT(struct BelInfoPOD {
     int32_t name;    // bel name (in site) constid
     int32_t type;    // compatible type name constid

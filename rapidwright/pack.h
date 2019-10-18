@@ -186,6 +186,9 @@ struct USPacker : public XilinxPacker
 
     // BRAM
     void pack_bram();
+
+    // DSP
+    void pack_dsps();
 };
 
 struct XC7Packer : public XilinxPacker
