@@ -854,6 +854,7 @@ bool Arch::pack()
         packer.pack_luts();
         packer.pack_dram();
         packer.pack_bram();
+        packer.pack_dsps();
         packer.pack_ffs();
         packer.pack_lutffs();
     }

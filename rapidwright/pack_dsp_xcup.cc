@@ -24,7 +24,6 @@ NEXTPNR_NAMESPACE_BEGIN
 
 void USPacker::pack_dsps()
 {
-
     const std::vector<IdString> dsp_subcell_names = {
             ctx->id("DSP_PREADD_DATA"), ctx->id("DSP_PREADD"), ctx->id("DSP_A_B_DATA"), ctx->id("DSP_MULTIPLIER"),
             ctx->id("DSP_C_DATA"),      ctx->id("DSP_M_DATA"), ctx->id("DSP_ALU"),      ctx->id("DSP_OUTPUT")};
@@ -80,9 +79,9 @@ void USPacker::pack_dsps()
                 if (sc->ports.count(p))
                     connect_port(ctx, pn, sc, p);
         }
-        /*
-         * Add ports of DSP "super-cell" as attributes
-         */
+        // Move parameters from the original cell to the first subcell
+        std::swap(ci->params, subcells.front()->params);
+        // Add ports of DSP "super-cell" as attributes
         for (auto sc : subcells) {
             sc->attrs[ctx->id("X_ORIG_MACRO_PRIM")] = ci->type.str(ctx);
             for (auto &p : sc->ports) {
@@ -105,7 +104,14 @@ void USPacker::pack_dsps()
 
         packed_cells.insert(ci->name);
     }
+
     flush_cells();
+
+    // Expand bus ports and set orig ports/type correctly
+    std::unordered_map<IdString, XFormRule> dsp_rules;
+    for (auto sctype : dsp_subcell_names)
+        dsp_rules[sctype].new_type = sctype;
+    generic_xform(dsp_rules);
 }
 
 NEXTPNR_NAMESPACE_END

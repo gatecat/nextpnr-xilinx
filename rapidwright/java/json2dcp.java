@@ -558,6 +558,16 @@ public class json2dcp {
                 String basename = nc.name.replace("/", "__").split("\\$subcell\\$")[0];
                 created_ports.putIfAbsent(basename, new HashSet<>());
                 EDIFCellInst macro = des.getTopEDIFCell().getCellInst(basename);
+
+                for (Map.Entry<String, String> param : nc.params.entrySet()) {
+                    String value = param.getValue();
+                    if (param.getKey().startsWith("IS_") && param.getKey().endsWith("_INVERTED")) {
+                        value = fixup_init(value, 1).replace("h", "b");
+                    }
+                    macro.addProperty(param.getKey(), value);
+                }
+
+
                 for (NextpnrCellPort p : nc.ports.values()) {
                     if (p.net == null)
                         continue;
