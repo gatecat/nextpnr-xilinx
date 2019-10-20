@@ -536,6 +536,7 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     tied_pins[ctx->id("BUFGCE")][ctx->id("CE")] = true;
 
     // UltraScale DSP
+    tied_pins[ctx->id("DSP48E2")][ctx->id("CLK")] = false;
     tied_pins[ctx->id("DSP48E2")][ctx->id("RSTA")] = false;
     tied_pins[ctx->id("DSP48E2")][ctx->id("RSTALLCARRYIN")] = false;
     tied_pins[ctx->id("DSP48E2")][ctx->id("RSTALUMODE")] = false;

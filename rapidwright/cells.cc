@@ -281,6 +281,7 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         add_port("UNDERFLOW", PORT_OUT);
         add_bus("XOROUT", PORT_OUT, 8);
     }
+    return cell;
 }
 
 std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, const std::vector<NetInfo *> &inputs,
