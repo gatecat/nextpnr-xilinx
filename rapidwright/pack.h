@@ -125,8 +125,8 @@ struct XilinxPacker
     void finalise_muxfs();
     void legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &mux_roots);
     void constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset);
-    void create_muxf_tree(CellInfo *base, const std::vector<NetInfo *> &data, const std::vector<NetInfo *> &select,
-                          NetInfo *out, int zoffset);
+    void create_muxf_tree(CellInfo *base, const std::string &name_base, const std::vector<NetInfo *> &data,
+                          const std::vector<NetInfo *> &select, NetInfo *out, int zoffset);
     // DistRAM
     std::unordered_map<IdString, XFormRule> dram_rules;
     CellInfo *create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,

@@ -293,6 +293,10 @@ void XilinxPacker::legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &m
 
 void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset)
 {
+
+    if (curr->type == id_SLICE_LUTX && (curr->constr_abs_z || curr->constr_parent != nullptr))
+        return;
+
     int base_z = 0;
     if (base->type == ctx->id("MUXF7"))
         base_z = BEL_F7MUX;
@@ -906,6 +910,10 @@ void Arch::assignCellInfo(CellInfo *cell)
                 cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
                 cell->lutInfo.only_drives_carry = true;
         }
+
+        const IdString addr_msb_sigs[] = {id_WA7, id_WA8, id_WA9};
+        for (int i = 0; i < 3; i++)
+            cell->lutInfo.address_msb[i] = get_net_or_empty(cell, addr_msb_sigs[i]);
 
     } else if (cell->type == id_SLICE_FFX) {
         cell->ffInfo.d = get_net_or_empty(cell, id_D);

@@ -162,6 +162,7 @@ struct ArchCellInfo
             int memory_group;
             bool only_drives_carry;
             NetInfo *input_sigs[6], *output_sigs[2];
+            NetInfo *address_msb[3];
             NetInfo *di1_net, *di2_net, *wclk;
         } lutInfo;
         struct
