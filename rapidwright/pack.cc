@@ -300,6 +300,8 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         base_z = BEL_F8MUX;
     else if (base->type == ctx->id("MUXF9"))
         base_z = BEL_F9MUX;
+    else if (base->constr_abs_z)
+        base_z = base->constr_z;
     else
         NPNR_ASSERT_FALSE("unexpected mux base type");
     int curr_z = zoffset * 16;
@@ -361,6 +363,10 @@ void XilinxPacker::pack_muxfs()
         legalise_muxf_tree(root, mux_roots);
     for (auto root : mux_roots)
         constrain_muxf_tree(root, root, 0);
+}
+
+void XilinxPacker::finalise_muxfs()
+{
     std::unordered_map<IdString, XFormRule> muxf_rules;
     muxf_rules[ctx->id("MUXF9")].new_type = id_F9MUX;
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I0")] = ctx->id("0");
@@ -837,6 +843,7 @@ bool Arch::pack()
         packer.pack_dram();
         packer.pack_bram();
         packer.pack_ffs();
+        packer.finalise_muxfs();
         packer.pack_lutffs();
     } else {
         USPacker packer;
@@ -856,6 +863,7 @@ bool Arch::pack()
         packer.pack_bram();
         packer.pack_dsps();
         packer.pack_ffs();
+        packer.finalise_muxfs();
         packer.pack_lutffs();
     }
 

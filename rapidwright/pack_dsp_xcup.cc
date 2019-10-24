@@ -17,9 +17,9 @@
  *
  */
 
+#include <boost/algorithm/string.hpp>
 #include "cells.h"
 #include "pack.h"
-#include <boost/algorithm/string.hpp>
 
 NEXTPNR_NAMESPACE_BEGIN
 
@@ -38,7 +38,8 @@ void USPacker::pack_dsps()
         // don't care
         for (auto port : ci->ports) {
             std::string name = port.first.str(ctx);
-            if (boost::starts_with(name, "ACIN") || boost::starts_with(name, "BCIN") || boost::starts_with(name, "PCIN")) {
+            if (boost::starts_with(name, "ACIN") || boost::starts_with(name, "BCIN") ||
+                boost::starts_with(name, "PCIN")) {
                 NetInfo *pn = port.second.net;
                 if (pn->name == ctx->id("$PACKER_GND_NET"))
                     disconnect_port(ctx, ci, port.first);
@@ -53,8 +54,8 @@ void USPacker::pack_dsps()
         std::vector<CellInfo *> subcells;
 
         for (auto ctype : dsp_subcell_names) {
-            std::unique_ptr<CellInfo> subcell = create_dsp_cell(ctx, ctype,
-                    int_name(ci->name, ctype.str(ctx) + "_INST", true));
+            std::unique_ptr<CellInfo> subcell =
+                    create_dsp_cell(ctx, ctype, int_name(ci->name, ctype.str(ctx) + "_INST", true));
 
             if (!subcells.empty()) {
                 // FIXME: add constraints for cascaded DSP chains
