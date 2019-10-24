@@ -828,6 +828,14 @@ void XC7Packer::pack_bram()
     }
 }
 
+void USPacker::pack_uram()
+{
+    std::unordered_map<IdString, XFormRule> uram_rules;
+    uram_rules[id_URAM288].new_type = id_BEL_URAM288;
+    uram_rules[ctx->id("URAM288_BASE")] = uram_rules[id_URAM288];
+    generic_xform(uram_rules, true);
+}
+
 bool Arch::pack()
 {
     if (xc7) {
@@ -865,6 +873,7 @@ bool Arch::pack()
         packer.pack_luts();
         packer.pack_dram();
         packer.pack_bram();
+        packer.pack_uram();
         packer.pack_dsps();
         packer.pack_ffs();
         packer.finalise_muxfs();
