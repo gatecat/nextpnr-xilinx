@@ -786,11 +786,22 @@ void Arch::fixupPlacement()
                         x_net = carry8->carryInfo.x_sigs[z];
                 }
 
+                CellInfo *out_fmux = nullptr;
+                // Eights B, D, F, H: F7MUX connects to F7F8 out
+                if (z == 1 || z == 3 || z == 5 || z == 7)
+                    out_fmux = lts.cells[(z - 1) << 4 | BEL_F7MUX];
+                // Eights C, G: F8MUX connects to F7F8 out
+                if (z == 2 || z == 6)
+                    out_fmux = lts.cells[(z - 2) << 4 | BEL_F8MUX];
+                // Eights E: F9MUX connects to F7F8 out
+                if (z == 4)
+                    out_fmux = lts.cells[BEL_F9MUX];
+
                 // FF1 might use X, if it isn't driven directly
                 CellInfo *ff1 = lts.cells[z << 4 | BEL_FF];
                 if (ff1 != nullptr && ff1->ffInfo.d != nullptr && ff1->ffInfo.d->driver.cell != nullptr) {
                     auto &drv = ff1->ffInfo.d->driver;
-                    if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5) {
+                    if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
                         // Direct, OK
                     } else {
                         // Indirect, must use X input
@@ -802,7 +813,7 @@ void Arch::fixupPlacement()
                 CellInfo *ff2 = lts.cells[z << 4 | BEL_FF2];
                 if (ff2 != nullptr && ff2->ffInfo.d != nullptr && ff2->ffInfo.d->driver.cell != nullptr) {
                     auto &drv = ff2->ffInfo.d->driver;
-                    if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5) {
+                    if ((drv.cell == lut6 && drv.port != id_MC31) || drv.cell == lut5 || drv.cell == out_fmux) {
                         // Direct, OK
                     } else {
                         // Indirect, must use X input
