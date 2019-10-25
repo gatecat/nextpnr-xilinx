@@ -122,9 +122,11 @@ struct XilinxPacker
 
     bool is_constrained(const CellInfo *cell);
     void pack_muxfs();
+    void finalise_muxfs();
     void legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &mux_roots);
     void constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset);
-
+    void create_muxf_tree(CellInfo *base, const std::string &name_base, const std::vector<NetInfo *> &data,
+                          const std::vector<NetInfo *> &select, NetInfo *out, int zoffset);
     // DistRAM
     std::unordered_map<IdString, XFormRule> dram_rules;
     CellInfo *create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
@@ -186,6 +188,10 @@ struct USPacker : public XilinxPacker
 
     // BRAM
     void pack_bram();
+    void pack_uram();
+
+    // DSP
+    void pack_dsps();
 };
 
 struct XC7Packer : public XilinxPacker

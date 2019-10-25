@@ -293,6 +293,10 @@ void XilinxPacker::legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &m
 
 void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset)
 {
+
+    if (curr->type == id_SLICE_LUTX && (curr->constr_abs_z || curr->constr_parent != nullptr))
+        return;
+
     int base_z = 0;
     if (base->type == ctx->id("MUXF7"))
         base_z = BEL_F7MUX;
@@ -300,6 +304,8 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         base_z = BEL_F8MUX;
     else if (base->type == ctx->id("MUXF9"))
         base_z = BEL_F9MUX;
+    else if (base->constr_abs_z)
+        base_z = base->constr_z;
     else
         NPNR_ASSERT_FALSE("unexpected mux base type");
     int curr_z = zoffset * 16;
@@ -361,6 +367,10 @@ void XilinxPacker::pack_muxfs()
         legalise_muxf_tree(root, mux_roots);
     for (auto root : mux_roots)
         constrain_muxf_tree(root, root, 0);
+}
+
+void XilinxPacker::finalise_muxfs()
+{
     std::unordered_map<IdString, XFormRule> muxf_rules;
     muxf_rules[ctx->id("MUXF9")].new_type = id_F9MUX;
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I0")] = ctx->id("0");
@@ -818,6 +828,14 @@ void XC7Packer::pack_bram()
     }
 }
 
+void USPacker::pack_uram()
+{
+    std::unordered_map<IdString, XFormRule> uram_rules;
+    uram_rules[id_URAM288].new_type = id_BEL_URAM288;
+    uram_rules[ctx->id("URAM288_BASE")] = uram_rules[id_URAM288];
+    generic_xform(uram_rules, true);
+}
+
 bool Arch::pack()
 {
     if (xc7) {
@@ -837,6 +855,7 @@ bool Arch::pack()
         packer.pack_dram();
         packer.pack_bram();
         packer.pack_ffs();
+        packer.finalise_muxfs();
         packer.pack_lutffs();
     } else {
         USPacker packer;
@@ -854,7 +873,10 @@ bool Arch::pack()
         packer.pack_luts();
         packer.pack_dram();
         packer.pack_bram();
+        packer.pack_uram();
+        packer.pack_dsps();
         packer.pack_ffs();
+        packer.finalise_muxfs();
         packer.pack_lutffs();
     }
 
@@ -897,6 +919,10 @@ void Arch::assignCellInfo(CellInfo *cell)
                 cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
                 cell->lutInfo.only_drives_carry = true;
         }
+
+        const IdString addr_msb_sigs[] = {id_WA7, id_WA8, id_WA9};
+        for (int i = 0; i < 3; i++)
+            cell->lutInfo.address_msb[i] = get_net_or_empty(cell, addr_msb_sigs[i]);
 
     } else if (cell->type == id_SLICE_FFX) {
         cell->ffInfo.d = get_net_or_empty(cell, id_D);

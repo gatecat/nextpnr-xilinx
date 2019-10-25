@@ -475,7 +475,7 @@ public class bbaexport {
     private static int getBelZoverride(Tile t, Site s, BEL b) {
 
         if (t.getTileTypeEnum() == TileTypeEnum.BRAM) {
-            switch(b.getBELType()) {
+            switch (b.getBELType()) {
                 case "RAMBFIFO36E2_RAMBFIFO36E2":
                     return 0;
                 case "RAMB36E2_RAMB36E2":
@@ -490,6 +490,33 @@ public class bbaexport {
                     return 9;
                 case "FIFO18E2_FIFO18E2":
                     return 10;
+            }
+        } else if (t.getTileTypeEnum() == TileTypeEnum.DSP) {
+            boolean is_upper_site = false;
+            for (Site s2 : t.getSites()) {
+                if (s2.getInstanceX() < s.getInstanceX()) {
+                    is_upper_site = true;
+                    break;
+                }
+            }
+            int zs = is_upper_site ? (1 << 4) : 0;
+            switch (b.getBELType()) {
+                case "DSP_PREADD_DATA":
+                    return zs | 0;
+                case "DSP_PREADD":
+                    return zs | 1;
+                case "DSP_A_B_DATA":
+                    return zs | 2;
+                case "DSP_MULTIPLIER":
+                    return zs | 3;
+                case "DSP_C_DATA":
+                    return zs | 4;
+                case "DSP_M_DATA":
+                    return zs | 5;
+                case "DSP_ALU":
+                    return zs | 6;
+                case "DSP_OUTPUT":
+                    return zs | 7;
             }
         } else if (t.getTileTypeEnum() == TileTypeEnum.BRAM_L || t.getTileTypeEnum() == TileTypeEnum.BRAM_R) {
             boolean is_top18 = false;
