@@ -33,3 +33,4 @@ install_manifest.txt
 *.jar
 *.mf
 *.bba
+__pycache__/
