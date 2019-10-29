@@ -10,10 +10,11 @@ class WireData:
 		self.tied_value = tied_value
 
 class PIPData:
-	def __init__(self, index, from_wire, to_wire, is_route_thru):
+	def __init__(self, index, from_wire, to_wire, is_bidi, is_route_thru):
 		self.index = index
 		self.from_wire = from_wire
 		self.to_wire = to_wire
+		self.is_bidi = is_bidi
 		self.is_route_thru = is_route_thru
 
 class SiteWireData:
@@ -107,11 +108,16 @@ class Tile:
 		self.data = data
 		self.site_insts = site_insts
 
-	def wires():
+	def get_pip_data(self, i):
+		return self.data.pips[i]
+	def get_wire_data(self, i):
+		return self.data.wires[i]
+
+	def wires(self):
 		return (Wire(self, i) for i in range(len(self.data.wires)))
-	def pips():
-		return (Pip(self, i) for i in range(len(self.data.pips)))
-	def sites():
+	def pips(self):
+		return (PIP(self, i) for i in range(len(self.data.pips)))
+	def sites(self):
 		return site_insts
 
 class Device:
@@ -120,14 +126,15 @@ class Device:
 		self.tiles = []
 		self.tiles_by_name = {}
 		self.sites_by_name = {}
-	def tile(name):
+	def tile(self, name):
 		return self.tiles_by_name[name]
-	def site(name):
+	def site(self, name):
 		return self.sites_by_name[name]
 
 def import_device(name, prjxray_root, metadata_root):
 	site_type_cache = {}
 	tile_type_cache = {}
+	tile_json_cache = {}
 	def parse_xy(xy):
 		xpos = xy.rfind("X")
 		ypos = xy.rfind("Y")
@@ -137,14 +144,37 @@ def import_device(name, prjxray_root, metadata_root):
 		if sitetype not in site_type_cache:
 			site_type_cache[sitetype] = SiteData(sitetype)
 		return site_type_cache[sitetype]
-			
+
+	def read_tile_type_json(tiletype):
+		if tiletype not in tile_json_cache:
+			with open(prjxray_root + "/tile_type_" + tiletype + ".json", "r") as jf:
+				tile_json_cache[tiletype] = json.load(jf)
+		return tile_json_cache[tiletype]
+
 	def get_tile_type_data(tiletype):
 		if tiletype not in tile_type_cache:
-			tile_type_cache[tiletype] = TileData(tiletype)
+			td = TileData(tiletype)
+			# Import wires and pips 
+			tj = read_tile_type_json(tiletype)
+			wire_name_to_id = {}
+			for wire in sorted(tj["wires"].keys()):
+				wire_id = len(td.wires)
+				wd = WireData(index=wire_id, name=wire, tied_value=None) # FIXME: tied_value
+				wire_name_to_id[wire] = wire_id
+				td.wires.append(wd)
+			for pip, pipdata in sorted(tj["pips"].items()):
+				# FIXME: pip/wire delays
+				pip_id = len(td.pips)
+				pd = PIPData(index=pip_id,
+					from_wire=wire_name_to_id[pipdata["src_wire"]], to_wire=wire_name_to_id[pipdata["dst_wire"]],
+					is_bidi=~bool(pipdata["is_directional"]), is_route_thru=bool(pipdata["is_pseudo"]))
+				td.pips.append(pd)
+			tile_type_cache[tiletype] = td
+
 		return tile_type_cache[tiletype]
 
 	d = Device(name)
-	with open(prjxray_root + "/gridinfo/grid-" + name + "-db.txt") as gf:
+	with open(prjxray_root + "/gridinfo/grid-" + name + "-db.txt", "r") as gf:
 		tileprops, tilesites, siteprops = parse_gridinfo(gf)
 		for tile, props in sorted(tileprops.items()):
 			x = int(props["COLUMN"])
