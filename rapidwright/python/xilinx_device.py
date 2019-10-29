@@ -1,6 +1,7 @@
 import json
 import os
 from gridinfo import parse_gridinfo
+from tileconn import apply_tileconn
 # Represents Xilinx device data from PrjXray etc
 
 class WireData:
@@ -55,6 +56,7 @@ class TileData:
 	def __init__(self, tile_type):
 		self.tile_type = tile_type
 		self.wires = []
+		self.wires_by_name = {}
 		self.pips = []
 
 class PIP:
@@ -77,7 +79,9 @@ class Wire:
 	def name(self):
 		return self.data.name
 	def node(self):
-		return self.tile.wire_to_node(index)
+		if self.index not in self.tile.wire_to_node:
+			self.tile.wire_to_node[self.index] = Node([self])
+		return self.tile.wire_to_node[self.index]
 
 class SiteBEL:
 	def __init__(self, site, index):
@@ -107,24 +111,33 @@ class Tile:
 		self.name = name
 		self.data = data
 		self.site_insts = site_insts
+		self.wire_to_node = {}
 
 	def get_pip_data(self, i):
 		return self.data.pips[i]
 	def get_wire_data(self, i):
 		return self.data.wires[i]
-
+	def tile_type(self):
+		return self.data.tile_type
 	def wires(self):
 		return (Wire(self, i) for i in range(len(self.data.wires)))
+	def wire(self, name):
+		return Wire(self, self.data.wires_by_name[name].index)
 	def pips(self):
 		return (PIP(self, i) for i in range(len(self.data.pips)))
 	def sites(self):
 		return site_insts
+
+class Node:
+	def __init__(self, wires=[]):
+		self.wires = wires
 
 class Device:
 	def __init__(self, name):
 		self.name = name
 		self.tiles = []
 		self.tiles_by_name = {}
+		self.tiles_by_xy = {}
 		self.sites_by_name = {}
 	def tile(self, name):
 		return self.tiles_by_name[name]
@@ -160,13 +173,13 @@ def import_device(name, prjxray_root, metadata_root):
 			for wire in sorted(tj["wires"].keys()):
 				wire_id = len(td.wires)
 				wd = WireData(index=wire_id, name=wire, tied_value=None) # FIXME: tied_value
-				wire_name_to_id[wire] = wire_id
 				td.wires.append(wd)
+				td.wires_by_name[wire] = wd
 			for pip, pipdata in sorted(tj["pips"].items()):
 				# FIXME: pip/wire delays
 				pip_id = len(td.pips)
 				pd = PIPData(index=pip_id,
-					from_wire=wire_name_to_id[pipdata["src_wire"]], to_wire=wire_name_to_id[pipdata["dst_wire"]],
+					from_wire=td.wires_by_name[pipdata["src_wire"]].index, to_wire=td.wires_by_name[pipdata["dst_wire"]].index,
 					is_bidi=~bool(pipdata["is_directional"]), is_route_thru=bool(pipdata["is_pseudo"]))
 				td.pips.append(pd)
 			tile_type_cache[tiletype] = td
@@ -189,5 +202,8 @@ def import_device(name, prjxray_root, metadata_root):
 					d.sites_by_name[site] = si
 			t = Tile(x, y, tile, get_tile_type_data(tiletype), siteinsts)
 			d.tiles_by_name[tile] = t
+			d.tiles_by_xy[x, y] = t
 			d.tiles.append(t)
+	with open(prjxray_root + "/tileconn.json", "r") as tcf:
+		apply_tileconn(tcf, d)
 	return d
