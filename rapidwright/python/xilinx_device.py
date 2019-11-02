@@ -19,29 +19,36 @@ class PIPData:
 		self.is_route_thru = is_route_thru
 
 class SiteWireData:
-	def __init__(self, name, is_pin=False, tile_wire_index=None):
+	def __init__(self, name, is_pin=False):
 		self.name = name
 		self.is_pin = is_pin
-		self.tile_wire_index = tile_wire_index
 
 class SiteBELPinData:
 	def __init__(self, name, pindir, site_wire_idx):
 		self.name = name
 		self.pindir = pindir
-		self.site_wire_index = site_wire_index
+		self.site_wire_idx = site_wire_idx
 
 class SiteBELData:
-	def __init__(self, name, bel_type, pins):
+	def __init__(self, name, bel_type, bel_class, pins):
 		self.name = name
 		self.bel_type = bel_type
+		self.bel_class = bel_class
 		self.pins = pins
 
 class SitePIPData:
-	def __init__(self, bel_idx, bel_input_idx, from_wire_idx, to_wire_idx):
+	def __init__(self, bel_idx, bel_input, from_wire_idx, to_wire_idx):
 		self.bel_idx = bel_idx
-		self.bel_input_idx = bel_input_idx
+		self.bel_input = bel_input
 		self.from_wire_idx = from_wire_idx
 		self.to_wire_idx  = to_wire_idx
+
+class SitePinData:
+	def __init__(self, name, pindir, site_wire_idx, prim_pin_name):
+		self.name = name
+		self.dir = pindir
+		self.site_wire_idx = site_wire_idx
+		self.prim_pin_name  = prim_pin_name
 
 class SiteData:
 	def __init__(self, site_type):
@@ -83,11 +90,21 @@ class Wire:
 			self.tile.wire_to_node[self.index] = Node([self])
 		return self.tile.wire_to_node[self.index]
 
+class SiteBELPin:
+	def __init__(self, bel, name):
+		self.bel = bel
+		self.name = name
+		self.data = self.bel.data.pins[name]
+
 class SiteBEL:
 	def __init__(self, site, index):
 		self.site = site
 		self.index = index
 		self.data = site.get_bel_data(index)
+	def name(self):
+		return self.data.name
+	def pins(self):
+		return (SiteBELPin(self, n) for n in self.data.pins.keys())
 
 class Site:
 	def __init__(self, tile, name, grid_xy, data):
@@ -95,7 +112,8 @@ class Site:
 		self.name = name
 		self.grid_xy = grid_xy
 		self.data = data
-
+	def get_bel_data(self, index):
+		return self.data.bels[index]
 	def bels(self):
 		return (SiteBEL(self, i) for i in range(len(self.data.bels)))
 	def available_variants(self):
@@ -155,7 +173,45 @@ def import_device(name, prjxray_root, metadata_root):
 
 	def get_site_type_data(sitetype):
 		if sitetype not in site_type_cache:
-			site_type_cache[sitetype] = SiteData(sitetype)
+			sd = SiteData(sitetype)
+			sp = metadata_root + "/site_type_" + sitetype + ".json"
+			if os.path.exists(sp):
+				with open(sp, "r") as jf:
+					sj = json.load(jf)
+				for vtype, vdata in sorted(sj.items()): # Consider all site variants
+					if vtype == sitetype:
+						vd = sd # primary variant
+					else:
+						vd = SiteData(vtype)
+					site_wire_by_name = {}
+					def wire_index(name):
+						if name not in site_wire_by_name:
+							idx = len(vd.wires)
+							vd.wires.append(SiteWireData(name=name))
+							site_wire_by_name[name] = idx
+						return site_wire_by_name[name]
+					# Import bels
+					bel_idx_by_name = {}
+					for bel, beldata in sorted(vdata["bels"].items()):
+						belpins = {}
+						for pin, pindata in sorted(beldata["pins"].items()):
+							belpins[pin] = SiteBELPinData(name=pin, pindir=pindata["dir"], site_wire_idx=wire_index(pindata["wire"]))
+						bd = SiteBELData(name=bel, bel_type=beldata["type"], bel_class=beldata["class"], pins=belpins)
+						bel_idx_by_name[bel] = len(vd.bels)
+						vd.bels.append(bd)
+					# Import pips
+					for pipdata in vdata["pips"]:
+						bel_idx = bel_idx_by_name[pipdata["bel"]]
+						bel_data = vd.bels[bel_idx]
+						vd.pips.append(SitePIPData(bel_idx=bel_idx_by_name[pipdata["bel"]], bel_input=pipdata["from_pin"], 
+							from_wire_idx=bel_data.pins[pipdata["from_pin"]].site_wire_idx,
+							to_wire_idx=bel_data.pins[pipdata["to_pin"]].site_wire_idx))
+					# Import pins
+					for pin, pindata in sorted(vdata["pins"].items()):
+						vd.pins.append(SitePinData(name=pin, pindir=pindata["dir"], site_wire_idx=wire_index(pindata["wire"]),
+							prim_pin_name=pindata["primary"]))
+					sd.variants[vtype] = vd
+			site_type_cache[sitetype] = sd
 		return site_type_cache[sitetype]
 
 	def read_tile_type_json(tiletype):

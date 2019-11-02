@@ -34,3 +34,4 @@ install_manifest.txt
 *.mf
 *.bba
 __pycache__/
+*.pyc
