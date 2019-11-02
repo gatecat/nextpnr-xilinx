@@ -65,17 +65,18 @@ class TileData:
 		self.wires = []
 		self.wires_by_name = {}
 		self.pips = []
+		self.sitepin_to_wire = {} # (sitetype, sitexy, pin) -> wireidx
 
 class PIP:
 	def __init__(self, tile, index):
 		self.tile = tile
 		self.index = index
 		self.data = tile.get_pip_data(index)
-	def srcWire(self):
+	def src_wire(self):
 		return Wire(self.tile, self.data.from_wire)
-	def dstWire(self):
+	def dst_wire(self):
 		return Wire(self.tile, self.data.to_wire)
-	def isRouteThru(self):
+	def is_route_thru(self):
 		return self.data.is_route_thru
 
 class Wire:
@@ -90,6 +91,14 @@ class Wire:
 			self.tile.wire_to_node[self.index] = Node([self])
 		return self.tile.wire_to_node[self.index]
 
+class SiteWire:
+	def __init__(self, site, index):
+		self.site = site
+		self.index = index
+		self.data = self.site.get_wire_data(index)
+	def name(self):
+		return self.data.name
+
 class SiteBELPin:
 	def __init__(self, bel, name):
 		self.bel = bel
@@ -103,8 +112,26 @@ class SiteBEL:
 		self.data = site.get_bel_data(index)
 	def name(self):
 		return self.data.name
+	def bel_type(self):
+		return self.data.bel_type
+	def bel_class(self):
+		return self.data.bel_class
 	def pins(self):
 		return (SiteBELPin(self, n) for n in self.data.pins.keys())
+
+class SitePIP:
+	def __init__(self, site, index):
+		self.site = site
+		self.index = index
+		self.data = site.get_pip_data(index)
+	def bel(self):
+		return SiteBEL(self.site, self.data.bel_idx)
+	def bel_input(self):
+		return self.data.bel_input
+	def src_wire(self):
+		return SiteWire(self.site, self.data.from_wire_idx)
+	def dst_wire(Self):
+		return SiteWire(self.site, self.data.to_wire_idx)
 
 class Site:
 	def __init__(self, tile, name, grid_xy, data):
@@ -112,10 +139,32 @@ class Site:
 		self.name = name
 		self.grid_xy = grid_xy
 		self.data = data
+		self.rel_xy = None # filled later
 	def get_bel_data(self, index):
 		return self.data.bels[index]
+	def get_wire_data(self, index):
+		return self.data.wires[index]
+	def get_pip_data(self, index):
+		return self.data.pips[index]
+	def site_type(self):
+		return self.data.site_type
+	def rel_xy(self):
+		if self.rel_xy is None:
+			base_x = 999999
+			base_y = 999999
+			for site in self.tile.sites:
+				if site.site_type() != self.site_type():
+					continue
+				base_x = min(base_x, site.grid_xy[0])
+				base_y = min(base_y, site.grid_xy[1])
+			self.rel_xy = (self.grid_xy[0] - base_x, self.grid_xy[1] - base_y)
+		return self.rel_xy
 	def bels(self):
 		return (SiteBEL(self, i) for i in range(len(self.data.bels)))
+	def wires(self):
+		return (SiteWire(self, i) for i in range(len(self.data.wires)))
+	def pips(self):
+		return (SitePIP(self, i) for i in range(len(self.data.pips)))
 	def available_variants(self):
 		return self.data.variants.keys()
 	def variant(self, vtype):
