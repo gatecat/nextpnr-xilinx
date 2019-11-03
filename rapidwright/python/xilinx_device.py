@@ -65,7 +65,7 @@ class TileData:
 		self.wires = []
 		self.wires_by_name = {}
 		self.pips = []
-		self.sitepin_to_wire = {} # (sitetype, sitexy, pin) -> wireidx
+		self.sitepin_to_wire = {} # (prefix, relxy, pin) -> wireidx
 
 class PIP:
 	def __init__(self, tile, index):
@@ -133,13 +133,28 @@ class SitePIP:
 	def dst_wire(Self):
 		return SiteWire(self.site, self.data.to_wire_idx)
 
+class SitePin:
+	def __init__(self, site, index):
+		self.site = site
+		self.index = index
+		self.data = site.data.pins[index]
+	def name(self):
+		return self.data.name
+	def dir(self):
+		return self.data.dir
+	def site_wire(self):
+		return SiteWire(self.site, self.data.site_wire_idx)
+	def tile_wire(self):
+		return self.site.tile.site_pin_wire(self.site.prefix, self.site.rel_xy(), self.data.prim_pin_name)
+
 class Site:
 	def __init__(self, tile, name, grid_xy, data):
-		self.tile = tile 
+		self.tile = tile
 		self.name = name
+		self.prefix = name[0:name.rfind('_')]
 		self.grid_xy = grid_xy
 		self.data = data
-		self.rel_xy = None # filled later
+		self._rel_xy = None # filled later
 	def get_bel_data(self, index):
 		return self.data.bels[index]
 	def get_wire_data(self, index):
@@ -149,22 +164,24 @@ class Site:
 	def site_type(self):
 		return self.data.site_type
 	def rel_xy(self):
-		if self.rel_xy is None:
+		if self._rel_xy is None:
 			base_x = 999999
 			base_y = 999999
-			for site in self.tile.sites:
+			for site in self.tile.sites():
 				if site.site_type() != self.site_type():
 					continue
 				base_x = min(base_x, site.grid_xy[0])
 				base_y = min(base_y, site.grid_xy[1])
-			self.rel_xy = (self.grid_xy[0] - base_x, self.grid_xy[1] - base_y)
-		return self.rel_xy
+			self._rel_xy = (self.grid_xy[0] - base_x, self.grid_xy[1] - base_y)
+		return self._rel_xy
 	def bels(self):
 		return (SiteBEL(self, i) for i in range(len(self.data.bels)))
 	def wires(self):
 		return (SiteWire(self, i) for i in range(len(self.data.wires)))
 	def pips(self):
 		return (SitePIP(self, i) for i in range(len(self.data.pips)))
+	def pins(self):
+		return (SitePin(self, i) for i in range(len(self.data.pins)))
 	def available_variants(self):
 		return self.data.variants.keys()
 	def variant(self, vtype):
@@ -193,7 +210,10 @@ class Tile:
 	def pips(self):
 		return (PIP(self, i) for i in range(len(self.data.pips)))
 	def sites(self):
-		return site_insts
+		return self.site_insts
+	def site_pin_wire(self, prefix, rel_xy, pin):
+		wire_idx = self.data.sitepin_to_wire[(prefix, rel_xy, pin)]
+		return Wire(self, wire_idx) if wire_idx is not None else None
 
 class Node:
 	def __init__(self, wires=[]):
@@ -274,7 +294,6 @@ def import_device(name, prjxray_root, metadata_root):
 			td = TileData(tiletype)
 			# Import wires and pips 
 			tj = read_tile_type_json(tiletype)
-			wire_name_to_id = {}
 			for wire in sorted(tj["wires"].keys()):
 				wire_id = len(td.wires)
 				wd = WireData(index=wire_id, name=wire, tied_value=None) # FIXME: tied_value
@@ -287,6 +306,15 @@ def import_device(name, prjxray_root, metadata_root):
 					from_wire=td.wires_by_name[pipdata["src_wire"]].index, to_wire=td.wires_by_name[pipdata["dst_wire"]].index,
 					is_bidi=~bool(pipdata["is_directional"]), is_route_thru=bool(pipdata["is_pseudo"]))
 				td.pips.append(pd)
+			for sitedata in tj["sites"]:
+				rel_xy = parse_xy(sitedata["name"])
+				prefix = sitedata["prefix"]
+				for sitepin, pindata in sorted(sitedata["site_pins"].items()):
+					if pindata is None:
+						pinwire = None
+					else:
+						pinwire = td.wires_by_name[pindata["wire"]].index
+					td.sitepin_to_wire[(prefix, rel_xy, sitepin)] = pinwire
 			tile_type_cache[tiletype] = td
 
 		return tile_type_cache[tiletype]
@@ -298,14 +326,13 @@ def import_device(name, prjxray_root, metadata_root):
 			x = int(props["COLUMN"])
 			y = int(props["ROW"])
 			tiletype = props["TYPE"]
-			siteinsts = []
+			t = Tile(x, y, tile, get_tile_type_data(tiletype), [])
 			if tile in tilesites:
 				for site in tilesites[tile]:
 					sitetype = siteprops[site]["SITE_TYPE"]
-					si = Site(tile, site, parse_xy(site), get_site_type_data(sitetype))
-					siteinsts.append(si)
+					si = Site(t, site, parse_xy(site), get_site_type_data(sitetype))
+					t.site_insts.append(si)
 					d.sites_by_name[site] = si
-			t = Tile(x, y, tile, get_tile_type_data(tiletype), siteinsts)
 			d.tiles_by_name[tile] = t
 			d.tiles_by_xy[x, y] = t
 			d.tiles.append(t)
