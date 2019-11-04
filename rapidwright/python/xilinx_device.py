@@ -148,12 +148,13 @@ class SitePin:
 		return self.site.tile.site_pin_wire(self.site.prefix, self.site.rel_xy(), self.data.prim_pin_name)
 
 class Site:
-	def __init__(self, tile, name, grid_xy, data):
+	def __init__(self, tile, name, grid_xy, data, primary=None):
 		self.tile = tile
 		self.name = name
 		self.prefix = name[0:name.rfind('_')]
 		self.grid_xy = grid_xy
 		self.data = data
+		self.primary = primary
 		self._rel_xy = None # filled later
 	def get_bel_data(self, index):
 		return self.data.bels[index]
@@ -168,7 +169,7 @@ class Site:
 			base_x = 999999
 			base_y = 999999
 			for site in self.tile.sites():
-				if site.site_type() != self.site_type():
+				if site.prefix != self.prefix:
 					continue
 				base_x = min(base_x, site.grid_xy[0])
 				base_y = min(base_y, site.grid_xy[1])
