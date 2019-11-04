@@ -5,9 +5,10 @@ from tileconn import apply_tileconn
 # Represents Xilinx device data from PrjXray etc
 
 class WireData:
-	def __init__(self, index, name, tied_value=None):
+	def __init__(self, index, name, intent="", tied_value=None):
 		self.index = index
 		self.name = name
+		self.intent = intent
 		self.tied_value = tied_value
 
 class PIPData:
@@ -86,6 +87,8 @@ class Wire:
 		self.data = tile.get_wire_data(index)
 	def name(self):
 		return self.data.name
+	def intent(self):
+		return self.data.intent
 	def node(self):
 		if self.index not in self.tile.wire_to_node:
 			self.tile.wire_to_node[self.index] = Node([self])
