@@ -107,6 +107,12 @@ class SiteBELPin:
 		self.bel = bel
 		self.name = name
 		self.data = self.bel.data.pins[name]
+	def name(self):
+		return self.name
+	def dir(self):
+		return self.data.pindir
+	def site_wire(self):
+		return SiteWire(self.bel.site, self.data.site_wire_idx)
 
 class SiteBEL:
 	def __init__(self, site, index):
@@ -151,14 +157,16 @@ class SitePin:
 		return self.site.tile.site_pin_wire(self.site.prefix, self.site.rel_xy(), self.data.prim_pin_name)
 
 class Site:
-	def __init__(self, tile, name, grid_xy, data, primary=None):
+	def __init__(self, tile, name, index, grid_xy, data, primary=None):
 		self.tile = tile
 		self.name = name
+		self.index = index
 		self.prefix = name[0:name.rfind('_')]
 		self.grid_xy = grid_xy
 		self.data = data
-		self.primary = primary
+		self.primary = primary if primary is not None else self
 		self._rel_xy = None # filled later
+		self._variants = None #filled later
 	def get_bel_data(self, index):
 		return self.data.bels[index]
 	def get_wire_data(self, index):
@@ -187,9 +195,16 @@ class Site:
 	def pins(self):
 		return (SitePin(self, i) for i in range(len(self.data.pins)))
 	def available_variants(self):
-		return self.data.variants.keys()
+		# Make sure primary type is first
+		if self._variants is None:
+			self._variants = []
+			self._variants.append(self.site_type())
+			for var in sorted(self.data.variants.keys()):
+				if var != self.site_type():
+					self._variants.append(var)
+		return self._variants
 	def variant(self, vtype):
-		vsite = Site(self.tile, self.name, self.grid_xy, self.data.variants[vtype])
+		vsite = Site(self.tile, self.name, self.index, self.grid_xy, self.data.variants[vtype], self)
 		return vsite
 
 class Tile:
@@ -284,6 +299,8 @@ def import_device(name, prjxray_root, metadata_root):
 						vd.pins.append(SitePinData(name=pin, pindir=pindata["dir"], site_wire_idx=wire_index(pindata["wire"]),
 							prim_pin_name=pindata["primary"]))
 					sd.variants[vtype] = vd
+			else:
+				sd.variants[sitetype] = sd
 			site_type_cache[sitetype] = sd
 		return site_type_cache[sitetype]
 
@@ -332,9 +349,9 @@ def import_device(name, prjxray_root, metadata_root):
 			tiletype = props["TYPE"]
 			t = Tile(x, y, tile, get_tile_type_data(tiletype), [])
 			if tile in tilesites:
-				for site in tilesites[tile]:
+				for idx, site in enumerate(tilesites[tile]):
 					sitetype = siteprops[site]["SITE_TYPE"]
-					si = Site(t, site, parse_xy(site), get_site_type_data(sitetype))
+					si = Site(t, site, idx, parse_xy(site), get_site_type_data(sitetype))
 					t.site_insts.append(si)
 					d.sites_by_name[site] = si
 			d.tiles_by_name[tile] = t

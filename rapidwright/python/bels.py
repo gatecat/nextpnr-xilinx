@@ -1,6 +1,6 @@
 # Mapping rules from prjxray to nextpnr
 
-def get_bel_z_override(bel, bels_in_tile):
+def get_bel_z_override(bel, default_z):
 	s = bel.site
 	t = s.tile
 	bt = bel.bel_type()
@@ -22,24 +22,20 @@ def get_bel_z_override(bel, bels_in_tile):
 		subslices = "ABCD"
 		postfixes = ["6LUT", "5LUT", "FF", "5FF"]
 		for i, pf in enumerate(postfixes):
-			if len(name) == len(pf) + 1 and name[1:] == pf:
-				return ((64 if is_upper_site else 0) | subslices.find(name[0]) | i)
-		if name == "F7AMUX":
+			if len(bn) == len(pf) + 1 and bn[1:] == pf:
+				return ((64 if is_upper_site else 0) | subslices.find(bn[0]) | i)
+		if bn == "F7AMUX":
 			return (0x47 if is_upper_site else 0x07)
-		elif name == "F7BMUX":
+		elif bn == "F7BMUX":
 			return (0x67 if is_upper_site else 0x27)
-		elif name == "F8MUX":
+		elif bn == "F8MUX":
 			return (0x48 if is_upper_site else 0x08)
-		elif name == "CARRY4":
+		elif bn == "CARRY4":
 			return (0x4F if is_upper_site else 0x0F)
 		# Other bels (e.g. extra xc7 routing bels) can be ignored for nextpnr porpoises
 		return -1
 	else:
-		# Default to the number of bels currently in the tile
-		if t.name() in bels_in_tile:
-			return bels_in_tile[t.name()]
-		else:
-			return 0
+		return default_z
 
 def get_bel_type_override(bt):
 	if bt.endswith("6LUT") or bt == "LUT_OR_MEM6" or bt == "LUT6":
