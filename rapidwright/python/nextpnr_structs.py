@@ -100,16 +100,35 @@ class NextpnrTileType:
 		self.wires = []
 		self.pips = []
 		self.sitewire_to_tilewire_idx = {}
-
+		# Import tile wires
 		for wire in tile.wires():
 			idx = len(self.wires)
 			self.wires.append(NextpnrWire(name=wire.name(), index=idx, intent=constid.make(wire.intent())))
 		self.tile_wire_count = len(self.wires)
+		# Import sites
 		for s in tile.sites():
 			for variant_idx, variant in enumerate(s.available_variants()):
 				sv = s.variant(variant)
+				# Import site variant bels
 				for bel in sv.bels():
 					self.add_bel(variant_idx, bel)
+		# Import pips
+		is_xc7_logic = (tile.tile_type() in ("CLBLL_L", "CLBLL_R", "CLBLM_L", "CLBLM_R"))
+		for p in tile.pips():
+			# Exclude certain route-through pips that are broken or unsupported
+			if p.is_route_thru() and p.src_wire().name().endswith("_CE_INT"):
+				continue
+			if p.is_route_thru() and is_xc7_logic:
+				continue
+			if p.is_route_thru() and "TFB" in p.dst_wire().name():
+				continue
+			if p.src_wire().name().startswith("CLK_BUFG_R_FBG_OUT"):
+				continue
+			np = self.add_pip(p, False)
+			np.extra_data = 1 if p.is_route_thru() else 0
+			if p.is_bidi():
+				self.add_pip(p, True)
+
 
 	def add_bel(self, site_variant_idx, bel):
 		site = bel.site
@@ -139,3 +158,33 @@ class NextpnrTileType:
 			)
 			nb.belports.append(nport)
 			self.wires[nport.wire].belpins.append(NextpnrBelPin(nb.index, pin.name))
+
+	def add_pip(self, p, reverse):
+		np = NextpnrPip(index=len(self.pips),
+			from_wire=(p.dst_wire() if reverse else p.src_wire()).index,
+			to_wire=(p.src_wire() if reverse else p.dst_wire()).index,
+			delay=0, pip_type=NextpnrPipType.TILE_ROUTING
+		)
+		self.wires[np.from_wire].pips_dh.append(np.index)
+		self.wires[np.to_wire].pips_uh.append(np.index)
+		self.pips.append(np)
+		return np
+
+	def add_pseudo_pip(self, from_wire, to_wire):
+		np = NextpnrPip(index=len(self.pips),
+			from_wire=from_wire, to_wire=to_wire,
+			delay=0, pip_type=NextpnrPipType.TILE_ROUTING
+		)
+		self.wires[np.from_wire].pips_dh.append(np.index)
+		self.wires[np.to_wire].pips_uh.append(np.index)
+		self.pips.append(np)
+		return np
+
+	def add_pseudo_bel(self, name, bel_type, pinname, wire_idx):
+		nb = NextpnrBel(name=name, index=len(self.bels),
+			bel_type=bel_type, native_type=native_type,
+			site=-1, site_variant=0, z=len(self.bels), is_routing=False
+		)
+		nb.belports.append(NextpnrBelWire(name=constid.make(pinname), port_type=1, wire=wire_idx))
+		self.wires[wire_idx].belpins.append(NextpnrBelPin(bel=nb.index, pin=pinname))
+		self.bels.append(nb)

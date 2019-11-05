@@ -79,6 +79,8 @@ class PIP:
 		return Wire(self.tile, self.data.to_wire)
 	def is_route_thru(self):
 		return self.data.is_route_thru
+	def is_bidi(self):
+		return self.data.is_bidi
 
 class Wire:
 	def __init__(self, tile, index):
