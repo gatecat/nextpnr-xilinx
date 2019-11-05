@@ -66,7 +66,7 @@ class TileData:
 		self.wires = []
 		self.wires_by_name = {}
 		self.pips = []
-		self.sitepin_to_wire = {} # (prefix, relxy, pin) -> wireidx
+		self.sitepin_to_wire = {} # (type, relxy, pin) -> wireidx
 
 class PIP:
 	def __init__(self, tile, index):
@@ -141,7 +141,7 @@ class SitePIP:
 		return self.data.bel_input
 	def src_wire(self):
 		return SiteWire(self.site, self.data.from_wire_idx)
-	def dst_wire(Self):
+	def dst_wire(self):
 		return SiteWire(self.site, self.data.to_wire_idx)
 
 class SitePin:
@@ -156,7 +156,7 @@ class SitePin:
 	def site_wire(self):
 		return SiteWire(self.site, self.data.site_wire_idx)
 	def tile_wire(self):
-		return self.site.tile.site_pin_wire(self.site.prefix, self.site.rel_xy(), self.data.prim_pin_name)
+		return self.site.tile.site_pin_wire(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name)
 
 class Site:
 	def __init__(self, tile, name, index, grid_xy, data, primary=None):
@@ -196,6 +196,11 @@ class Site:
 		return (SitePIP(self, i) for i in range(len(self.data.pips)))
 	def pins(self):
 		return (SitePin(self, i) for i in range(len(self.data.pins)))
+	def pin(self, p):
+		for i in range(len(self.data.pins)):
+			if self.data.pins[i].name == p:
+				return SitePin(self, i)
+		return None
 	def available_variants(self):
 		# Make sure primary type is first
 		if self._variants is None:
@@ -232,8 +237,8 @@ class Tile:
 		return (PIP(self, i) for i in range(len(self.data.pips)))
 	def sites(self):
 		return self.site_insts
-	def site_pin_wire(self, prefix, rel_xy, pin):
-		wire_idx = self.data.sitepin_to_wire[(prefix, rel_xy, pin)]
+	def site_pin_wire(self, sitetype, rel_xy, pin):
+		wire_idx = self.data.sitepin_to_wire[(sitetype, rel_xy, pin)]
 		return Wire(self, wire_idx) if wire_idx is not None else None
 
 class Node:
@@ -331,13 +336,13 @@ def import_device(name, prjxray_root, metadata_root):
 				td.pips.append(pd)
 			for sitedata in tj["sites"]:
 				rel_xy = parse_xy(sitedata["name"])
-				prefix = sitedata["prefix"]
+				sitetype = sitedata["type"]
 				for sitepin, pindata in sorted(sitedata["site_pins"].items()):
 					if pindata is None:
 						pinwire = None
 					else:
 						pinwire = td.wires_by_name[pindata["wire"]].index
-					td.sitepin_to_wire[(prefix, rel_xy, sitepin)] = pinwire
+					td.sitepin_to_wire[(sitetype, rel_xy, sitepin)] = pinwire
 			tile_type_cache[tiletype] = td
 
 		return tile_type_cache[tiletype]

@@ -107,11 +107,25 @@ class NextpnrTileType:
 		self.tile_wire_count = len(self.wires)
 		# Import sites
 		for s in tile.sites():
+			seen_pins = set() # set of (pinname, sitewire name)
 			for variant_idx, variant in enumerate(s.available_variants()):
+				if variant in ("FIFO36E1", ): #unsupported atm
+					continue
 				sv = s.variant(variant)
 				# Import site variant bels
 				for bel in sv.bels():
 					self.add_bel(variant_idx, bel)
+				# Import site variant pins as site IO pips
+				for pin in sv.pins():
+					pin_key = (pin.name(), pin.site_wire().name())
+					if pin_key not in seen_pins:
+						self.add_site_io_pip(pin)
+						seen_pins.add(pin_key)
+				# Import site variant pips
+				for spip in sv.pips():
+					self.add_site_pip(variant_idx, spip)
+
+
 		# Import pips
 		is_xc7_logic = (tile.tile_type() in ("CLBLL_L", "CLBLL_R", "CLBLM_L", "CLBLM_R"))
 		for p in tile.pips():
@@ -128,7 +142,6 @@ class NextpnrTileType:
 			np.extra_data = 1 if p.is_route_thru() else 0
 			if p.is_bidi():
 				self.add_pip(p, True)
-
 
 	def add_bel(self, site_variant_idx, bel):
 		site = bel.site
@@ -158,6 +171,75 @@ class NextpnrTileType:
 			)
 			nb.belports.append(nport)
 			self.wires[nport.wire].belpins.append(NextpnrBelPin(nb.index, pin.name))
+		return nb
+
+	def add_site_pip(self, site_variant_idx, sp):
+		if "LUT" in sp.bel().bel_type():
+			return None # ignore site LUT route-throughs
+		bel_name = sp.bel().name()
+		bel_pin = sp.bel_input()
+		if (bel_name == "ADI1MUX" and bel_pin == "BDI1") or \
+			(bel_name == "BDI1MUX" and bel_pin == "DI") or \
+			(bel_name == "CDI1MUX" and bel_pin == "DI"):
+			return None
+		np = NextpnrPip(index=len(self.pips),
+			from_wire=self.sitewire_to_tilewire(sp.src_wire()),
+			to_wire=self.sitewire_to_tilewire(sp.dst_wire()),
+			delay=0, pip_type=NextpnrPipType.SITE_INTERNAL
+		)
+		self.wires[np.from_wire].pips_dh.append(np.index)
+		self.wires[np.to_wire].pips_uh.append(np.index)
+		np.bel = constid.make(bel_name)
+		np.site = sp.site.primary.index
+		np.site_variant = site_variant_idx
+		np.extra_data = constid.make(bel_pin)
+		self.pips.append(np)
+		return np
+
+	def add_site_io_pip(self, pin):
+		pn = pin.name()
+		s = pin.site
+		pindir = pin.dir()
+		if pin.tile_wire() is None:
+			return None # ignore pins that are not connected to a useful tile wire
+		if pindir in ("OUTPUT", "BIDIR"):
+			if s.primary.site_type() == "IPAD" and pn == "O":
+				return None
+			np = NextpnrPip(index=len(self.pips),
+				from_wire=self.sitewire_to_tilewire(pin.site_wire()),
+				to_wire=pin.tile_wire().index,
+				delay=0, pip_type=NextpnrPipType.SITE_EXIT
+			)
+		else:
+			if s.site_type() in ("SLICEL", "SLICEM"):
+				# Add permuation pseudo-pips for LUT inputs
+				swn = pin.site_wire().name()
+				if len(swn) == 2 and swn[0] in "ABCDEFGH" and swn[1] in "123456":
+					i = int(swn[1])
+					for j in range(1, 7):
+						if (i == 6) != (j == 6):
+							continue # don't allow permutation of input 6
+						pp = NextpnrPip(index=len(self.pips),
+							from_wire=s.pin(swn[0] + str(j)).tile_wire().index,
+							to_wire=self.sitewire_to_tilewire(pin.site_wire()),
+							delay=0, pip_type=NextpnrPipType.LUT_PERMUTATION)
+						pp.extra_data = ("ABCDEFGH".index(swn[0]) << 8) | ((j - 1) << 4) | (i - 1)
+						if s.rel_xy()[0] == 1:
+							pp.extra_data |= (4 << 8)
+						self.wires[pp.from_wire].pips_dh.append(pp.index)
+						self.wires[pp.to_wire].pips_uh.append(pp.index)
+						self.pips.append(pp)
+					return None
+			print(pin.site.name, pn)
+			np = NextpnrPip(index=len(self.pips),
+				from_wire=pin.tile_wire().index,
+				to_wire=self.sitewire_to_tilewire(pin.site_wire()),
+				delay=0, pip_type=NextpnrPipType.SITE_ENTRANCE
+			)
+		self.wires[np.from_wire].pips_dh.append(np.index)
+		self.wires[np.to_wire].pips_uh.append(np.index)
+		self.pips.append(np)
+		return np
 
 	def add_pip(self, p, reverse):
 		np = NextpnrPip(index=len(self.pips),
