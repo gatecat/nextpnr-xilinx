@@ -17,7 +17,7 @@ def get_bel_z_override(bel, default_z):
 			return (5 if is_top18 else 9)
 		elif bt == "FIFO18E1_FIFO18E1":
 			return 10
-	elif s.site_type() == "SLICEL" or s.site_type() == "SLICEM":
+	if s.site_type() == "SLICEL" or s.site_type() == "SLICEM":
 		is_upper_site = (s.rel_xy()[0] == 1)
 		subslices = "ABCD"
 		postfixes = ["6LUT", "5LUT", "FF", "5FF"]
@@ -34,8 +34,7 @@ def get_bel_z_override(bel, default_z):
 			return (0x4F if is_upper_site else 0x0F)
 		# Other bels (e.g. extra xc7 routing bels) can be ignored for nextpnr porpoises
 		return -1
-	else:
-		return default_z
+	return default_z
 
 def get_bel_type_override(bt):
 	if bt.endswith("6LUT") or bt == "LUT_OR_MEM6" or bt == "LUT6":

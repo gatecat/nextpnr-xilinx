@@ -96,6 +96,7 @@ class NextpnrTileType:
 		return self.sitewire_to_tilewire_idx[key]
 	def __init__(self, device, tile):
 		self.type = constid.make(tile.tile_type())
+		self.index = -1
 		self.bels = []
 		self.wires = []
 		self.pips = []
@@ -150,7 +151,7 @@ class NextpnrTileType:
 		if z == -1:
 			return None
 		name = bel.name()
-		print(name)
+		print(name, z)
 		bt = bel.bel_type()
 		prim_st = site.primary.site_type()
 		if prim_st in ("IOB33M", "IOB33S"):
