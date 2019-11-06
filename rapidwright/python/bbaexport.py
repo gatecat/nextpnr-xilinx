@@ -16,12 +16,31 @@ def main():
 	with open(args.constids, "r") as cf:
 		constid.read_base(cf)
 	# Read and parse X-ray database
-	device = import_device(args.device, args.xray, args.metadata)
+	d = import_device(args.device, args.xray, args.metadata)
 	# Import tile types
 	seen_tiletypes = set()
-	for tile in device.tiles:
+	tile_types = []
+	tile_type_index = {}
+	for tile in d.tiles:
 		if tile.tile_type() not in seen_tiletypes:
-			ntt = NextpnrTileType(device, tile)
+			ntt = NextpnrTileType(d, tile)
 			seen_tiletypes.add(tile.tile_type())
+			tile_type_index[tile.tile_type()] = len(tile_types)
+			tile_types.append(ntt)
+
+	# Import tile instances
+	# FIXME: package pins
+	tile_insts = []
+	for y in range(d.height):
+		for x in range(d.width):
+			t = d.tiles_by_xy[x, y]
+			nti = NextpnrTileInst(index=len(tile_insts), name=t.name,
+				tile_type=tile_type_index[t.tile_type()])
+			for s in t.sites():
+				nsi = NextpnrSiteInst(name=s.name, package_pin="",
+					site_xy=s.grid_xy, rel_xy=s.rel_xy(), inter_xy=t.interconn_xy)
+				nti.sites.append(nsi)
+			nti.tilewire_to_node = [-1] * tile_types[nti.tile_type].tile_wire_count
+			tile_insts.append(nti)
 if __name__ == '__main__':
 	main()

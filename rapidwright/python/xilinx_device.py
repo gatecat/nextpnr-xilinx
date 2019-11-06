@@ -93,8 +93,12 @@ class Wire:
 		return self.data.intent
 	def node(self):
 		if self.index not in self.tile.wire_to_node:
-			self.tile.wire_to_node[self.index] = Node([self])
+			self.tile.wire_to_node[self.index] = Node(self.tile, [self])
 		return self.tile.wire_to_node[self.index]
+	def is_gnd(self):
+		return "GND_WIRE" in self.name()
+	def is_vcc(self):
+		return "VCC_WIRE" in self.name()
 
 class SiteWire:
 	def __init__(self, site, index):
@@ -215,14 +219,15 @@ class Site:
 		return vsite
 
 class Tile:
-	def __init__(self, x, y, name, data, site_insts):
+	def __init__(self, x, y, name, data, interconn_xy, site_insts):
 		self.x = x
 		self.y = y
 		self.name = name
 		self.data = data
+		self.interconn_xy = interconn_xy
 		self.site_insts = site_insts
 		self.wire_to_node = {}
-
+		self.node_autoidx = 0
 	def get_pip_data(self, i):
 		return self.data.pips[i]
 	def get_wire_data(self, i):
@@ -242,8 +247,23 @@ class Tile:
 		return Wire(self, wire_idx) if wire_idx is not None else None
 
 class Node:
-	def __init__(self, wires=[]):
+	def __init__(self, tile, wires=[]):
+		self.tile = tile
+		self.index = tile.node_autoidx
+		tile.node_autoidx += 1
 		self.wires = wires
+	def unique_index(self):
+		return (self.tile.y << 48) | (self.tile.x << 32) | self.index
+	def is_vcc(self):
+		for wire in self.wires:
+			if wire.is_vcc():
+				return True
+		return False
+	def is_gnd(self):
+		for wire in self.wires:
+			if wire.is_gnd():
+				return True
+		return False
 
 class Device:
 	def __init__(self, name):
@@ -252,6 +272,8 @@ class Device:
 		self.tiles_by_name = {}
 		self.tiles_by_xy = {}
 		self.sites_by_name = {}
+		self.width = 0
+		self.height = 0
 	def tile(self, name):
 		return self.tiles_by_name[name]
 	def site(self, name):
@@ -353,8 +375,11 @@ def import_device(name, prjxray_root, metadata_root):
 		for tile, props in sorted(tileprops.items()):
 			x = int(props["COLUMN"])
 			y = int(props["ROW"])
+			d.width = max(d.width, x + 1)
+			d.height = max(d.height, y + 1)
 			tiletype = props["TYPE"]
-			t = Tile(x, y, tile, get_tile_type_data(tiletype), [])
+			interconn_xy = (int(props["INT_TILE_X"]), int(props["INT_TILE_Y"]))
+			t = Tile(x, y, tile, get_tile_type_data(tiletype), interconn_xy, [])
 			if tile in tilesites:
 				for idx, site in enumerate(tilesites[tile]):
 					sitetype = siteprops[site]["SITE_TYPE"]
