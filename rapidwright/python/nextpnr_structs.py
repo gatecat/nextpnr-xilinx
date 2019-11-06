@@ -105,6 +105,18 @@ class NextpnrTileType:
 		for wire in tile.wires():
 			idx = len(self.wires)
 			self.wires.append(NextpnrWire(name=wire.name(), index=idx, intent=constid.make(wire.intent())))
+		self.row_gnd_wire_index = len(self.wires)
+		self.wires.append(NextpnrWire(name="PSEUDO_GND_WIRE_ROW", index=self.row_gnd_wire_index,
+			intent=constid.make("PSEUDO_GND")))
+		self.row_vcc_wire_index = len(self.wires)
+		self.wires.append(NextpnrWire(name="PSEUDO_VCC_WIRE_ROW", index=self.row_vcc_wire_index,
+			intent=constid.make("PSEUDO_VCC")))
+		self.global_gnd_wire_index = len(self.wires)
+		self.wires.append(NextpnrWire(name="PSEUDO_GND_WIRE_GLBL", index=self.global_gnd_wire_index,
+			intent=constid.make("PSEUDO_GND")))
+		self.global_vcc_wire_index = len(self.wires)
+		self.wires.append(NextpnrWire(name="PSEUDO_VCC_WIRE_GLBL", index=self.global_vcc_wire_index,
+			intent=constid.make("PSEUDO_VCC")))
 		self.tile_wire_count = len(self.wires)
 		# Import sites
 		for s in tile.sites():

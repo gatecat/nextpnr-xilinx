@@ -61,6 +61,7 @@ def main():
 		bba.u32(constid.num_base_ids)
 		bba.u32(len(constid.constids) - constid.num_base_ids)
 		bba.ref('extra_constid_strs')
+		print("Exporting tile and site type data...")
 		for tt in tile_types:
 			# List of wires on bels in tile
 			for bel in tt.bels:
@@ -84,14 +85,97 @@ def main():
 			# Bel data for tiletype
 			bba.label('t{}_bels'.format(tt.index))
 			for b in tt.bels:
-				bba.u32(b.name)
-				bba.u32(b.bel_type)
-				bba.u32(b.native_type)
-				bba.u32(len(b.belports))
-				bba.ref("t{}b{}_wires".format(tt.index, b.index))
-				bba.u16(b.z)
-				bba.u16(b.site)
-				bba.u16(b.site_variant)
-				bba.u16(b.is_routing)
+				bba.u32(b.name) # name constid
+				bba.u32(b.bel_type) # type (compatible type for nextpnr) constid
+				bba.u32(b.native_type) # native type (original type in RapidWright) constid
+				bba.u32(len(b.belports)) # number of bel port wires
+				bba.ref("t{}b{}_wires".format(tt.index, b.index)) # ref to list of bel wires
+				bba.u16(b.z) # bel z position
+				bba.u16(b.site) # bel site index in tile
+				bba.u16(b.site_variant) # bel site variant index
+				bba.u16(b.is_routing) # 1 if bel is a routing bel
+			# Wire data for tiletype
+			bba.label('t{}_wires'.format(tt.index))
+			for w in tt.wires:
+				bba.u32(w.name) # name constid
+				bba.u32(len(w.pips_uh)) # number of uphill pips
+				bba.u32(len(w.pips_dh)) # number of downhill pips
+				bba.ref("t{}w{}_uh".format(tt.index, w.index)) # ref to list of uphill pip indices
+				bba.ref("t{}w{}_dh".format(tt.index, w.index)) # ref to list of downhill pip indices
+				bba.u32(len(w.belpins)) # number of bel pins on wire
+				bba.ref("t{}w{}_bels".format(tt.index, w.index)) # ref to list of bel pins
+				bba.u16(w.site if w.is_site else 0) # wire site index in tile if a site wire, else -1 if a tile wire
+				bba.u16(0) # padding
+				bba.u32(w.intent) # wire intent constid
+			# Pip data for tiletype
+			bba.label('t{}_pips'.format(tt.index))
+			for p in tt.pips:
+				bba.u32(p.from_wire) # src tile wire index
+				bba.u32(p.to_wire) # dst tile wire index
+				bba.u16(p.delay)
+				bba.u16(p.pip_type.value)
+				bba.u32(p.bel) # bel name constid for site pips
+				bba.u32(p.extra_data) # misc extra data for pseudo-pips (e.g lut permutation info)
+				bba.u16(p.site) # site index in tile for site pips
+				bba.u16(p.site_variant) # site variant index for site pips
+		# Per-tile-type data including references to the above lists of objects
+		bba.label("tiletype_data")
+		for tt in tile_types:
+			bba.u32(tt.type) # tile type constid
+			bba.u32(len(tt.bels)) # number of bels
+			bba.ref("t{}_bels".format(tt.index)) # ref to list of bels
+			bba.u32(len(tt.wires)) # number of wires
+			bba.ref("t{}_wires".format(tt.index)) # ref to list of wires
+			bba.u32(len(tt.pips)) # number of pips
+			bba.ref("t{}_pips".format(tt.index)) # ref to list of pips
+		print("Exporting nodes...")
+		seen_nodes = set()
+		curr = 0
+		total = len(d.tiles)
+		node_wire_count = []
+		node_intent = []
+		for row in range(d.height):
+			gnd_nodes = []
+			vcc_nodes = []
+			seen_gnd_nodes = set()
+			seen_vcc_nodes = set()
+			for col in range(d.width):
+				t = d.tiles_by_xy[col, row]
+				tt = t.tile_type()
+				curr += 1
+				for w in t.wires():
+					n = w.node()
+					uid = n.unique_index()
+					if uid in seen_nodes:
+						continue
+					seen_nodes.add(uid)
+					if n.is_gnd() and tt not in ("BRAM_INT_INTERFACE_L", "BRAM_INT_INTERFACE_R", "RCLK_INT_L", "RCLK_INT_R"):
+						if uid not in seen_gnd_nodes:
+							gnd_nodes.append(n)
+							seen_gnd_nodes.add(uid)
+						continue
+					if n.is_vcc() and tt not in ("BRAM_INT_INTERFACE_L", "BRAM_INT_INTERFACE_R"):
+						if uid not in seen_vcc_nodes:
+							vcc_nodes.append(n)
+							seen_vcc_nodes.add(uid)
+					# Nodes only containing 1 wire are just part of the tile and don't need
+					# an explicit data structure wasting memory
+					if len(n.wires) > 1:
+						# List of tile wires in node
+						bba.label("n{}_tw".format(len(node_wire_count)))
+						# Add interconnect tiles first for better delay estimates in nextpnr
+						for j in range(2):
+							for w in n.wires:
+								if (w.tile.tile_type() in ("INT", "INT_L", "INT_R")) != (j == 0):
+									continue
+								tileidx = w.tile.y * d.width + w.tile.x
+								bba.u32(tileidx) # tile index
+								bba.u32(w.index) # wire index in tile
+								tile_insts[tileidx].tilewire_to_node[w.index] = len(node_wire_count)
+						node_intent.append(constid.make(n.wires[0].intent()))
+						node_wire_count.append(len(n.wires))
+		print("Exporting tile and site instances...")
+
+
 if __name__ == '__main__':
 	main()
