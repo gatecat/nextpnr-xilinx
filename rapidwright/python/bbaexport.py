@@ -174,6 +174,41 @@ def main():
 								tile_insts[tileidx].tilewire_to_node[w.index] = len(node_wire_count)
 						node_intent.append(constid.make(n.wires[0].intent()))
 						node_wire_count.append(len(n.wires))
+			# Connect up row and column ground nodes
+			for i in range(2):
+				wire_count = 0
+				bba.label("n{}_tw".format(len(node_wire_count)))
+				for n in (vcc_nodes if i == 1 else gnd_nodes):
+					for w in n.wires:
+						tileidx = w.tile.y * d.width + w.tile.x
+						bba.u32(tileidx) # tile index
+						bba.u32(w.index) # wire index in tile
+						tile_insts[tileidx].tilewire_to_node[w.index] = len(node_wire_count)
+						wire_count += 1
+				for col in range(d.width):
+					t = d.tiles_by_xy[col, row]
+					tileidx = row * d.width + col
+					bba.u32(tileidx)
+					wire_idx = tile_types[tile_insts[tileidx].tile_type].row_vcc_wire_index if i == 1 else tile_types[tile_insts[tileidx].tile_type].row_gnd_wire_index
+					bba.u32(wire_idx)
+					tile_insts[tileidx].tilewire_to_node[wire_idx] = len(node_wire_count)
+					wire_count += 1
+				node_wire_count.append(wire_count)
+				node_intent.append(constid.make("PSEUDO_VCC" if i == 1 else "PSEUDO_GND"))
+		# Create the global Vcc and Ground nodes
+		for i in range(2):
+			wire_count = 0
+			bba.label("n{}_tw".format(len(node_wire_count)))
+			for row in range(d.height):
+				t = d.tiles_by_xy[0, row]
+				tileidx = row * d.width
+				bba.u32(tileidx)
+				wire_idx = tile_types[tile_insts[tileidx].tile_type].global_vcc_wire_index if i == 1 else tile_types[tile_insts[tileidx].tile_type].global_gnd_wire_index
+				bba.u32(wire_idx)
+				tile_insts[tileidx].tilewire_to_node[wire_idx] = len(node_wire_count)
+				wire_count += 1
+			node_wire_count.append(wire_count)
+			node_intent.append(constid.make("PSEUDO_VCC" if i == 1 else "PSEUDO_GND"))
 		print("Exporting tile and site instances...")
 
 
