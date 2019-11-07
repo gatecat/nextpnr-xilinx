@@ -94,6 +94,7 @@ class NextpnrTileType:
 			self.wires.append(nw)
 			self.sitewire_to_tilewire_idx[key] = nw.index
 		return self.sitewire_to_tilewire_idx[key]
+
 	def __init__(self, device, tile):
 		self.type = constid.make(tile.tile_type())
 		self.index = -1
@@ -155,6 +156,12 @@ class NextpnrTileType:
 			np.extra_data = 1 if p.is_route_thru() else 0
 			if p.is_bidi():
 				self.add_pip(p, True)
+		# Add pseudo-bels driving Vcc and GND
+		self.add_pseudo_bel(name="PSEUDO_GND_BEL", bel_type="PSEUDO_GND", pinname="Y", wire_idx=self.global_gnd_wire_index)
+		self.add_pseudo_bel(name="PSEUDO_VCC_BEL", bel_type="PSEUDO_VCC", pinname="Y", wire_idx=self.global_vcc_wire_index)
+		# Add pseudo global->row Vcc and GND pips
+		self.add_pseudo_pip(from_wire=self.global_gnd_wire_index, to_wire=self.row_gnd_wire_index)
+		self.add_pseudo_pip(from_wire=self.global_vcc_wire_index, to_wire=self.row_vcc_wire_index)
 
 	def add_bel(self, site_variant_idx, bel):
 		site = bel.site
@@ -277,9 +284,9 @@ class NextpnrTileType:
 
 	def add_pseudo_bel(self, name, bel_type, pinname, wire_idx):
 		nb = NextpnrBel(name=name, index=len(self.bels),
-			bel_type=bel_type, native_type=native_type,
+			bel_type=bel_type, native_type=bel_type,
 			site=-1, site_variant=0, z=len(self.bels), is_routing=False
 		)
 		nb.belports.append(NextpnrBelWire(name=constid.make(pinname), port_type=1, wire=wire_idx))
-		self.wires[wire_idx].belpins.append(NextpnrBelPin(bel=nb.index, pin=pinname))
+		self.wires[wire_idx].belpins.append(NextpnrBelPin(bel=nb.index, port=pinname))
 		self.bels.append(nb)

@@ -216,7 +216,7 @@ def main():
 			for w2n in ti.tilewire_to_node:
 				bba.u32(w2n) # global node index
 			# List of site instances in a tile
-			bba.label("t{}_sites".format(ti.index))
+			bba.label("ti{}_sites".format(ti.index))
 			for si in ti.sites:
 				bba.str(si.name) # site name char*
 				bba.str(si.package_pin) # site package pin char*
