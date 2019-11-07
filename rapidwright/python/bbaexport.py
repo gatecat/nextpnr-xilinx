@@ -210,7 +210,51 @@ def main():
 			node_wire_count.append(wire_count)
 			node_intent.append(constid.make("PSEUDO_VCC" if i == 1 else "PSEUDO_GND"))
 		print("Exporting tile and site instances...")
-
-
+		for ti in tile_insts:
+			# Mapping from tile wire to node index
+			bba.label("ti{}_wire_to_node".format(ti.index))
+			for w2n in ti.tilewire_to_node:
+				bba.u32(w2n) # global node index
+			# List of site instances in a tile
+			bba.label("t{}_sites".format(ti.index))
+			for si in ti.sites:
+				bba.str(si.name) # site name char*
+				bba.str(si.package_pin) # site package pin char*
+				bba.u32(si.site_xy[0]) # site X grid coord
+				bba.u32(si.site_xy[1]) # site Y grid coord
+				bba.u32(si.rel_xy[0]) # in-tile relative X coord
+				bba.u32(si.rel_xy[1]) # in-tile relative Y grid coord
+				bba.u32(si.inter_xy[0]) # associated interconn tile X
+				bba.u32(si.inter_xy[1]) # associated interconn tile Y
+		# List of tile instances and associated metadata
+		bba.label("tile_insts")
+		for ti in tile_insts:
+			bba.str(ti.name) # tile name char*
+			bba.u32(ti.tile_type) # index into list of tile types
+			bba.u32(len(ti.tilewire_to_node)) # length of tilewire-to-node list
+			bba.ref("ti{}_wire_to_node".format(ti.index)) # reference to tilewire-to-node list
+			bba.u32(len(ti.sites)) # number of sites in tile
+			bba.ref("ti{}_sites".format(ti.index)) # reference to list of site data
+		# List of nodes
+		bba.label("nodes")
+		for i in range(len(node_wire_count)):
+			bba.u32(node_wire_count[i]) # number of tile wires in node
+			bba.u32(node_intent[i]) # intent code constid of node
+			bba.ref("n{}_tw".format(i)) # reference to list of tile wires in node, created earlier
+		# Main chip info structure
+		bba.label("chip_info")
+		bba.str(d.name) # device name char*
+		bba.str("prjxray") # generator name char*
+		bba.u32(1) # version
+		bba.u32(d.width) # tile grid width
+		bba.u32(d.height) # tile grid height
+		bba.u32(len(tile_insts)) # number of tiles
+		bba.u32(len(tile_types)) # number of tiletypes
+		bba.u32(len(node_wire_count)) # number of nodes
+		bba.ref("tiletype_data") # reference to tiletype data list
+		bba.ref("tile_insts") # reference to list of tile instances
+		bba.ref("nodes") # reference to list of nodes
+		bba.ref("extra_constids") # reference to list of constid strings (extra to baked-in ones)
+		bba.pop()
 if __name__ == '__main__':
 	main()

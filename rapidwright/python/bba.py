@@ -23,5 +23,5 @@ class BBAWriter:
 		print("u16 {} {}".format(int(n), comment), file=self.f)
 	def u32(self, n, comment=""):
 		print("u32 {} {}".format(int(n), comment), file=self.f)
-	def pop():
+	def pop(self):
 		print("pop", file=self.f)
