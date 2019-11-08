@@ -171,6 +171,7 @@ class Site:
 		self.grid_xy = grid_xy
 		self.data = data
 		self.primary = primary if primary is not None else self
+		self.package_pin = None
 		self._rel_xy = None # filled later
 		self._variants = None #filled later
 	def get_bel_data(self, index):
@@ -381,6 +382,9 @@ def import_device(name, prjxray_root, metadata_root):
 	# Load intent JSON
 	with open(metadata_root + "/wire_intents.json", "r") as ijf:
 		ij = json.load(ijf)
+	grid_name = name
+	if "xc7a35t" in grid_name: # currently missing in prjxray-db
+		grid_name = "xc7a50tfgg484-1"
 	with open(prjxray_root + "/gridinfo/grid-" + name + "-db.txt", "r") as gf:
 		tileprops, tilesites, siteprops = parse_gridinfo(gf)
 		for tile, props in sorted(tileprops.items()):
@@ -400,6 +404,15 @@ def import_device(name, prjxray_root, metadata_root):
 			d.tiles_by_name[tile] = t
 			d.tiles_by_xy[x, y] = t
 			d.tiles.append(t)
+	# Read package pins
+	with open(prjxray_root + "/" + name + "_package_pins.csv") as ppf:
+		for line in ppf:
+			sl = line.strip().split(",")
+			if len(sl) < 2:
+				continue
+			if sl[1] == "site":
+				continue # header
+			d.sites_by_name[sl[1]].package_pin = sl[0]
 	with open(prjxray_root + "/tileconn.json", "r") as tcf:
 		apply_tileconn(tcf, d)
 	return d

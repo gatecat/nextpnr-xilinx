@@ -30,7 +30,6 @@ def main():
 			tile_types.append(ntt)
 
 	# Import tile instances
-	# FIXME: package pins
 	tile_insts = []
 	for y in range(d.height):
 		for x in range(d.width):
@@ -38,7 +37,7 @@ def main():
 			nti = NextpnrTileInst(index=len(tile_insts), name=t.name,
 				tile_type=tile_type_index[t.tile_type()])
 			for s in t.sites():
-				nsi = NextpnrSiteInst(name=s.name, package_pin="",
+				nsi = NextpnrSiteInst(name=s.name, package_pin="." if s.package_pin is None else s.package_pin,
 					site_xy=s.grid_xy, rel_xy=s.rel_xy(), inter_xy=t.interconn_xy)
 				nti.sites.append(nsi)
 			nti.tilewire_to_node = [-1] * tile_types[nti.tile_type].tile_wire_count
