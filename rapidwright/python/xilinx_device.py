@@ -347,6 +347,7 @@ def import_device(name, prjxray_root, metadata_root):
 			for wire in sorted(tj["wires"].keys()):
 				wire_id = len(td.wires)
 				wd = WireData(index=wire_id, name=wire, tied_value=None) # FIXME: tied_value
+				wd.intent = get_wire_intent(tiletype, wire)
 				td.wires.append(wd)
 				td.wires_by_name[wire] = wd
 			for pip, pipdata in sorted(tj["pips"].items()):
@@ -369,7 +370,17 @@ def import_device(name, prjxray_root, metadata_root):
 
 		return tile_type_cache[tiletype]
 
+	def get_wire_intent(tiletype, wirename):
+		if tiletype not in ij["tiles"]:
+			return "GENERIC"
+		if wirename not in ij["tiles"][tiletype]:
+			return "GENERIC"
+		return ij["intents"][str(ij["tiles"][tiletype][wirename])]
+
 	d = Device(name)
+	# Load intent JSON
+	with open(metadata_root + "/wire_intents.json", "r") as ijf:
+		ij = json.load(ijf)
 	with open(prjxray_root + "/gridinfo/grid-" + name + "-db.txt", "r") as gf:
 		tileprops, tilesites, siteprops = parse_gridinfo(gf)
 		for tile, props in sorted(tileprops.items()):
