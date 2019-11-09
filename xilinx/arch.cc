@@ -29,6 +29,7 @@
 #include "placer1.h"
 #include "placer_heap.h"
 #include "router1.h"
+#include "router2.h"
 #include "timing.h"
 #include "util.h"
 
@@ -801,6 +802,10 @@ bool Arch::route()
     routeVcc();
     routeClock();
     findSinkLocations();
+
+    // Test router2
+    router2_test(getCtx());
+
     bool result = router1(getCtx(), Router1Cfg(getCtx()));
     fixupRouting();
     getCtx()->attrs[getCtx()->id("step")] = std::string("route");
