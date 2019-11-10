@@ -385,7 +385,7 @@ def import_device(name, prjxray_root, metadata_root):
 	grid_name = name
 	if "xc7a35t" in grid_name: # currently missing in prjxray-db
 		grid_name = "xc7a50tfgg484-1"
-	with open(prjxray_root + "/gridinfo/grid-" + name + "-db.txt", "r") as gf:
+	with open(prjxray_root + "/gridinfo/grid-" + grid_name + "-db.txt", "r") as gf:
 		tileprops, tilesites, siteprops = parse_gridinfo(gf)
 		for tile, props in sorted(tileprops.items()):
 			x = int(props["COLUMN"])

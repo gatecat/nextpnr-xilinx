@@ -103,7 +103,7 @@ def main():
 				bba.ref("t{}w{}_dh".format(tt.index, w.index)) # ref to list of downhill pip indices
 				bba.u32(len(w.belpins)) # number of bel pins on wire
 				bba.ref("t{}w{}_bels".format(tt.index, w.index)) # ref to list of bel pins
-				bba.u16(w.site if w.is_site else 0) # wire site index in tile if a site wire, else -1 if a tile wire
+				bba.u16(w.site if w.is_site else -1) # wire site index in tile if a site wire, else -1 if a tile wire
 				bba.u16(0) # padding
 				bba.u32(w.intent) # wire intent constid
 			# Pip data for tiletype

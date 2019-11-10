@@ -23,7 +23,7 @@ def get_bel_z_override(bel, default_z):
 		postfixes = ["6LUT", "5LUT", "FF", "5FF"]
 		for i, pf in enumerate(postfixes):
 			if len(bn) == len(pf) + 1 and bn[1:] == pf:
-				return ((64 if is_upper_site else 0) | subslices.find(bn[0]) | i)
+				return (64 if is_upper_site else 0) | (subslices.index(bn[0]) << 4) | i
 		if bn == "F7AMUX":
 			return (0x47 if is_upper_site else 0x07)
 		elif bn == "F7BMUX":
