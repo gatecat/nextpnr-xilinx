@@ -8,10 +8,10 @@ Project Xray, open bitstream documentation for xc7 FPGAs.
 Currently two flows are supported:
  - UltraScale+ with RapidWright database generation, bitstream generation
    using RapidWight and Vivado
- - xc7 with RapidWright database generation, bitstream generation
+ - xc7 with Project Xray database generation, bitstream generation
    using FASM and Project Xray (no Vivado anywhere in the flow)
 
-## Prerequisites
+## Prerequisites - UltraScale+
 
  - Follow the [RapidWright manual install instructions](https://www.rapidwright.io/docs/Manual_Install.html)
  - Make sure `$RAPIDWRIGHT_PATH` is set correctly for all further steps
@@ -19,21 +19,30 @@ Currently two flows are supported:
  - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
  - Use [this branch](https://github.com/daveshah1/yosys/tree/nextpnr_rw_usp) of Yosys **FIXME: upstream Yosys is currently unsupported, even for xc7**
 
+## Prerequisites - Artix-7
+
+ - Run `git submodule init` and `git submodule update` to fetch the database and metadata
+ - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
+ - Use [this branch](https://github.com/daveshah1/yosys/tree/nextpnr_rw_usp) of Yosys **FIXME: upstream Yosys is currently unsupported, even for xc7**
+
 A brief (academic) paper describing the Yosys+nextpnr flow can be found
 on [arXiv](https://arxiv.org/abs/1903.10407).
 
-## Building
+## Building - Artix-7
+
+ - Run `cmake -DARCH=rapidwright .`
+ - Run `make` (with -jN as appropriate)
+
+## Building - UltraScale+
 
  - Run `cmake -DARCH=rapidwright -DRAPIDWRIGHT_PATH=/path/to/rapidwright -DGSON_PATH=/path/to/gson-2.8.5.jar .`
  - Run `make` (with -jN as appropriate)
 
-## Building the Arty example
- - Build the xc7a35t database using RapidWright:
-  - Make sure `RAPIDWRIGHT_PATH` is set
-  - Run `java -Xmx36G  -jar rapidwright_bbaexport.jar xc7a35tcsg324-1 ./rapidwright/constids.inc ./rapidwright/xc7a35t.bba`
-  - Run `./bbasm ./rapidwright/xc7a35t.bba rapidwright/xc7a35t.bin`
-  - Note: it would be possible to prebuild databases to remove the build time dependency on RapidWright
+## Building the Arty example - XRay database
+ - Run `pypy3 rapidwright/python/bbaexport.py --device  xc7a35tcsg324-1 --bba rapidwright/xc7a35t.bba`
+ - Run `./bbasm rapidwright/xc7a35t.bba rapidwright/xc7a35t.bin`
  - Run `attosoc.sh` in `rapidwright/examples/arty-a35`.
+
 
 ## Creating chip database from RapidWright
 
