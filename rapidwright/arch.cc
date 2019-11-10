@@ -687,6 +687,40 @@ void Arch::routeClock()
             }
         }
     }
+#if 0
+    for (auto net : sorted(nets)) {
+        NetInfo *ni = net.second;
+        for (auto &usr : ni->users) {
+            if (usr.cell->type != id_BUFGCTRL || usr.port != id("I0"))
+                continue;
+            WireId dst = getCtx()->getNetinfoSinkWire(ni, usr);
+            std::queue<WireId> visit;
+            visit.push(dst);
+            int i = 0;
+            while(!visit.empty() && i < 5000) {
+                WireId curr = visit.front();
+                visit.pop();
+                log("  %s\n", nameOfWire(curr));
+                for (auto pip : getPipsUphill(curr)) {
+                    auto &pd = locInfo(pip).pip_data[pip.index];
+                    log_info("    p %s sr %s (t %d s %d sv %d)\n", nameOfPip(pip), nameOfWire(getPipSrcWire(pip)), pd.flags, pd.site, pd.site_variant);
+                    if (!checkPipAvail(pip)) {
+                        log("      p unavail\n");
+                        continue;
+                    }
+                    WireId src = getPipSrcWire(pip);
+                    if (!checkWireAvail(src)) {
+                        log("      w unavail (%s)\n", nameOf(getBoundWireNet(src)));
+                        continue;
+                    }
+                    log_info("     p %s s %s\n", nameOfPip(pip), nameOfWire(src));
+                    visit.push(src);
+                }
+                ++i;
+            }
+        }
+    }
+#endif
 }
 
 void Arch::findSinkLocations()
