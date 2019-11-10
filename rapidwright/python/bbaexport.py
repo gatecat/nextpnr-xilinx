@@ -3,13 +3,17 @@ from bba import BBAWriter
 import sys, argparse
 import bels, constid
 from nextpnr_structs import *
+import os
 
 def main():
+
+	rwbase = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--xray", help="Project X-Ray device database path for current family (e.g. ../prjxray-db/artix7)", type=str, required=True)
-	parser.add_argument("--metadata", help="nextpnr-xilinx site metadata root", type=str, required=True)
+	parser.add_argument("--xray", help="Project X-Ray device database path for current family (e.g. ../prjxray-db/artix7)", type=str, default=os.path.join(rwbase, "external", "prjxray-db", "artix7"))
+	parser.add_argument("--metadata", help="nextpnr-xilinx site metadata root", type=str, default=os.path.join(rwbase, "external", "nextpnr-xilinx-meta", "artix7"))
 	parser.add_argument("--device", help="name of device to export", type=str, required=True)
-	parser.add_argument("--constids", help="name of nextpnr constids file to read", type=str, required=True)
+	parser.add_argument("--constids", help="name of nextpnr constids file to read", type=str, default=os.path.join(rwbase, "constids.inc"))
 	parser.add_argument("--bba", help="bba file to write", type=str, required=True)
 	args = parser.parse_args()
 	# Read baked-in constids
