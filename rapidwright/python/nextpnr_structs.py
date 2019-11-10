@@ -170,7 +170,6 @@ class NextpnrTileType:
 		if z == -1:
 			return None
 		name = bel.name()
-		print(name, z)
 		bt = bel.bel_type()
 		prim_st = site.primary.site_type()
 		if prim_st in ("IOB33M", "IOB33S"):
@@ -250,7 +249,6 @@ class NextpnrTileType:
 						self.wires[pp.to_wire].pips_uh.append(pp.index)
 						self.pips.append(pp)
 					return None
-			print(pin.site.name, pn)
 			np = NextpnrPip(index=len(self.pips),
 				from_wire=pin.tile_wire().index,
 				to_wire=self.sitewire_to_tilewire(pin.site_wire()),

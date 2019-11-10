@@ -356,7 +356,7 @@ def import_device(name, prjxray_root, metadata_root):
 				pip_id = len(td.pips)
 				pd = PIPData(index=pip_id,
 					from_wire=td.wires_by_name[pipdata["src_wire"]].index, to_wire=td.wires_by_name[pipdata["dst_wire"]].index,
-					is_bidi=~bool(pipdata["is_directional"]), is_route_thru=bool(pipdata["is_pseudo"]))
+					is_bidi=~bool(int(pipdata["is_directional"])), is_route_thru=bool(int(pipdata["is_pseudo"])))
 				td.pips.append(pd)
 			for sitedata in tj["sites"]:
 				rel_xy = parse_xy(sitedata["name"])
