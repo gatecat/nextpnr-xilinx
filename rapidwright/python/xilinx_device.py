@@ -385,6 +385,7 @@ def import_device(name, prjxray_root, metadata_root):
 	grid_name = name
 	if "xc7a35t" in grid_name: # currently missing in prjxray-db
 		grid_name = "xc7a50tfgg484-1"
+	actual_int_tile = {}
 	with open(prjxray_root + "/gridinfo/grid-" + grid_name + "-db.txt", "r") as gf:
 		tileprops, tilesites, siteprops = parse_gridinfo(gf)
 		for tile, props in sorted(tileprops.items()):
@@ -395,6 +396,8 @@ def import_device(name, prjxray_root, metadata_root):
 			tiletype = props["TYPE"]
 			interconn_xy = (int(props["INT_TILE_X"]), int(props["INT_TILE_Y"]))
 			t = Tile(x, y, tile, get_tile_type_data(tiletype), interconn_xy, [])
+			if tiletype in ("INT", "INT_L", "INT_R"):
+				actual_int_tile[interconn_xy] = t
 			if tile in tilesites:
 				for idx, site in enumerate(tilesites[tile]):
 					sitetype = siteprops[site]["SITE_TYPE"]
@@ -404,6 +407,13 @@ def import_device(name, prjxray_root, metadata_root):
 			d.tiles_by_name[tile] = t
 			d.tiles_by_xy[x, y] = t
 			d.tiles.append(t)
+	# Resolve interconnect tile coordinates
+	for t in d.tiles:
+		icxy = t.interconn_xy
+		if icxy in actual_int_tile:
+			t.interconn_xy = (actual_int_tile[icxy].x, actual_int_tile[icxy].y)
+		else:
+			t.interconn_xy = (-1, -1)
 	# Read package pins
 	with open(prjxray_root + "/" + name + "_package_pins.csv") as ppf:
 		for line in ppf:
