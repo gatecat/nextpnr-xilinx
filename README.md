@@ -8,10 +8,10 @@ Project Xray, open bitstream documentation for xc7 FPGAs.
 Currently two flows are supported:
  - UltraScale+ with RapidWright database generation, bitstream generation
    using RapidWight and Vivado
- - xc7 with RapidWright database generation, bitstream generation
+ - xc7 with Project Xray database generation, bitstream generation
    using FASM and Project Xray (no Vivado anywhere in the flow)
 
-## Prerequisites
+## Prerequisites - UltraScale+
 
  - Follow the [RapidWright manual install instructions](https://www.rapidwright.io/docs/Manual_Install.html)
  - Make sure `$RAPIDWRIGHT_PATH` is set correctly for all further steps
@@ -19,32 +19,45 @@ Currently two flows are supported:
  - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
  - Use [this branch](https://github.com/daveshah1/yosys/tree/nextpnr_rw_usp) of Yosys **FIXME: upstream Yosys is currently unsupported, even for xc7**
 
+## Prerequisites - Artix-7
+
+ - Run `git submodule init` and `git submodule update` to fetch the database and metadata
+ - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
+ - Use [this branch](https://github.com/daveshah1/yosys/tree/nextpnr_rw_usp) of Yosys **FIXME: upstream Yosys is currently unsupported, even for xc7**
+
 A brief (academic) paper describing the Yosys+nextpnr flow can be found
 on [arXiv](https://arxiv.org/abs/1903.10407).
 
-## Building
+## Building - Artix-7
 
- - Run `cmake -DARCH=rapidwright -DRAPIDWRIGHT_PATH=/path/to/rapidwright -DGSON_PATH=/path/to/gson-2.8.5.jar .`
+ - Run `cmake -DARCH=xilinx .`
  - Run `make` (with -jN as appropriate)
 
-## Building the Arty example
- - Build the xc7a35t database using RapidWright:
-  - Make sure `RAPIDWRIGHT_PATH` is set
-  - Run `java -Xmx36G  -jar rapidwright_bbaexport.jar xc7a35tcsg324-1 ./rapidwright/constids.inc ./rapidwright/xc7a35t.bba`
-  - Run `./bbasm ./rapidwright/xc7a35t.bba rapidwright/xc7a35t.bin`
-  - Note: it would be possible to prebuild databases to remove the build time dependency on RapidWright
- - Run `attosoc.sh` in `rapidwright/examples/arty-a35`.
+## Building - UltraScale+
+
+ - Run `cmake -DARCH=xilinx -DRAPIDWRIGHT_PATH=/path/to/rapidwright -DGSON_PATH=/path/to/gson-2.8.5.jar .`
+ - Run `make` (with -jN as appropriate)
+
+## Building the Arty example - XRay database
+ - Run `pypy3 xilinx/python/bbaexport.py --device  xc7a35tcsg324-1 --bba xilinx/xc7a35t.bba`
+ - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
+ - Run `attosoc.sh` in `xilinx/examples/arty-a35`.
+
+## Building the zcu104 example - RapidWright
+ - Run `java -jar rapidwright_bbaexport.jar xczu7ev-ffvc1156-2-e xilinx/constids.inc xilinx/xczu7ev.bba`
+ - Run `./bbasm xilinx/xczu7ev.bba xilinx/xczu7ev.bin`
+ - Run `blinky.sh` in `xilinx/examples/zcu104`.
 
 ## Creating chip database from RapidWright
 
- - Run `java -jar rapidwright_bbaexport.jar xczu2cg-sbva484-1-e rapidwright/constids.inc rapidwright/xczu2cg.bba`
+ - Run `java -jar rapidwright_bbaexport.jar xczu2cg-sbva484-1-e xilinx/constids.inc xilinx/xczu2cg.bba`
    - This uses RapidWright to build a textual representation of a chip database for nextpnr
    - Replace `xczu2cg-sbva484-1-e` and the bba filename with the device you want to target. You can build multiple
      databases for multiple devices if desired (subject to the support caveats above)
 
- - Run `./bbasm rapidwright/xczu2cg.bba rapidwright/xczu2cg.bin`
+ - Run `./bbasm xilinx/xczu2cg.bba xilinx/xczu2cg.bin`
    - This converts the text database from above to a binary database that nextpnr can _mmap_
-  - See [rapidwright/examples](rapidwright/examples) for example scripts that run the Yosys/nextpnr/RapidWright flow,
+  - See [xilinx/examples](xilinx/examples) for example scripts that run the Yosys/nextpnr/RapidWright flow,
     then use Vivado to write a Verilog simulation netlist.
 
 ## Notes

@@ -4,6 +4,7 @@
 /nextpnr-ice40*
 /nextpnr-ecp5*
 /nextpnr-rapidwright*
+/nextpnr-xilinx*
 cmake-build-*/
 Makefile
 cmake_install.cmake
@@ -33,3 +34,5 @@ install_manifest.txt
 *.jar
 *.mf
 *.bba
+__pycache__/
+*.pyc
