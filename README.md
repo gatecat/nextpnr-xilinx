@@ -43,6 +43,10 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
  - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
  - Run `attosoc.sh` in `xilinx/examples/arty-a35`.
 
+## Building the zcu104 example - RapidWright
+ - Run `java -jar rapidwright_bbaexport.jar xczu7ev-ffvc1156-2-e xilinx/constids.inc xilinx/xczu7ev.bba`
+ - Run `./bbasm xilinx/xczu7ev.bba xilinx/xczu7ev.bin`
+ - Run `blinky.sh` in `xilinx/examples/zcu104`.
 
 ## Creating chip database from RapidWright
 
