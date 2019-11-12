@@ -30,30 +30,30 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
 
 ## Building - Artix-7
 
- - Run `cmake -DARCH=rapidwright .`
+ - Run `cmake -DARCH=xilinx .`
  - Run `make` (with -jN as appropriate)
 
 ## Building - UltraScale+
 
- - Run `cmake -DARCH=rapidwright -DRAPIDWRIGHT_PATH=/path/to/rapidwright -DGSON_PATH=/path/to/gson-2.8.5.jar .`
+ - Run `cmake -DARCH=xilinx -DRAPIDWRIGHT_PATH=/path/to/rapidwright -DGSON_PATH=/path/to/gson-2.8.5.jar .`
  - Run `make` (with -jN as appropriate)
 
 ## Building the Arty example - XRay database
- - Run `pypy3 rapidwright/python/bbaexport.py --device  xc7a35tcsg324-1 --bba rapidwright/xc7a35t.bba`
- - Run `./bbasm rapidwright/xc7a35t.bba rapidwright/xc7a35t.bin`
- - Run `attosoc.sh` in `rapidwright/examples/arty-a35`.
+ - Run `pypy3 xilinx/python/bbaexport.py --device  xc7a35tcsg324-1 --bba xilinx/xc7a35t.bba`
+ - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
+ - Run `attosoc.sh` in `xilinx/examples/arty-a35`.
 
 
 ## Creating chip database from RapidWright
 
- - Run `java -jar rapidwright_bbaexport.jar xczu2cg-sbva484-1-e rapidwright/constids.inc rapidwright/xczu2cg.bba`
+ - Run `java -jar rapidwright_bbaexport.jar xczu2cg-sbva484-1-e xilinx/constids.inc xilinx/xczu2cg.bba`
    - This uses RapidWright to build a textual representation of a chip database for nextpnr
    - Replace `xczu2cg-sbva484-1-e` and the bba filename with the device you want to target. You can build multiple
      databases for multiple devices if desired (subject to the support caveats above)
 
- - Run `./bbasm rapidwright/xczu2cg.bba rapidwright/xczu2cg.bin`
+ - Run `./bbasm xilinx/xczu2cg.bba xilinx/xczu2cg.bin`
    - This converts the text database from above to a binary database that nextpnr can _mmap_
-  - See [rapidwright/examples](rapidwright/examples) for example scripts that run the Yosys/nextpnr/RapidWright flow,
+  - See [xilinx/examples](xilinx/examples) for example scripts that run the Yosys/nextpnr/RapidWright flow,
     then use Vivado to write a Verilog simulation netlist.
 
 ## Notes

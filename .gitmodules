@@ -1,9 +1,9 @@
 [submodule "tests"]
 	path = tests
 	url = https://github.com/YosysHQ/nextpnr-tests
-[submodule "rapidwright/external/prjxray-db"]
-	path = rapidwright/external/prjxray-db
+[submodule "xilinx/external/prjxray-db"]
+	path = xilinx/external/prjxray-db
 	url = https://github.com/SymbiFlow/prjxray-db
-[submodule "rapidwright/external/nextpnr-xilinx-meta"]
-	path = rapidwright/external/nextpnr-xilinx-meta
+[submodule "xilinx/external/nextpnr-xilinx-meta"]
+	path = xilinx/external/nextpnr-xilinx-meta
 	url = https://github.com/daveshah1/nextpnr-xilinx-meta

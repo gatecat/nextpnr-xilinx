@@ -4,6 +4,7 @@
 /nextpnr-ice40*
 /nextpnr-ecp5*
 /nextpnr-rapidwright*
+/nextpnr-xilinx*
 cmake-build-*/
 Makefile
 cmake_install.cmake

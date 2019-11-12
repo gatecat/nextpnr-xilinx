@@ -29,9 +29,9 @@ if (EXTERNAL_CHIPDB)
 endif()
 
 # List of families to build
-set(FAMILIES generic ice40 ecp5 rapidwright)
+set(FAMILIES generic ice40 ecp5 xilinx)
 
-set(ARCH "rapidwright" CACHE STRING "Architecture family for nextpnr build")
+set(ARCH "xilinx" CACHE STRING "Architecture family for nextpnr build")
 set_property(CACHE ARCH PROPERTY STRINGS ${FAMILIES})
 
 if (NOT ARCH)
