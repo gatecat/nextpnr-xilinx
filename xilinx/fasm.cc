@@ -867,8 +867,11 @@ struct FasmBackend
                     write_bit(s + "_ACTIVE");
                     all_gclk.insert(s.substr(s.find("GCLK")));
                 }
-                for (auto s : used_ck_in)
+                for (auto s : used_ck_in) {
+                    if (s.find("HROW_CK_INT") != std::string::npos)
+                        continue;
                     write_bit(s + "_ACTIVE");
+                }
             } else if (boost::starts_with(type, "HCLK_CMT")) {
                 auto used_ccio = used_wires_starting_with(tile, "HCLK_CMT_CCIO", true);
                 for (auto s : used_ccio) {

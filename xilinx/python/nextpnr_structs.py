@@ -172,7 +172,7 @@ class NextpnrTileType:
 		name = bel.name()
 		bt = bel.bel_type()
 		prim_st = site.primary.site_type()
-		if prim_st in ("IOB33M", "IOB33S"):
+		if prim_st in ("IOB33M", "IOB33S", "IOB33"):
 			name = site.site_type() + "/" + name
 		nb = NextpnrBel(
 			name=name, index=len(self.bels), 
@@ -199,7 +199,8 @@ class NextpnrTileType:
 		bel_pin = sp.bel_input()
 		if (bel_name == "ADI1MUX" and bel_pin == "BDI1") or \
 			(bel_name == "BDI1MUX" and bel_pin == "DI") or \
-			(bel_name == "CDI1MUX" and bel_pin == "DI"):
+			(bel_name == "CDI1MUX" and bel_pin == "DI") or \
+            (bel_name == "TFBUSED"):
 			return None
 		np = NextpnrPip(index=len(self.pips),
 			from_wire=self.sitewire_to_tilewire(sp.src_wire()),
