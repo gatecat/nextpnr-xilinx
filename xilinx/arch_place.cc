@@ -440,9 +440,16 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                 }
             }
 
-            if ((i == 1) || (i == 2) || (i == 5) || (i == 6))
-                if (tile_is_memory && x_net != nullptr)
-                    return false; // collision with top address bits
+            // collision with top address bits
+            if (tile_is_memory) {
+                CellInfo *top_lut = lts.cells[(3 << 4) | BEL_6LUT];
+                if (top_lut != nullptr) {
+                    if ((i == 2) && x_net != top_lut->lutInfo.address_msb[0])
+                        return false;
+                    if ((i == 1) && x_net != top_lut->lutInfo.address_msb[1])
+                        return false;
+                }
+            }
 
             bool mux_output_used = false;
             NetInfo *out5 = nullptr;
