@@ -152,6 +152,8 @@ class NextpnrTileType:
 				continue
 			if p.src_wire().name().startswith("CLK_BUFG_R_FBG_OUT"):
 				continue
+			if "CLK_HROW_CK_INT" in p.src_wire().name():
+				continue
 			np = self.add_pip(p, False)
 			np.extra_data = 1 if p.is_route_thru() else 0
 			if p.is_bidi():
@@ -200,7 +202,7 @@ class NextpnrTileType:
 		if (bel_name == "ADI1MUX" and bel_pin == "BDI1") or \
 			(bel_name == "BDI1MUX" and bel_pin == "DI") or \
 			(bel_name == "CDI1MUX" and bel_pin == "DI") or \
-            (bel_name == "TFBUSED"):
+			(bel_name.startswith("TFBUSED")):
 			return None
 		np = NextpnrPip(index=len(self.pips),
 			from_wire=self.sitewire_to_tilewire(sp.src_wire()),
