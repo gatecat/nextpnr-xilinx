@@ -151,7 +151,7 @@ struct Router2
         }
     }
 
-    boost::container::flat_map<WireId, PerWireData> wires;
+    std::unordered_map<WireId, PerWireData> wires;
     void setup_wires()
     {
         // Set up per-wire structures, so that MT parts don't have to do any memory allocation
@@ -360,7 +360,7 @@ struct Router2
         // This could also be used to speed up forwards routing by a hybrid
         // bidirectional approach
         int backwards_iter = 0;
-        int backwards_limit = 125;
+        int backwards_limit = 200;
         t.backwards_pip.clear();
         t.backwards_queue.push(dst_wire);
         while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
@@ -452,6 +452,7 @@ struct Router2
 
         int toexplore = 25000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
         int iter = 0;
+        int explored = 1;
         while (!t.queue.empty() && (!is_bb || iter < toexplore)) {
             auto curr = t.queue.top();
             t.queue.pop();
@@ -491,6 +492,7 @@ struct Router2
                         curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
                 next_score.togo_cost = 1.75 * get_togo_cost(net, i, next, dst_wire);
                 if (!t.visited.count(next) || (t.visited.at(next).score.total() > next_score.total())) {
+                    ++explored;
 #if 0
                     ROUTE_LOG_DBG("exploring wire %s cost %f togo %f\n", ctx->nameOfWire(next), next_score.cost,
                                   next_score.togo_cost);
@@ -499,25 +501,23 @@ struct Router2
                     t.queue.push(QueuedWire(next, dh, ctx->getPipLocation(dh), next_score, ctx->rng()));
                     t.visited[next].score = next_score;
                     t.visited[next].pip = dh;
-                    if (next == dst_wire)
-                        goto loop_done;
+                    if (next == dst_wire) {
+                        toexplore = std::min(toexplore, iter + 5);
+                    }
                 }
-            }
-            if (false) {
-            loop_done:
-                break;
             }
         }
         if (t.visited.count(dst_wire)) {
-            ROUTE_LOG_DBG("   Routed: ");
+            ROUTE_LOG_DBG("   Routed (explored %d wires): ", explored);
             WireId cursor_bwd = dst_wire;
             while (t.visited.count(cursor_bwd)) {
                 auto &v = t.visited.at(cursor_bwd);
                 bind_pip_internal(net, i, cursor_bwd, v.pip);
                 if (ctx->debug) {
                     auto &wd = wires.at(cursor_bwd);
-                    ROUTE_LOG_DBG("      wire: %s (curr %d hist %f)\n", ctx->nameOfWire(cursor_bwd),
-                                  int(wd.bound_nets.size()) - 1, wd.hist_cong_cost);
+                    ROUTE_LOG_DBG("      wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(cursor_bwd),
+                                  int(wd.bound_nets.size()) - 1, wd.hist_cong_cost,
+                                  wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
                 }
                 if (v.pip == PipId()) {
                     NPNR_ASSERT(cursor_bwd == src_wire);
