@@ -759,9 +759,31 @@ void Arch::findSinkLocations()
 bool Arch::route()
 {
     assign_budget(getCtx(), true);
-    routeVcc();
+    // routeVcc();
     routeClock();
     findSinkLocations();
+
+#if 1
+    log("RAM routing debug");
+    BelId bel = getBelByName(id("RAMB18_X1Y28/RAMB18E1"));
+    WireId tgt = getBelPinWire(bel, id("ADDRATIEHIGH0"));
+    int i = 0;
+    std::queue<WireId> tovisit;
+    tovisit.push(tgt);
+    while (i < 100 && !tovisit.empty()) {
+        WireId cursor = tovisit.front();
+        tovisit.pop();
+        log("  %s\n", getCtx()->nameOfWire(cursor));
+        for (auto uh : getPipsUphill(cursor)) {
+            WireId src = getPipSrcWire(uh);
+            log("        %s <- %s %c%c\n", getCtx()->nameOfPip(uh), getCtx()->nameOfWire(src),
+                checkPipAvail(uh) ? '+' : '-', checkWireAvail(src) ? '+' : '-');
+            if (checkPipAvail(uh) && checkWireAvail(src))
+                tovisit.push(src);
+        }
+        ++i;
+    }
+#endif
 
     // Test router2
     router2_test(getCtx());
