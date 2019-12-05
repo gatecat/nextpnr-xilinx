@@ -452,6 +452,9 @@ ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
 
     expand(dst_tile % chip_info->width, dst_tile / chip_info->width);
 
+    if (source_locs.count(src))
+        expand(source_locs.at(src).x, source_locs.at(src).y);
+
     if (sink_locs.count(dst)) {
         expand(sink_locs.at(dst).x, sink_locs.at(dst).y);
     } else if (dst.tile != -1 && chip_info->tile_insts[dst.tile].num_sites > 0) {
@@ -698,7 +701,7 @@ void Arch::routeClock()
 #endif
 }
 
-void Arch::findSinkLocations()
+void Arch::findSourceSinkLocations()
 {
     // Use a backwards BFS to find the real location of sinks, on a best-effort basis
 #if 1
@@ -752,6 +755,56 @@ void Arch::findSinkLocations()
                 }
             }
         }
+
+        auto &drv = ni->driver;
+        if (drv.cell != nullptr)
+        {
+            BelId bel = drv.cell->bel;
+            if (bel == BelId() || isLogicTile(bel))
+                continue; // don't need to do this for logic bels, which are always next to their INT
+            WireId source = getCtx()->getNetinfoSourceWire(ni);
+            if (source == WireId() || source_locs.count(source))
+                continue;
+            std::queue<WireId> visit;
+            std::unordered_map<WireId, WireId> backtrace;
+            int iter = 0;
+            // as this is a best-effort optimisation to slightly improve routing,
+            // don't spend too long with a nice low iteration limit
+            const int iter_max = 500;
+            visit.push(source);
+            while (!visit.empty() && iter < iter_max) {
+                ++iter;
+                WireId cursor = visit.front();
+                visit.pop();
+                if (wireInfo(cursor).site == -1) {
+                    int intent = wireIntent(cursor);
+                    if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
+                        intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY) {
+                        int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
+                        source_locs[source] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
+                        if (getCtx()->debug) {
+                            log_info("%s ----> %s\n", nameOfWire(source), nameOfWire(cursor));
+                        }
+
+                        while (backtrace.count(cursor)) {
+                            cursor = backtrace.at(cursor);
+                            if (!source_locs.count(cursor)) {
+                                source_locs[cursor] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
+                            }
+                        }
+
+                        break;
+                    }
+                }
+                for (auto pip : getPipsDownhill(cursor)) {
+                    WireId dst = getPipDstWire(pip);
+                    if (!backtrace.count(dst)) {
+                        backtrace[dst] = cursor;
+                        visit.push(getPipDstWire(pip));
+                    }
+                }
+            }
+        }
     }
 #endif
 }
@@ -761,7 +814,7 @@ bool Arch::route()
     assign_budget(getCtx(), true);
     // routeVcc();
     routeClock();
-    findSinkLocations();
+    findSourceSinkLocations();
 
 #if 1
     log("RAM routing debug");

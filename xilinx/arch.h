@@ -1582,8 +1582,8 @@ struct Arch : BaseCtx
 
     void routeVcc();
     void routeClock();
-    void findSinkLocations();
-    std::unordered_map<WireId, Loc> sink_locs;
+    void findSourceSinkLocations();
+    std::unordered_map<WireId, Loc> sink_locs, source_locs;
     // -------------------------------------------------
 
     void parseXdc(std::istream &file);
