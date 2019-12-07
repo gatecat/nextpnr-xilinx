@@ -128,6 +128,7 @@ NPNR_PACKED_STRUCT(struct BelInfoPOD {
     int32_t name;    // bel name (in site) constid
     int32_t type;    // compatible type name constid
     int32_t xl_type; // xilinx type name constid
+    int32_t timing_class;
     int32_t num_bel_wires;
     RelPtr<BelWirePOD> bel_wires;
     int16_t z;
@@ -153,7 +154,8 @@ enum PipType
 
 NPNR_PACKED_STRUCT(struct PipInfoPOD {
     int32_t src_index, dst_index;
-    int16_t delay;
+    int32_t timing_class;
+    int16_t padding;
     int16_t flags;
 
     int32_t bel;          // name of bel containing pip
@@ -165,6 +167,7 @@ NPNR_PACKED_STRUCT(struct PipInfoPOD {
 NPNR_PACKED_STRUCT(struct TileWireInfoPOD {
     int32_t name;
     int32_t num_uphill, num_downhill;
+    int32_t timing_class;
     // Pip index inside tile
     RelPtr<int32_t> pips_uphill, pips_downhill;
     // Bel index inside tile
@@ -231,6 +234,58 @@ NPNR_PACKED_STRUCT(struct ConstIDDataPOD {
     RelPtr<RelPtr<char>> bba_ids;
 });
 
+
+NPNR_PACKED_STRUCT(struct CellPropDelayPOD {
+    int32_t from_port;
+    int32_t to_port;
+    int32_t min_delay;
+    int32_t max_delay;
+});
+
+enum TimingCheckType : int32_t {
+    TIMING_CHECK_SETUP = 0,
+    TIMING_CHECK_HOLD  = 1,
+    TIMING_CHECK_WIDTH = 2,
+};
+
+NPNR_PACKED_STRUCT(struct CellTimingCheckPOD {
+    int32_t check_type;
+    int32_t sig_port;
+    int32_t clock_port;
+    int32_t min_value;
+    int32_t max_value;
+});
+
+NPNR_PACKED_STRUCT(struct CellTimingPOD {
+    int32_t variant_name;
+    int32_t num_delays, num_checks;
+    RelPtr<CellPropDelayPOD> tile_types;
+    RelPtr<CellTimingCheckPOD> tile_insts;
+});
+
+NPNR_PACKED_STRUCT(struct BelTimingPOD {
+    int32_t num_variants;
+    RelPtr<CellTimingPOD> variants;
+});
+
+NPNR_PACKED_STRUCT(struct WireTimingPOD {
+    int32_t resistance, capacitance;
+});
+
+NPNR_PACKED_STRUCT(struct PipTimingPOD {
+    int16_t is_buffered;
+    int16_t padding;
+    int32_t min_delay, max_delay;
+    int32_t resistance, capacitance;
+});
+
+NPNR_PACKED_STRUCT(struct TimingDataPOD {
+    int32_t num_bel_classes, num_pip_classes, num_wire_classes;
+    RelPtr<BelTimingPOD> bel_timing_classes;
+    RelPtr<WireTimingPOD> wire_timing_classes;
+    RelPtr<PipTimingPOD> pip_timing_classes;
+});
+
 NPNR_PACKED_STRUCT(struct ChipInfoPOD {
     RelPtr<char> name;
     RelPtr<char> generator;
@@ -243,6 +298,9 @@ NPNR_PACKED_STRUCT(struct ChipInfoPOD {
     RelPtr<NodeInfoPOD> nodes;
 
     RelPtr<ConstIDDataPOD> extra_constids;
+
+    int32_t num_speed_grades;
+    RelPtr<TimingDataPOD> timing_data;
 });
 
 /************************ End of chipdb section. ************************/
