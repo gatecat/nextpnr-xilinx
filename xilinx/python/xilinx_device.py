@@ -67,13 +67,21 @@ class SiteData:
 		self.pins = []
 		self.variants = {}
 
+class TileSitePinData:
+	def __init__(self, wire_idx):
+		self.wire_idx = wire_idx
+		self.min_delay = 0
+		self.max_delay = 0
+		self.resistance = 0
+		self.capacitance = 0
+
 class TileData:
 	def __init__(self, tile_type):
 		self.tile_type = tile_type
 		self.wires = []
 		self.wires_by_name = {}
 		self.pips = []
-		self.sitepin_to_wire = {} # (type, relxy, pin) -> wireidx
+		self.sitepin_data = {} # (type, relxy, pin) -> TileSitePinData
 
 class PIP:
 	def __init__(self, tile, index):
@@ -178,6 +186,14 @@ class SitePin:
 		return SiteWire(self.site, self.data.site_wire_idx)
 	def tile_wire(self):
 		return self.site.tile.site_pin_wire(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name)
+	def min_delay(self):
+		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).min_delay
+	def max_delay(self):
+		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).max_delay
+	def resistance(self):
+		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).resistance
+	def capacitance(self):
+		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).capacitance
 
 class Site:
 	def __init__(self, tile, name, index, grid_xy, data, primary=None):
@@ -261,8 +277,10 @@ class Tile:
 	def sites(self):
 		return self.site_insts
 	def site_pin_wire(self, sitetype, rel_xy, pin):
-		wire_idx = self.data.sitepin_to_wire[(sitetype, rel_xy, pin)]
+		wire_idx = self.data.sitepin_data[(sitetype, rel_xy, pin)].wire_idx
 		return Wire(self, wire_idx) if wire_idx is not None else None
+	def site_pin_timing(self, sitetype, rel_xy, pin):
+		return self.data.sitepin_data[(sitetype, rel_xy, pin)]
 
 class Node:
 	def __init__(self, tile, wires=[]):
@@ -396,10 +414,18 @@ def import_device(name, prjxray_root, metadata_root):
 				sitetype = sitedata["type"]
 				for sitepin, pindata in sorted(sitedata["site_pins"].items()):
 					if pindata is None:
-						pinwire = None
+						tspd = TileSitePinData(None)
 					else:
 						pinwire = td.wires_by_name[pindata["wire"]].index
-					td.sitepin_to_wire[(sitetype, rel_xy, sitepin)] = pinwire
+						tspd = TileSitePinData(pinwire)
+						if "delay" in pindata:
+							tspd.min_delay = min(float(pindata["delay"][0]), float(pindata["delay"][1]))
+							tspd.max_delay = max(float(pindata["delay"][2]), float(pindata["delay"][3]))
+						if "res" in pindata:
+							tspd.resistance = float(pindata["res"])
+						if "cap" in pindata:
+							tspd.capacitance = float(pindata["cap"])
+					td.sitepin_data[(sitetype, rel_xy, sitepin)] = tspd
 			tile_type_cache[tiletype] = td
 
 		return tile_type_cache[tiletype]
