@@ -10,6 +10,8 @@ class WireData:
 		self.name = name
 		self.intent = intent
 		self.tied_value = tied_value
+		self.resistance = 0
+		self.capacitance = 0
 
 class PIPData:
 	def __init__(self, index, from_wire, to_wire, is_bidi, is_route_thru):
@@ -18,6 +20,11 @@ class PIPData:
 		self.to_wire = to_wire
 		self.is_bidi = is_bidi
 		self.is_route_thru = is_route_thru
+		self.is_buffered = False
+		self.min_delay = 0
+		self.max_delay = 0
+		self.resistance = 0
+		self.capacitance = 0
 
 class SiteWireData:
 	def __init__(self, name, is_pin=False):
@@ -81,6 +88,16 @@ class PIP:
 		return self.data.is_route_thru
 	def is_bidi(self):
 		return self.data.is_bidi
+	def is_buffered(self):
+		return self.data.is_buffered
+	def min_delay(self):
+		return self.data.min_delay
+	def max_delay(self):
+		return self.data.max_delay
+	def resistance(self):
+		return self.data.resistance
+	def capacitance(self):
+		return self.data.capacitance
 
 class Wire:
 	def __init__(self, tile, index):
@@ -345,18 +362,34 @@ def import_device(name, prjxray_root, metadata_root):
 			td = TileData(tiletype)
 			# Import wires and pips 
 			tj = read_tile_type_json(tiletype)
-			for wire in sorted(tj["wires"].keys()):
+			for wire, wire_data in sorted(tj["wires"].items()):
 				wire_id = len(td.wires)
 				wd = WireData(index=wire_id, name=wire, tied_value=None) # FIXME: tied_value
 				wd.intent = get_wire_intent(tiletype, wire)
+				if wire_data is not None:
+					if "res" in wire_data:
+						wd.resistance = float(wire_data["res"])
+					if "cap" in wire_data:
+						wd.capacitance = float(wire_data["cap"])
 				td.wires.append(wd)
-				td.wires_by_name[wire] = wd
+				td.wires_by_name[wire] = wd					
 			for pip, pipdata in sorted(tj["pips"].items()):
 				# FIXME: pip/wire delays
 				pip_id = len(td.pips)
 				pd = PIPData(index=pip_id,
 					from_wire=td.wires_by_name[pipdata["src_wire"]].index, to_wire=td.wires_by_name[pipdata["dst_wire"]].index,
 					is_bidi=(not bool(int(pipdata["is_directional"]))), is_route_thru=bool(int(pipdata["is_pseudo"])))
+				if "is_pass_transistor" in pipdata:
+					pd.is_buffered = (not bool(int(pipdata["is_pass_transistor"])))
+				if "src_to_dst" in pipdata:
+					s2d = pipdata["src_to_dst"]
+					if "delay" in s2d and s2d["delay"] is not None:
+						pd.min_delay = min(float(s2d["delay"][0]), float(s2d["delay"][1]))
+						pd.max_delay = max(float(s2d["delay"][2]), float(s2d["delay"][3]))
+					if "res" in s2d and s2d["res"] is not None:
+						pd.resistance = float(s2d["res"])
+					if "in_cap" in s2d and s2d["in_cap"] is not None:
+						pd.capacitance = float(s2d["in_cap"])
 				td.pips.append(pd)
 			for sitedata in tj["sites"]:
 				rel_xy = parse_xy(sitedata["name"])
