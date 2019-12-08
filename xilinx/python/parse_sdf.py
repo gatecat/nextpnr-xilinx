@@ -84,12 +84,15 @@ def parse_sexpr(stream):
 
 def parse_sexpr_file(filename):
     with open(filename, 'r') as f:
-        assert f.read(1) == '('
+        c = f.read(1)
+        while c != '(':
+            assert c == ' ' or c == '\n' or c == '\t'
+            c = f.read(1)
         return parse_sexpr(f)
 
 
 def parse_delay(delay):
-    sp = [int(x) for x in delay.split(":")]
+    sp = [float(x) if x != '' else None for x in delay.split(":")]
     assert len(sp) == 3
     return Delay(sp[0], sp[1], sp[2])
 
