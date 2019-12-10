@@ -757,8 +757,7 @@ void Arch::findSourceSinkLocations()
         }
 
         auto &drv = ni->driver;
-        if (drv.cell != nullptr)
-        {
+        if (drv.cell != nullptr) {
             BelId bel = drv.cell->bel;
             if (bel == BelId() || isLogicTile(bel))
                 continue; // don't need to do this for logic bels, which are always next to their INT
