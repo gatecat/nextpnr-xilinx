@@ -552,6 +552,8 @@ struct Router2
 #endif
                 // Evaluate score of next wire
                 WireId next = ctx->getPipDstWire(dh);
+                if (t.visited.count(next))
+                    continue;
 #if 1
                 if (debug_arc)
                     ROUTE_LOG_DBG("   src wire %s\n", ctx->nameOfWire(next));
