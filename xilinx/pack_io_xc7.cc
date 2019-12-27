@@ -240,10 +240,12 @@ void XC7Packer::pack_io()
         }
     }
     std::queue<BelId> available_io_bels;
-    IdString pad_id = ctx->id("IOB_PAD");
+    IdString pad_id = ctx->xc7 ? ctx->id("PAD") : ctx->id("IOB_PAD");
     for (auto bel : ctx->getBels()) {
         if (int(available_io_bels.size()) >= unconstr_io_count)
             break;
+        if (ctx->locInfo(bel).bel_data[bel.index].site_variant != 0)
+            continue;
         if (ctx->getBelType(bel) != pad_id)
             continue;
         if (ctx->getBelPackagePin(bel) == ".")
@@ -252,10 +254,15 @@ void XC7Packer::pack_io()
             continue;
         available_io_bels.push(bel);
     }
+    int avail_count = int(available_io_bels.size());
     // Constrain unconstrained IO
     for (auto &iob : pad_and_buf) {
         CellInfo *pad = iob.first;
         if (!pad->attrs.count(ctx->id("BEL"))) {
+            if (available_io_bels.empty()) {
+                log_error("IO placer ran out of available IOs (%d available IO, %d unconstrained pins)\n", avail_count,
+                          unconstr_io_count);
+            }
             pad->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(available_io_bels.front()));
             available_io_bels.pop();
         }
