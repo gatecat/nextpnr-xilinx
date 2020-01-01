@@ -124,7 +124,7 @@ struct FasmBackend
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
                                ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
                             "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
-                            "OLOGIC_Y" + i + ".OSERDESE.DATA_RATE_TQ.BUF"};
+                            "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"};
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
                                ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
                                                                          "ILOGIC_Y" + i + ".ZINV_D"};
@@ -706,7 +706,7 @@ struct FasmBackend
             write_bit("ZSRVAL_OQ", !bool_or_default(ci->params, ctx->id("SRVAL_OQ"), false));
             write_bit("ZSRVAL_TQ", !bool_or_default(ci->params, ctx->id("SRVAL_TQ"), false));
 
-            push("OSERDESE");
+            push("OSERDES");
             write_bit("IN_USE");
             std::string type = str_or_default(ci->params, ctx->id("DATA_RATE_OQ"), "BUF");
             write_bit(std::string("DATA_RATE_OQ.") + ((get_net_or_empty(ci, ctx->id("OQ")) != nullptr) ? type : "BUF"));
