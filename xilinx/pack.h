@@ -116,6 +116,7 @@ struct XilinxPacker
     void tie_port(CellInfo *ci, const std::string &port, bool value, bool inv = false);
 
     // LUTs & FFs
+    void pack_inverters();
     void pack_luts();
     void pack_ffs();
     void pack_lutffs();

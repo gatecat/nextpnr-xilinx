@@ -836,12 +836,26 @@ void USPacker::pack_uram()
     generic_xform(uram_rules, true);
 }
 
+void XilinxPacker::pack_inverters()
+{
+    // FIXME: fold where possible
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("INV")) {
+            ci->params[ctx->id("INIT")] = Property(1, 2);
+            rename_port(ctx, ci, ctx->id("I"), ctx->id("I0"));
+            ci->type = ctx->id("LUT1");
+        }
+    }
+}
+
 bool Arch::pack()
 {
     if (xc7) {
         XC7Packer packer;
         packer.ctx = getCtx();
         packer.pack_constants();
+        packer.pack_inverters();
         packer.pack_io();
         // packer.prepare_iologic();
         packer.prepare_clocking();
@@ -861,6 +875,7 @@ bool Arch::pack()
         USPacker packer;
         packer.ctx = getCtx();
         packer.pack_constants();
+        packer.pack_inverters();
         packer.pack_io();
         packer.prepare_iologic();
         packer.prepare_clocking();
