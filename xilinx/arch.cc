@@ -815,7 +815,7 @@ bool Arch::route()
     routeClock();
     findSourceSinkLocations();
 
-#if 1
+#if 0
     log("RAM routing debug");
     BelId bel = getBelByName(id("RAMB18_X1Y28/RAMB18E1"));
     WireId tgt = getBelPinWire(bel, id("ADDRATIEHIGH0"));
@@ -838,8 +838,9 @@ bool Arch::route()
 #endif
 
     // Test router2
-    router2_test(getCtx());
-
+    log_info("Running router2 for main routing task\n");
+    router2(getCtx());
+    log_info("Running router1 to ensure route is legal\n");
     bool result = router1(getCtx(), Router1Cfg(getCtx()));
     fixupRouting();
     getCtx()->attrs[getCtx()->id("step")] = std::string("route");
