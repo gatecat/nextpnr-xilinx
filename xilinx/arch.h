@@ -268,6 +268,12 @@ NPNR_PACKED_STRUCT(struct BelTimingPOD {
     RelPtr<CellTimingPOD> variants;
 });
 
+/*
+delay in ps
+R in mOhm
+C in fF
+*/
+
 NPNR_PACKED_STRUCT(struct WireTimingPOD {
     int32_t resistance, capacitance;
 });

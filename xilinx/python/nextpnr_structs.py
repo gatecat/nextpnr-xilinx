@@ -82,6 +82,114 @@ def lookup_port_type(t):
 	else:
 		assert False
 
+# Constant timing scale factors
+r_scale = 1000 # mOhm
+c_scale = 1000 # fF
+del_scale = 1 # ps
+
+class NextpnrPipTimingClass:
+	def __init__(self, is_buffered, min_delay, max_delay, r, c):
+		self.is_buffered = 1 if is_buffered else 0
+		self.min_delay = int(min_delay * del_scale)
+		self.max_delay = int(max_delay * del_scale)
+		self.r = int(r * r_scale)
+		self.c = int(c * c_scale)
+	def __eq__(self, other):
+		return self.is_buffered == other.is_buffered and self.min_delay == other.min_delay and \
+			self.max_delay == other.max_delay and self.r == other.r and self.c == other.c
+	def __ne__(self, other):
+		return self.is_buffered != other.is_buffered or self.min_delay != other.min_delay or \
+			self.max_delay != other.max_delay or self.r != other.r or self.c != other.c
+	def __hash__(self):
+		return hash((self.is_buffered, self.min_delay, self.max_delay, self.r, self.c))
+
+class NextpnrWireTimingClass:
+	def __init__(self, r, c):
+		self.r = int(r * r_scale)
+		self.c = int(c * c_scale)
+	def __eq__(self, other):
+		return self.r == other.r and self.c == other.c
+	def __ne__(self, other):
+		return self.r != other.r or self.c != other.c
+	def __hash__(self):
+		return hash((self.r, self.c))
+
+class NextpnrPropDelay:
+	def __init__(self, from_port, to_port, min_delay, max_delay):
+		self.from_port = constid.make(from_port)
+		self.to_port = constid.make(to_port)
+		self.min_delay = int(min_delay * del_scale)
+		self.max_delay = int(max_delay * del_scale)
+	@staticmethod
+	def from_sdf_iopath(iopath):
+		return NextpnrPropDelay(iopath.from_pin, iopath.to_pin,
+			min(iopath.rising.minv, iopath.falling.minv),
+			max(iopath.rising.maxv, iopath.falling.maxv)
+		)
+	@staticmethod
+	def from_sdf_interconn(ic):
+		return NextpnrPropDelay(ic.from_net, ic.to_net,
+			min(ic.rising.minv, ic.falling.minv),
+			max(ic.rising.maxv, ic.falling.maxv)
+		)
+
+class NextpnrTmgChkType(Enum):
+	TIMING_CHECK_SETUP = 0
+	TIMING_CHECK_HOLD  = 1
+	TIMING_CHECK_WIDTH = 2
+
+class NextpnrTimingCheck:
+	def __init__(self, chktype, sig_port, clock_port, min_value, max_value):
+		self.chktype = chktype
+		self.sig_port = constid.make(sig_port)
+		self.clock_port = constid.make(clock_port)
+		self.min_value = int(min_value * del_scale)
+		self.max_value = int(max_value * del_scale)
+	@staticmethod
+	def from_sdf_setuphold(self, sh):
+		return [
+			NextpnrTimingCheck(NextpnrTmgChkType.TIMING_CHECK_SETUP, sh.pin, sh.clock,
+				sh.setup.minv, sh.setup.maxv),
+			NextpnrTimingCheck(NextpnrTmgChkType.TIMING_CHECK_HOLD, sh.pin, sh.clock,
+				sh.hold.minv, sh.hold.maxv),
+		]
+	@staticmethod
+	def from_sdf_width(self, w):
+		NextpnrTimingCheck(NextpnrTmgChkType.TIMING_CHECK_WIDTH, sh.clock, sh.clock,
+				w.width.minv, w.width.maxv)
+
+class NextpnrCellTiming:
+	def __init__(self, variant_name):
+		self.variant_name = constid.make(variant_name)
+		self.delays = []
+		self.checks = []
+	def sort(self):
+		# Sort delays and checks by pin constid; so we can do a binary search in nextpnr
+		# to save time
+		self.delays.sort(key = lambda d: (d.to_port, d.from_port))
+		self.checks.sort(key = lambda c: (c.sig_port, c.clock_port))
+
+class NextpnrTimingData:
+	def __init__(self):
+		self.pip_classes = {}
+		self.wire_classes = {}
+	def get_pip_class(self, is_buffered, min_delay, max_delay, r, c):
+		tc = NextpnrPipTimingClass(is_buffered, min_delay, max_delay, r, c)
+		if tc not in self.pip_classes:
+			idx = len(self.pip_classes)
+			self.pip_classes[tc] = idx
+			return idx
+		else:
+			return self.pip_classes[tc]
+	def get_wire_class(self, r, c):
+		tc = NextpnrWireTimingClass(r, c)
+		if tc not in self.wire_classes:
+			idx = len(self.wire_classes)
+			self.wire_classes[tc] = idx
+			return idx
+		else:
+			return self.wire_classes[tc]
+
 class NextpnrTileType:
 	def sitewire_to_tilewire(self, sw):
 		key = str(sw.site.primary.index) + "/" + sw.name()
