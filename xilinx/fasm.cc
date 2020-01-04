@@ -201,8 +201,19 @@ struct FasmBackend
 
         if (pp_config.count(ppk)) {
             auto &pp = pp_config.at(ppk);
-            for (auto &c : pp)
-                out << get_tile_name(pip.tile) << "." << c << std::endl;
+            std::string tile_name = get_tile_name(pip.tile);
+            for (auto c : pp) {
+                if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
+                    // Need to flip for top HCLK
+                    bool is_top_sing = pip.tile < ctx->getHclkForIoi(pip.tile);
+                    if (is_top_sing) {
+                        auto y0pos = c.find("Y0");
+                        if (y0pos != std::string::npos)
+                            c.replace(y0pos, 2, "Y1");
+                    }
+                }
+                out << tile_name << "." << c << std::endl;
+            }
             if (!pp.empty())
                 last_was_blank = false;
         } else {
