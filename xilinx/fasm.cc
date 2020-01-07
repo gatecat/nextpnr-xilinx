@@ -227,13 +227,6 @@ struct FasmBackend
             std::string dst_name = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx);
             std::string src_name = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx);
 
-            if (boost::starts_with(tile_name, "CMT_TOP_R_UPPER") || boost::starts_with(tile_name, "CMT_TOP_L_UPPER")) {
-                if (!((boost::ends_with(dst_name, "PLLE2_CLKIN1") && boost::ends_with(src_name, "PLLE2_CLK_IN1_INT")) ||
-                      (boost::ends_with(dst_name, "PLLE2_CLKIN2") && boost::ends_with(src_name, "PLLE2_CLK_IN2_INT")) ||
-                      (boost::ends_with(dst_name, "PLLE2_CLKFBIN") && boost::ends_with(src_name, "PLLE2_CLK_FB_INT"))))
-                    return;
-            }
-
             if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
                 if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
@@ -1116,7 +1109,7 @@ struct FasmBackend
         std::string comp = str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL");
         push("COMPENSATION");
         if (comp == "INTERNAL") {
-            write_bit("INTERNAL");
+            // write_bit("INTERNAL");
             write_bit("Z_ZHOLD_OR_CLKIN_BUF");
         } else {
             NPNR_ASSERT_FALSE("unsupported compensation type");
