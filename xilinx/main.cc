@@ -56,37 +56,6 @@ po::options_description UspCommandHandler::getArchOptions()
 
 void UspCommandHandler::customBitstream(Context *ctx)
 {
-#if 0
-    if (ctx->debug) {
-        std::ofstream out("delays.csv");
-
-        auto bel_inter_xy = [&](BelId bel) {
-            auto &chip_info = ctx->chip_info;
-            auto &site = chip_info->tile_insts[bel.tile].site_insts[ctx->locInfo(bel).bel_data[bel.index].site];
-
-            if (site.inter_x != -1) {
-                return std::make_pair(site.inter_x, site.inter_y);
-            } else {
-                return std::make_pair(bel.tile % chip_info->width, bel.tile / chip_info->height);
-            }
-        };
-
-        for (auto &net : ctx->nets) {
-            NetInfo *ni = net.second.get();
-            if (ni->driver.cell == nullptr)
-                continue;
-            if (ctx->getBelGlobalBuf(ni->driver.cell->bel))
-                continue;
-            auto drv_loc = bel_inter_xy(ni->driver.cell->bel);
-            for (auto &usr : ni->users) {
-                auto usr_loc = bel_inter_xy(usr.cell->bel);
-                out << std::abs(drv_loc.first - usr_loc.first) << ", " << std::abs(drv_loc.second - usr_loc.second)
-                    << ", " << ctx->getDelayNS(ctx->getNetinfoRouteDelay(ni, usr)) << std::endl;
-            }
-        }
-    }
-#endif
-
     if (vm.count("fasm")) {
         std::string filename = vm["fasm"].as<std::string>();
         ctx->writeFasm(filename);

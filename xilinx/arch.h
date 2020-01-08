@@ -647,7 +647,7 @@ struct Arch : BaseCtx
 
     std::string getChipName() const;
 
-    IdString archId() const { return id("ice40"); }
+    IdString archId() const { return id("xilinx"); }
     ArchArgs archArgs() const { return args; }
     IdString archArgsToId(ArchArgs args) const;
 
@@ -1390,15 +1390,10 @@ struct Arch : BaseCtx
     // Get the delay through a cell from one port to another, returning false
     // if no path exists. This only considers combinational delays, as required by the Arch API
     bool getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const;
-    // getCellDelayInternal is similar to the above, but without false path checks and including clock to out delays
-    // for internal arch use only
-    bool getCellDelayInternal(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const;
     // Get the port class, also setting clockInfoCount to the number of TimingClockingInfos associated with a port
     TimingPortClass getPortTimingClass(const CellInfo *cell, IdString port, int &clockInfoCount) const;
     // Get the TimingClockingInfo of a port
     TimingClockingInfo getPortClockingInfo(const CellInfo *cell, IdString port, int index) const;
-    // Return true if a port is a net
-    bool isGlobalNet(const NetInfo *net) const;
 
     // -------------------------------------------------
 
@@ -1415,9 +1410,6 @@ struct Arch : BaseCtx
 
     bool xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const;
     bool xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const;
-
-    // Helper function for above
-    bool logicCellsCompatible(const CellInfo **it, const size_t size) const;
 
     IdString getBelTileType(BelId bel) const { return IdString(locInfo(bel).type); }
     bool isLogicTile(BelId bel) const
@@ -1506,7 +1498,5 @@ struct Arch : BaseCtx
     // -------------------------------------------------
     void writeFasm(const std::string &filename);
 };
-
-void ice40DelayFuzzerMain(Context *ctx);
 
 NEXTPNR_NAMESPACE_END
