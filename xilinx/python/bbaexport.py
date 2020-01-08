@@ -25,9 +25,10 @@ def main():
 	seen_tiletypes = set()
 	tile_types = []
 	tile_type_index = {}
+	timing = NextpnrTimingData()
 	for tile in d.tiles:
 		if tile.tile_type() not in seen_tiletypes:
-			ntt = NextpnrTileType(d, tile)
+			ntt = NextpnrTileType(d, tile, timing)
 			ntt.index = len(tile_types)
 			seen_tiletypes.add(tile.tile_type())
 			tile_type_index[tile.tile_type()] = len(tile_types)
@@ -115,7 +116,7 @@ def main():
 			for p in tt.pips:
 				bba.u32(p.from_wire) # src tile wire index
 				bba.u32(p.to_wire) # dst tile wire index
-				bba.u16(p.delay)
+				bba.u16(p.timing_class)
 				bba.u16(p.pip_type.value)
 				bba.u32(p.bel) # bel name constid for site pips
 				bba.u32(p.extra_data) # misc extra data for pseudo-pips (e.g lut permutation info)

@@ -27,11 +27,11 @@ class NextpnrWire:
 		self.belpins = []
 
 class NextpnrPip:
-	def __init__(self, index, from_wire, to_wire, delay, pip_type):
+	def __init__(self, index, from_wire, to_wire, timing_class, pip_type):
 		self.index = index
 		self.from_wire = from_wire
 		self.to_wire = to_wire
-		self.delay = delay
+		self.timing_class = timing_class
 		self.pip_type = pip_type
 		self.bel = -1
 		self.extra_data = 0
@@ -203,9 +203,10 @@ class NextpnrTileType:
 			self.sitewire_to_tilewire_idx[key] = nw.index
 		return self.sitewire_to_tilewire_idx[key]
 
-	def __init__(self, device, tile):
+	def __init__(self, device, tile, timing):
 		self.type = constid.make(tile.tile_type())
 		self.index = -1
+		self.timing = timing
 		self.bels = []
 		self.wires = []
 		self.pips = []
@@ -312,10 +313,18 @@ class NextpnrTileType:
 			(bel_name == "CDI1MUX" and bel_pin == "DI") or \
 			(bel_name.startswith("TFBUSED")):
 			return None
+		# FIXME get from SDF
+		timing_class = self.timing.get_pip_class(
+			is_buffered=True,
+			min_delay=10,
+			max_delay=10,
+			r=0,
+			c=0
+		)
 		np = NextpnrPip(index=len(self.pips),
 			from_wire=self.sitewire_to_tilewire(sp.src_wire()),
 			to_wire=self.sitewire_to_tilewire(sp.dst_wire()),
-			delay=0, pip_type=NextpnrPipType.SITE_INTERNAL
+			timing_class=timing_class, pip_type=NextpnrPipType.SITE_INTERNAL
 		)
 		self.wires[np.from_wire].pips_dh.append(np.index)
 		self.wires[np.to_wire].pips_uh.append(np.index)
@@ -332,13 +341,20 @@ class NextpnrTileType:
 		pindir = pin.dir()
 		if pin.tile_wire() is None:
 			return None # ignore pins that are not connected to a useful tile wire
+		timing_class = self.timing.get_pip_class(
+				is_buffered=False,
+				min_delay=pin.min_delay(),
+				max_delay=pin.max_delay(),
+				r=pin.resistance(),
+				c=pin.capacitance(),
+			)
 		if pindir in ("OUTPUT", "BIDIR"):
 			if s.primary.site_type() == "IPAD" and pn == "O":
 				return None
 			np = NextpnrPip(index=len(self.pips),
 				from_wire=self.sitewire_to_tilewire(pin.site_wire()),
 				to_wire=pin.tile_wire().index,
-				delay=0, pip_type=NextpnrPipType.SITE_EXIT
+				timing_class=timing_class, pip_type=NextpnrPipType.SITE_EXIT
 			)
 		else:
 			if s.site_type() in ("SLICEL", "SLICEM"):
@@ -352,7 +368,7 @@ class NextpnrTileType:
 						pp = NextpnrPip(index=len(self.pips),
 							from_wire=s.pin(swn[0] + str(j)).tile_wire().index,
 							to_wire=self.sitewire_to_tilewire(pin.site_wire()),
-							delay=0, pip_type=NextpnrPipType.LUT_PERMUTATION)
+							timing_class=timing_class, pip_type=NextpnrPipType.LUT_PERMUTATION)
 						pp.extra_data = ("ABCDEFGH".index(swn[0]) << 8) | ((j - 1) << 4) | (i - 1)
 						if s.rel_xy()[0] == 1:
 							pp.extra_data |= (4 << 8)
@@ -363,7 +379,7 @@ class NextpnrTileType:
 			np = NextpnrPip(index=len(self.pips),
 				from_wire=pin.tile_wire().index,
 				to_wire=self.sitewire_to_tilewire(pin.site_wire()),
-				delay=0, pip_type=NextpnrPipType.SITE_ENTRANCE
+				timing_class=timing_class, pip_type=NextpnrPipType.SITE_ENTRANCE
 			)
 		self.wires[np.from_wire].pips_dh.append(np.index)
 		self.wires[np.to_wire].pips_uh.append(np.index)
@@ -371,10 +387,18 @@ class NextpnrTileType:
 		return np
 
 	def add_pip(self, p, reverse):
+		# Determine pip timing class
+		timing_class = self.timing.get_pip_class(
+			is_buffered=p.is_buffered(),
+			min_delay=p.min_delay(),
+			max_delay=p.max_delay(),
+			r=p.resistance(),
+			c=p.capacitance(),
+		)
 		np = NextpnrPip(index=len(self.pips),
 			from_wire=(p.dst_wire() if reverse else p.src_wire()).index,
 			to_wire=(p.src_wire() if reverse else p.dst_wire()).index,
-			delay=0, pip_type=NextpnrPipType.TILE_ROUTING
+			timing_class=timing_class, pip_type=NextpnrPipType.TILE_ROUTING
 		)
 		self.wires[np.from_wire].pips_dh.append(np.index)
 		self.wires[np.to_wire].pips_uh.append(np.index)
@@ -382,9 +406,10 @@ class NextpnrTileType:
 		return np
 
 	def add_pseudo_pip(self, from_wire, to_wire):
+		timing_class = self.timing.get_pip_class(is_buffered=0, min_delay=0, max_delay=0, r=0.001, c=0)
 		np = NextpnrPip(index=len(self.pips),
 			from_wire=from_wire, to_wire=to_wire,
-			delay=0, pip_type=NextpnrPipType.TILE_ROUTING
+			timing_class=timing_class, pip_type=NextpnrPipType.TILE_ROUTING
 		)
 		self.wires[np.from_wire].pips_dh.append(np.index)
 		self.wires[np.to_wire].pips_uh.append(np.index)

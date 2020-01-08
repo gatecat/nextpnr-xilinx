@@ -187,13 +187,13 @@ class SitePin:
 	def tile_wire(self):
 		return self.site.tile.site_pin_wire(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name)
 	def min_delay(self):
-		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).min_delay
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).min_delay
 	def max_delay(self):
-		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).max_delay
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).max_delay
 	def resistance(self):
-		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).resistance
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).resistance
 	def capacitance(self):
-		return self.data.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).capacitance
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).capacitance
 
 class Site:
 	def __init__(self, tile, name, index, grid_xy, data, primary=None):
