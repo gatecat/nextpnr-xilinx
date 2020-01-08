@@ -1,6 +1,7 @@
 from enum import *
 import constid
 import bels
+import parse_sdf
 
 class NextpnrPipType(Enum):
 	TILE_ROUTING = 0
@@ -146,7 +147,7 @@ class NextpnrTimingCheck:
 		self.min_value = int(min_value * del_scale)
 		self.max_value = int(max_value * del_scale)
 	@staticmethod
-	def from_sdf_setuphold(self, sh):
+	def from_sdf_setuphold(sh):
 		return [
 			NextpnrTimingCheck(NextpnrTmgChkType.TIMING_CHECK_SETUP, sh.pin, sh.clock,
 				sh.setup.minv, sh.setup.maxv),
@@ -154,7 +155,7 @@ class NextpnrTimingCheck:
 				sh.hold.minv, sh.hold.maxv),
 		]
 	@staticmethod
-	def from_sdf_width(self, w):
+	def from_sdf_width(w):
 		NextpnrTimingCheck(NextpnrTmgChkType.TIMING_CHECK_WIDTH, sh.clock, sh.clock,
 				w.width.minv, w.width.maxv)
 
@@ -166,8 +167,59 @@ class NextpnrCellTiming:
 	def sort(self):
 		# Sort delays and checks by pin constid; so we can do a binary search in nextpnr
 		# to save time
-		self.delays.sort(key = lambda d: (d.to_port, d.from_port))
-		self.checks.sort(key = lambda c: (c.sig_port, c.clock_port))
+		self.delays.sort(key=lambda d: (d.to_port, d.from_port))
+		self.checks.sort(key=lambda c: (c.sig_port, c.clock_port))
+	@staticmethod
+	def from_sdf_cell(sdfc):
+		cell = NextpnrCellTiming(sdfc.type)
+		for entry in sdfc.entries:
+			if isinstance(entry, parse_sdf.IOPath):
+				cell.delays.append(NextpnrPropDelay.from_sdf_iopath(entry))
+			elif isinstance(entry, parse_sdf.SetupHoldCheck):
+				cell.checks.append(NextpnrTimingCheck.from_sdf_setuphold(entry))
+			elif isinstance(entry, parse_sdf.WidthCheck):
+				cell.checks.append(NextpnrTimingCheck.from_sdf_width(entry))
+			else:
+				assert False, "unknown SDF entry type"
+		for interconn in sorted(sdfc.interconnect.values(), key=lambda ic: (ic.to_net, ic.from_net)):
+			cell.delays.append(NextpnrPropDelay.from_sdf_interconn(interconn))
+		cell.sort()
+		return cell
+
+class NextpnrInstanceTiming:
+	def __init__(self, inst_name):
+		self.inst_name = constid.make(inst_name)
+		self.variants = []
+	def sort(self):
+		# Sort variants by name constid; so we can do a binary search
+		self.variants.sort(key=lambda v: v.variant_name)
+		for variant in self.variants:
+			variant.sort()
+
+class NextpnrTileCellTiming:
+	def __init__(self, tile_type):
+		self.tile_type = constid.make(tile_type)
+		self.instances = []
+		self.instance_name_to_index = {}
+	def sort(self):
+		# Sort variants by name constid; so we can do a binary search
+		self.instances.sort(key=lambda i: i.inst_name)
+		self.instance_name_to_index = {}
+		for idx, instance in enumerate(self.instances):
+			self.instance_name_to_index[instance.inst_name] = idx
+			instance.sort()
+
+	@staticmethod
+	def from_sdf(tile_type, sdf):
+		tmg = NextpnrCellTiming(tile_type)
+		instances = {}
+		for cell in sorted(sdf.cells.values(), key=lambda c: (c.inst, c.type)):
+			if cell.inst not in instances:
+				instances[cell.inst] = NextpnrInstanceTiming(cell.inst)
+			instances[cell.inst].variants.append(NextpnrCellTiming.from_sdf_cell(cell))
+		tmg.instances = [instances.values()]
+		tmg.sort()
+		return tmg
 
 class NextpnrTimingData:
 	def __init__(self):
@@ -207,6 +259,10 @@ class NextpnrTileType:
 		self.type = constid.make(tile.tile_type())
 		self.index = -1
 		self.timing = timing
+		if tile.cell_timing() is not None:
+			self.cell_timing = NextpnrTileCellTiming.from_sdf(tile.tile_type(), tile.cell_timing())
+		else:
+			self.cell_timing = None
 		self.bels = []
 		self.wires = []
 		self.pips = []

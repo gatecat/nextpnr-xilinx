@@ -130,5 +130,5 @@ def parse_sdf_file(filename):
                             SetupHoldCheck(check[1], check[2], parse_delay(check[3][0]), parse_delay(check[4][0])))
                     elif check[0] == "WIDTH":
                         cell.entries.append(WidthCheck(check[1], parse_delay(check[2][0])))
-        sdf.cells[inst] = cell
+        sdf.cells[(celltype, inst)] = cell
     return sdf

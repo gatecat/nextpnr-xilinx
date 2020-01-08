@@ -283,6 +283,8 @@ class Tile:
 		return Wire(self, wire_idx) if wire_idx is not None else None
 	def site_pin_timing(self, sitetype, rel_xy, pin):
 		return self.data.sitepin_data[(sitetype, rel_xy, pin)]
+	def cell_timing(self):
+		return self.data.cell_timing
 
 class Node:
 	def __init__(self, tile, wires=[]):

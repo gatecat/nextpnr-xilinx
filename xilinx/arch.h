@@ -125,10 +125,11 @@ enum DSP48E2BelTypeZ
 };
 
 NPNR_PACKED_STRUCT(struct BelInfoPOD {
-    int32_t name;    // bel name (in site) constid
-    int32_t type;    // compatible type name constid
-    int32_t xl_type; // xilinx type name constid
-    int32_t timing_class;
+    int32_t name;        // bel name (in site) constid
+    int32_t type;        // compatible type name constid
+    int32_t xl_type;     // xilinx type name constid
+    int32_t timing_inst; // timing instance index in tile
+
     int32_t num_bel_wires;
     RelPtr<BelWirePOD> bel_wires;
     int16_t z;
@@ -202,6 +203,9 @@ NPNR_PACKED_STRUCT(struct TileTypeInfoPOD {
 
     int32_t num_pips;
     RelPtr<PipInfoPOD> pip_data;
+
+    // Cell timing data index
+    int32_t timing_index;
 });
 
 NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
@@ -234,7 +238,6 @@ NPNR_PACKED_STRUCT(struct ConstIDDataPOD {
     RelPtr<RelPtr<char>> bba_ids;
 });
 
-
 NPNR_PACKED_STRUCT(struct CellPropDelayPOD {
     int32_t from_port;
     int32_t to_port;
@@ -242,9 +245,10 @@ NPNR_PACKED_STRUCT(struct CellPropDelayPOD {
     int32_t max_delay;
 });
 
-enum TimingCheckType : int32_t {
+enum TimingCheckType : int32_t
+{
     TIMING_CHECK_SETUP = 0,
-    TIMING_CHECK_HOLD  = 1,
+    TIMING_CHECK_HOLD = 1,
     TIMING_CHECK_WIDTH = 2,
 };
 
@@ -263,9 +267,18 @@ NPNR_PACKED_STRUCT(struct CellTimingPOD {
     RelPtr<CellTimingCheckPOD> tile_insts;
 });
 
-NPNR_PACKED_STRUCT(struct BelTimingPOD {
-    int32_t num_variants;
-    RelPtr<CellTimingPOD> variants;
+NPNR_PACKED_STRUCT(struct InstanceTimingPOD {
+    // Variants, sorted by name IdString
+    int32_t inst_name;
+    int32_t num_celltypes;
+    RelPtr<CellTimingPOD> celltypes;
+});
+
+NPNR_PACKED_STRUCT(struct TileCellTimingPOD {
+    int32_t tile_type_name;
+    // Instances, sorted by name IdString
+    int32_t num_instances;
+    RelPtr<InstanceTimingPOD> instances;
 });
 
 /*
@@ -274,9 +287,7 @@ R in mOhm
 C in fF
 */
 
-NPNR_PACKED_STRUCT(struct WireTimingPOD {
-    int32_t resistance, capacitance;
-});
+NPNR_PACKED_STRUCT(struct WireTimingPOD { int32_t resistance, capacitance; });
 
 NPNR_PACKED_STRUCT(struct PipTimingPOD {
     int16_t is_buffered;
@@ -287,7 +298,7 @@ NPNR_PACKED_STRUCT(struct PipTimingPOD {
 
 NPNR_PACKED_STRUCT(struct TimingDataPOD {
     int32_t num_bel_classes, num_pip_classes, num_wire_classes;
-    RelPtr<BelTimingPOD> bel_timing_classes;
+    RelPtr<TileCellTimingPOD> tile_cell_timings;
     RelPtr<WireTimingPOD> wire_timing_classes;
     RelPtr<PipTimingPOD> pip_timing_classes;
 });
