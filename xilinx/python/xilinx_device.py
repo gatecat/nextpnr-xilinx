@@ -2,6 +2,7 @@ import json
 import os
 from gridinfo import parse_gridinfo
 from tileconn import apply_tileconn
+from parse_sdf import parse_sdf_file
 # Represents Xilinx device data from PrjXray etc
 
 class WireData:
@@ -82,6 +83,7 @@ class TileData:
 		self.wires_by_name = {}
 		self.pips = []
 		self.sitepin_data = {} # (type, relxy, pin) -> TileSitePinData
+		self.cell_timing = None
 
 class PIP:
 	def __init__(self, tile, index):
@@ -426,6 +428,9 @@ def import_device(name, prjxray_root, metadata_root):
 						if "cap" in pindata:
 							tspd.capacitance = float(pindata["cap"])
 					td.sitepin_data[(sitetype, rel_xy, sitepin)] = tspd
+			if os.path.exists(prjxray_root + "/timings/" + tiletype + ".sdf"):
+				td.cell_timing = parse_sdf_file(prjxray_root + "/timings/" + tiletype + ".sdf")
+
 			tile_type_cache[tiletype] = td
 
 		return tile_type_cache[tiletype]

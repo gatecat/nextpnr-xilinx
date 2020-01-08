@@ -85,7 +85,7 @@ def lookup_port_type(t):
 # Constant timing scale factors
 r_scale = 1000 # mOhm
 c_scale = 1000 # fF
-del_scale = 1 # ps
+del_scale = 1000 # ps
 
 class NextpnrPipTimingClass:
 	def __init__(self, is_buffered, min_delay, max_delay, r, c):
