@@ -406,6 +406,9 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     delay_t base = 30 * std::min(std::abs(dst_x - src_x), 18) + 10 * std::max(std::abs(dst_x - src_x) - 18, 0) +
                    60 * std::min(std::abs(dst_y - src_y), 6) + 20 * std::max(std::abs(dst_y - src_y) - 6, 0) + 300;
 
+    if (xc7)
+        base = (base * 3) / 2;
+
     if (sink_locs.count(dst))
         base += 1000;
     if (src_intent == ID_NODE_PINFEED && dst_x == src_x && dst_y == src_y)

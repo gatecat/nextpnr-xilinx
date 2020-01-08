@@ -1363,8 +1363,23 @@ struct Arch : BaseCtx
             } else if (dst_intent == ID_NODE_LAGUNA_DATA) {
                 delay.delay = 5000;
             } else {
-                const delay_t pip_epsilon = 75;
-                delay.delay = pip_epsilon;
+                const delay_t pip_epsilon = 35;
+                auto &pip_data = locInfo(pip).pip_data[pip.index];
+                auto &pip_timing = chip_info->timing_data->pip_timing_classes[pip_data.timing_class];
+                auto &src_timing =
+                        chip_info->timing_data
+                                ->wire_timing_classes[locInfo(pip).wire_data[pip_data.src_index].timing_class];
+                delay_t pip_delay =
+                        pip_timing.max_delay +
+                        delay_t((float(src_timing.resistance + pip_timing.resistance) * pip_timing.capacitance) / 1e9);
+                if (!pip_timing.is_buffered) {
+                    auto &dst_timing =
+                            chip_info->timing_data
+                                    ->wire_timing_classes[locInfo(pip).wire_data[pip_data.dst_index].timing_class];
+                    pip_delay += delay_t(
+                            (float(src_timing.resistance + pip_timing.resistance) * dst_timing.capacitance) / 1e9);
+                }
+                delay.delay = std::max(pip_delay, pip_epsilon);
             }
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
             delay.delay = 300;
