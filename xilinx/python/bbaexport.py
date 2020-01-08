@@ -33,6 +33,9 @@ def main():
 			seen_tiletypes.add(tile.tile_type())
 			tile_type_index[tile.tile_type()] = len(tile_types)
 			tile_types.append(ntt)
+			if ntt.cell_timing is not None:
+				timing.add_tile(ntt.cell_timing)
+	timing.sort_tiles()
 
 	# Import tile instances
 	tile_insts = []
@@ -92,6 +95,16 @@ def main():
 				bba.u32(b.name) # name constid
 				bba.u32(b.bel_type) # type (compatible type for nextpnr) constid
 				bba.u32(b.native_type) # native type (original type in RapidWright) constid
+				timing_inst_idx = -1
+				if tt.type in timing.tile_type_to_tile_index:
+					ttmg = timing.tiles[timing.tile_type_to_tile_index[tt.type]]
+					bel_name_inst = constid.make(b.site_type + "/" + constid.constids[b.name])
+					site_inst = constid.make(b.site_type)
+					if bel_name_inst in ttmg.instance_name_to_index:
+						timing_inst_idx = ttmg.instance_name_to_index[bel_name_inst]
+					elif site_inst in ttmg.instance_name_to_index:
+						timing_inst_idx = ttmg.instance_name_to_index[site_inst]
+				bba.u32(timing_inst_idx) # timing instance index
 				bba.u32(len(b.belports)) # number of bel port wires
 				bba.ref("t{}b{}_wires".format(tt.index, b.index)) # ref to list of bel wires
 				bba.u16(b.z) # bel z position
@@ -104,6 +117,7 @@ def main():
 				bba.u32(w.name) # name constid
 				bba.u32(len(w.pips_uh)) # number of uphill pips
 				bba.u32(len(w.pips_dh)) # number of downhill pips
+				bba.u32(w.timing_class) # timing class index
 				bba.ref("t{}w{}_uh".format(tt.index, w.index)) # ref to list of uphill pip indices
 				bba.ref("t{}w{}_dh".format(tt.index, w.index)) # ref to list of downhill pip indices
 				bba.u32(len(w.belpins)) # number of bel pins on wire
@@ -116,7 +130,8 @@ def main():
 			for p in tt.pips:
 				bba.u32(p.from_wire) # src tile wire index
 				bba.u32(p.to_wire) # dst tile wire index
-				bba.u16(p.timing_class)
+				bba.u32(p.timing_class) # pip timing class
+				bba.u16(0) # padding
 				bba.u16(p.pip_type.value)
 				bba.u32(p.bel) # bel name constid for site pips
 				bba.u32(p.extra_data) # misc extra data for pseudo-pips (e.g lut permutation info)
@@ -132,6 +147,7 @@ def main():
 			bba.ref("t{}_wires".format(tt.index)) # ref to list of wires
 			bba.u32(len(tt.pips)) # number of pips
 			bba.ref("t{}_pips".format(tt.index)) # ref to list of pips
+			bba.u32(timing.tile_type_to_tile_index[tt.type] if tt.type in timing.tile_type_to_tile_index else -1) # tile cell timing data index
 		print("Exporting nodes...")
 		seen_nodes = set()
 		curr = 0
@@ -245,6 +261,66 @@ def main():
 			bba.u32(node_wire_count[i]) # number of tile wires in node
 			bba.u32(node_intent[i]) # intent code constid of node
 			bba.ref("n{}_tw".format(i)) # reference to list of tile wires in node, created earlier
+		# Wire timing classes
+		bba.label("wire_timing_classes")
+		for wc, i in sorted(timing.wire_classes.items(), key=lambda e: e[1]):
+			bba.u32(wc.r) # resistance
+			bba.u32(wc.c) # capacitance
+		# Pip timing classes
+		bba.label("pip_timing_classes")
+		for pc, i in sorted(timing.pip_classes.items(), key=lambda e: e[1]):
+			bba.u16(1 if pc.is_buffered else 0) # buffered or not
+			bba.u16(0) # padding
+			bba.u32(pc.min_delay) # minimum delay
+			bba.u32(pc.max_delay) # maximum delay
+			bba.u32(pc.r) # resistance
+			bba.u32(pc.c) # capacitance
+		for i, tmgt in enumerate(timing.tiles):
+			for j, it in enumerate(tmgt.instances):
+				for k, vt in enumerate(it.variants):
+					# Propagation delays
+					bba.label("tmgt{}_i{}_v{}_dels".format(i, j, k))
+					for td in vt.delays:
+						bba.u32(td.from_port) # from port constid
+						bba.u32(td.to_port) # to port constid
+						bba.u32(td.min_delay) # min comb delay
+						bba.u32(td.max_delay) # max comb delay
+					# Timing checks
+					bba.label("tmgt{}_i{}_v{}_chks".format(i, j, k))
+					for tc in vt.checks:
+						bba.u32(tc.chktype.value) # timing check type
+						bba.u32(tc.sig_port) # signal port constid
+						bba.u32(tc.clock_port) # associated clock port constid
+						bba.u32(tc.min_value) # min timing check value
+						bba.u32(tc.max_value) # max timing check value
+				# Instance variants
+				bba.label("tmgt_i{}_v{}".format(i, j))
+				for k, vt in enumerate(it.variants):
+					bba.u32(vt.variant_name) # variant name constid
+					bba.u32(len(vt.delays)) # number of delay entries
+					bba.u32(len(vt.checks)) # number of check entries
+					bba.ref("tmgt{}_i{}_v{}_dels".format(i, j, k)) # ref to list of delay entries
+					bba.ref("tmgt{}_i{}_v{}_chks".format(i, j, k)) # ref to list of check entries
+			# Instances in tile
+			bba.label("tmgt_i{}".format(i))
+			for j, it in enumerate(tmgt.instances):
+				bba.u32(it.inst_name) # instance name constid
+				bba.u32(len(it.variants)) # number of instance variants
+				bba.ref("tmgt_i{}_v{}".format(i, j)) # ref to list of inst variants
+		# Cell timing tile types
+		bba.label("tile_cell_timing")
+		for i, tmgt in enumerate(timing.tiles):
+			bba.u32(tmgt.tile_type) # tile type name constid
+			bba.u32(len(tmgt.instances)) # number of instances in tile
+			bba.ref("tmgt_i{}".format(i)) # ref to list of instances
+		# Overall timing data
+		bba.label("timing")
+		bba.u32(len(timing.tiles)) # number of tile types with cell timing info
+		bba.u32(len(timing.wire_classes)) # number of wire classes
+		bba.u32(len(timing.pip_classes)) # number of pip classes
+		bba.ref("tile_cell_timing") # ref to list of cell timing tile types
+		bba.ref("wire_timing_classes") # ref to wire class data list
+		bba.ref("pip_timing_classes") # ref to pip class data list
 		# Main chip info structure
 		bba.label("chip_info")
 		bba.str(d.name) # device name char*
@@ -259,6 +335,8 @@ def main():
 		bba.ref("tile_insts") # reference to list of tile instances
 		bba.ref("nodes") # reference to list of nodes
 		bba.ref("extra_constids") # reference to list of constid strings (extra to baked-in ones)
+		bba.u32(1) # only one speed grade currently
+		bba.ref("timing") # timing data
 		bba.pop()
 if __name__ == '__main__':
 	main()

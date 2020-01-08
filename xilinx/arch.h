@@ -297,7 +297,7 @@ NPNR_PACKED_STRUCT(struct PipTimingPOD {
 });
 
 NPNR_PACKED_STRUCT(struct TimingDataPOD {
-    int32_t num_bel_classes, num_pip_classes, num_wire_classes;
+    int32_t num_tile_types, num_wire_classes, num_pip_classes;
     RelPtr<TileCellTimingPOD> tile_cell_timings;
     RelPtr<WireTimingPOD> wire_timing_classes;
     RelPtr<PipTimingPOD> pip_timing_classes;

@@ -126,6 +126,10 @@ class Wire:
 		return "GND_WIRE" in self.name()
 	def is_vcc(self):
 		return "VCC_WIRE" in self.name()
+	def resistance(self):
+		return self.data.resistance
+	def capacitance(self):
+		return self.data.capacitance
 
 class SiteWire:
 	def __init__(self, site, index):

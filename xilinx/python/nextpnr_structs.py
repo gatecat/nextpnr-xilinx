@@ -17,12 +17,13 @@ class NextpnrBelPin:
 		self.port = constid.make(port)
 
 class NextpnrWire:
-	def __init__(self, name, index, intent):
+	def __init__(self, name, index, intent, timing_class):
 		self.name = constid.make(name)
 		self.index = index
 		self.is_site = False
 		self.site = 0
 		self.intent = intent
+		self.timing_class = timing_class
 		self.pips_uh = []
 		self.pips_dh = []
 		self.belpins = []
@@ -46,12 +47,13 @@ class NextpnrBelWire:
 		self.wire = wire
 
 class NextpnrBel:
-	def __init__(self, name, index, bel_type, native_type, site, site_variant, z, is_routing):
+	def __init__(self, name, index, bel_type, native_type, site, site_type, site_variant, z, is_routing):
 		self.name = constid.make(name)
 		self.index = index
 		self.bel_type = constid.make(bel_type)
 		self.native_type = constid.make(native_type)
 		self.site = site
+		self.site_type = site_type
 		self.site_variant = site_variant
 		self.z = z
 		self.is_routing = is_routing
@@ -211,13 +213,13 @@ class NextpnrTileCellTiming:
 
 	@staticmethod
 	def from_sdf(tile_type, sdf):
-		tmg = NextpnrCellTiming(tile_type)
+		tmg = NextpnrTileCellTiming(tile_type)
 		instances = {}
 		for cell in sorted(sdf.cells.values(), key=lambda c: (c.inst, c.type)):
 			if cell.inst not in instances:
 				instances[cell.inst] = NextpnrInstanceTiming(cell.inst)
 			instances[cell.inst].variants.append(NextpnrCellTiming.from_sdf_cell(cell))
-		tmg.instances = [instances.values()]
+		tmg.instances = list(instances.values())
 		tmg.sort()
 		return tmg
 
@@ -225,6 +227,8 @@ class NextpnrTimingData:
 	def __init__(self):
 		self.pip_classes = {}
 		self.wire_classes = {}
+		self.tiles = []
+		self.tile_type_to_tile_index = {}
 	def get_pip_class(self, is_buffered, min_delay, max_delay, r, c):
 		tc = NextpnrPipTimingClass(is_buffered, min_delay, max_delay, r, c)
 		if tc not in self.pip_classes:
@@ -241,12 +245,21 @@ class NextpnrTimingData:
 			return idx
 		else:
 			return self.wire_classes[tc]
+	def add_tile(self, tile_data):
+		self.tiles.append(tile_data)
+	def sort_tiles(self):
+		self.tiles.sort(key=lambda t: t.tile_type)
+		self.tile_type_to_tile_index = {}
+		for idx, tile in enumerate(self.tiles):
+			self.tile_type_to_tile_index[tile.tile_type] = idx
 
 class NextpnrTileType:
 	def sitewire_to_tilewire(self, sw):
 		key = str(sw.site.primary.index) + "/" + sw.name()
 		if key not in self.sitewire_to_tilewire_idx:
-			nw = NextpnrWire(name=sw.name(), index=len(self.wires), intent=constid.make("INTENT_SITE_WIRE"))
+			# FIXME: can site wires have timing parameters?
+			null_timing_class = self.timing.get_wire_class(r=0, c=0)
+			nw = NextpnrWire(name=sw.name(), index=len(self.wires), intent=constid.make("INTENT_SITE_WIRE"), timing_class=null_timing_class)
 			nw.is_site = True
 			nw.site = sw.site.primary.index
 			if sw.name() == "GND_WIRE":
@@ -270,19 +283,22 @@ class NextpnrTileType:
 		# Import tile wires
 		for wire in tile.wires():
 			idx = len(self.wires)
-			self.wires.append(NextpnrWire(name=wire.name(), index=idx, intent=constid.make(wire.intent())))
+			timing_class = self.timing.get_wire_class(r=wire.resistance(), c=wire.capacitance())
+			self.wires.append(NextpnrWire(name=wire.name(), index=idx, intent=constid.make(wire.intent()),
+										  timing_class=timing_class))
+		null_timing_class = self.timing.get_wire_class(r=0, c=0)
 		self.row_gnd_wire_index = len(self.wires)
 		self.wires.append(NextpnrWire(name="PSEUDO_GND_WIRE_ROW", index=self.row_gnd_wire_index,
-			intent=constid.make("PSEUDO_GND")))
+			intent=constid.make("PSEUDO_GND"), timing_class=null_timing_class))
 		self.row_vcc_wire_index = len(self.wires)
 		self.wires.append(NextpnrWire(name="PSEUDO_VCC_WIRE_ROW", index=self.row_vcc_wire_index,
-			intent=constid.make("PSEUDO_VCC")))
+			intent=constid.make("PSEUDO_VCC"), timing_class=null_timing_class))
 		self.global_gnd_wire_index = len(self.wires)
 		self.wires.append(NextpnrWire(name="PSEUDO_GND_WIRE_GLBL", index=self.global_gnd_wire_index,
-			intent=constid.make("PSEUDO_GND")))
+			intent=constid.make("PSEUDO_GND"), timing_class=null_timing_class))
 		self.global_vcc_wire_index = len(self.wires)
 		self.wires.append(NextpnrWire(name="PSEUDO_VCC_WIRE_GLBL", index=self.global_vcc_wire_index,
-			intent=constid.make("PSEUDO_VCC")))
+			intent=constid.make("PSEUDO_VCC"), timing_class=null_timing_class))
 		self.tile_wire_count = len(self.wires)
 		# Import sites
 		for s in tile.sites():
@@ -346,6 +362,7 @@ class NextpnrTileType:
 			bel_type=bels.get_bel_type_override(bt),
 			native_type=bt,
 			site=site.primary.index, site_variant=site_variant_idx,
+			site_type=site.site_type(),
 			z=z, is_routing=(bel.bel_class() == "RBEL")
 		)
 		self.bels.append(nb)
@@ -475,7 +492,7 @@ class NextpnrTileType:
 	def add_pseudo_bel(self, name, bel_type, pinname, wire_idx):
 		nb = NextpnrBel(name=name, index=len(self.bels),
 			bel_type=bel_type, native_type=bel_type,
-			site=-1, site_variant=0, z=len(self.bels), is_routing=False
+			site=-1, site_variant=0, site_type="", z=len(self.bels), is_routing=False
 		)
 		nb.belports.append(NextpnrBelWire(name=constid.make(pinname), port_type=1, wire=wire_idx))
 		self.wires[wire_idx].belpins.append(NextpnrBelPin(bel=nb.index, port=pinname))
