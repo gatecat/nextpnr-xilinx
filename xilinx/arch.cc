@@ -874,7 +874,27 @@ DecalXY Arch::getGroupDecal(GroupId pip) const { return {}; };
 
 bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const
 {
+    int tt_id = -1, inst_id = -1;
+    if (cell->bel != BelId()) {
+        tt_id = locInfo(cell->bel).timing_index;
+        inst_id = locInfo(cell->bel).bel_data[cell->bel.index].timing_inst;
+    }
+
     if (cell->type == id_SLICE_LUTX) {
+        if (xc7 && inst_id != -1) {
+            int z = locInfo(cell->bel).bel_data[cell->bel.index].z;
+            IdString tiletype = getBelTileType(cell->bel);
+            bool is_lut5 = (z & 0xF) == BEL_5LUT;
+            bool is_slicem = (tiletype == id_CLBLM_L || tiletype == ID_CLBLM_R) && (z < 64);
+            IdString variant = is_slicem ? (is_lut5 ? id("LUT_OR_MEM5LRAM") : id("LUT_OR_MEM6LRAM"))
+                                         : (is_lut5 ? id("LUT5") : id("LUT6"));
+
+            if (fromPort == id_CLK)
+                return false;
+            return xc7_cell_timing_lookup(tt_id, inst_id, variant, (is_lut5 && fromPort == id_A6) ? id_A5 : fromPort,
+                                          (is_lut5 && toPort == id_O6) ? id_O5 : toPort, delay);
+        }
+
         if (fromPort == id_A1 || fromPort == id_A2 || fromPort == id_A3 || fromPort == id_A4 || fromPort == id_A5 ||
             fromPort == id_A6) {
             if (toPort == id_O5 || toPort == id_O6) {
@@ -977,6 +997,55 @@ int Arch::getHclkForIoi(int ioi)
     for (auto uh : getPipsUphill(ioclk0))
         return uh.tile;
     NPNR_ASSERT_FALSE("failed to find HCLK pips");
+}
+namespace {
+template <typename Tres, typename Tgetter, typename Tkey>
+boost::optional<const Tres &> db_binary_search(const Tres *list, int count, Tgetter key_getter, Tkey key)
+{
+    if (count < 7) {
+        for (int i = 0; i < count; i++) {
+            if (key_getter(list[i]) == key) {
+                return boost::optional<const Tres &>(list[i]);
+            }
+        }
+    } else {
+        int b = 0, e = count - 1;
+        while (b <= e) {
+            int i = (b + e) / 2;
+            if (key_getter(list[i]) == key) {
+                return boost::optional<const Tres &>(list[i]);
+            }
+            if (key_getter(list[i]) > key)
+                e = i - 1;
+            else
+                b = i + 1;
+        }
+    }
+    return {};
+}
+} // namespace
+
+bool Arch::xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdString from_port, IdString to_port,
+                                  DelayInfo &delay) const
+{
+    if (tt_id == -1 || inst_id == -1)
+        return false;
+    const InstanceTimingPOD &inst = chip_info->timing_data->tile_cell_timings[tt_id].instances[inst_id];
+    auto found_var = db_binary_search(
+            inst.celltypes.get(), inst.num_celltypes, [](const CellTimingPOD &ct) { return ct.variant_name; },
+            variant.index);
+    if (!found_var)
+        return false;
+
+    const CellTimingPOD &ct = *found_var;
+    auto found_delay = db_binary_search(
+            ct.delays.get(), ct.num_delays,
+            [](const CellPropDelayPOD &ct) { return std::make_pair(ct.to_port, ct.from_port); },
+            std::make_pair(to_port.index, from_port.index));
+    if (!found_delay)
+        return false;
+    delay.delay = found_delay->max_delay;
+    return true;
 }
 
 #ifdef WITH_HEAP

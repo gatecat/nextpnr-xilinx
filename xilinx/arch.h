@@ -263,8 +263,8 @@ NPNR_PACKED_STRUCT(struct CellTimingCheckPOD {
 NPNR_PACKED_STRUCT(struct CellTimingPOD {
     int32_t variant_name;
     int32_t num_delays, num_checks;
-    RelPtr<CellPropDelayPOD> tile_types;
-    RelPtr<CellTimingCheckPOD> tile_insts;
+    RelPtr<CellPropDelayPOD> delays;
+    RelPtr<CellTimingCheckPOD> checks;
 });
 
 NPNR_PACKED_STRUCT(struct InstanceTimingPOD {
@@ -1494,6 +1494,9 @@ struct Arch : BaseCtx
 
     // Perform placement validity checks, returning false on failure (all
     // implemented in arch_place.cc)
+
+    bool xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdString from_port, IdString to_port,
+                                DelayInfo &delay) const;
 
     // Whether or not a given cell can be placed at a given Bel
     // This is not intended for Bel type checks, but finer-grained constraints
