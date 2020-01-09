@@ -675,7 +675,7 @@ struct Arch : BaseCtx
 
     std::unordered_map<WireId, NetInfo *> wire_to_net;
     std::unordered_map<PipId, NetInfo *> pip_to_net;
-
+    std::unordered_map<WireId, std::pair<int, int>> driving_pip_loc;
     std::unordered_map<WireId, NetInfo *> reserved_wires;
 
     struct LogicTileStatus
@@ -1096,6 +1096,7 @@ struct Arch : BaseCtx
         NPNR_ASSERT(wire_to_net[dst] == nullptr || wire_to_net[dst] == net);
 
         pip_to_net[pip] = net;
+        driving_pip_loc[dst] = std::make_pair(pip.tile % chip_info->width, pip.tile / chip_info->width);
 
         wire_to_net[dst] = net;
         net->wires[dst].pip = pip;
@@ -1366,12 +1367,20 @@ struct Arch : BaseCtx
                 const delay_t pip_epsilon = 35;
                 auto &pip_data = locInfo(pip).pip_data[pip.index];
                 auto &pip_timing = chip_info->timing_data->pip_timing_classes[pip_data.timing_class];
+                int src_len = 1;
+                auto found_srcloc = driving_pip_loc.find(getPipSrcWire(pip));
+                if (found_srcloc != driving_pip_loc.end()) {
+                    src_len =
+                            std::max(1, std::abs(found_srcloc->second.first - (pip.tile % chip_info->width)) +
+                                                std::abs(found_srcloc->second.second - (pip.tile / chip_info->width)));
+                }
                 auto &src_timing =
                         chip_info->timing_data
                                 ->wire_timing_classes[locInfo(pip).wire_data[pip_data.src_index].timing_class];
                 delay_t pip_delay =
-                        pip_timing.max_delay +
-                        delay_t((float(src_timing.resistance + pip_timing.resistance) * pip_timing.capacitance) / 1e9);
+                        pip_timing.max_delay + delay_t((float(src_len * src_timing.resistance + pip_timing.resistance) *
+                                                        pip_timing.capacitance) /
+                                                       1e9);
                 if (!pip_timing.is_buffered) {
                     auto &dst_timing =
                             chip_info->timing_data
