@@ -69,6 +69,7 @@ bool USPacker::has_illegal_fanout(NetInfo *carry)
 void USPacker::pack_carries()
 {
     log_info("Packing carries..\n");
+    split_carry4s();
     std::vector<CellInfo *> root_muxcys;
     // Find MUXCYs
     for (auto cell : sorted(ctx->cells)) {

@@ -66,9 +66,47 @@ bool XC7Packer::has_illegal_fanout(NetInfo *carry)
     return false;
 }
 
+void XilinxPacker::split_carry4s() {
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type != ctx->id("CARRY4"))
+            continue;
+        NetInfo *cin = get_net_or_empty(ci, ctx->id("CI"));
+        if (cin == nullptr || cin->name == ctx->id("$PACKER_GND_NET")) {
+            cin = get_net_or_empty(ci, ctx->id("CYINIT"));
+        }
+        disconnect_port(ctx, ci, ctx->id("CI"));
+        disconnect_port(ctx, ci, ctx->id("CYINIT"));
+
+        for (int i = 0; i < 4; i++) {
+            std::unique_ptr<CellInfo> xorcy =
+                    create_cell(ctx, ctx->id("XORCY"), ctx->id(ci->name.str(ctx) + "$split$xorcy" + std::to_string(i)));
+            std::unique_ptr<CellInfo> muxcy =
+                    create_cell(ctx, ctx->id("MUXCY"), ctx->id(ci->name.str(ctx) + "$split$muxcy" + std::to_string(i)));
+            connect_port(ctx, cin, muxcy.get(), ctx->id("CI"));
+            connect_port(ctx, cin, xorcy.get(), ctx->id("CI"));
+            replace_port(ci, ctx->id("DI[" + std::to_string(i) + "]"), muxcy.get(), ctx->id("DI"));
+            connect_port(ctx, get_net_or_empty(ci, ctx->id("S[" + std::to_string(i) + "]")), muxcy.get(), ctx->id("S"));
+            replace_port(ci, ctx->id("S[" + std::to_string(i) + "]"), xorcy.get(), ctx->id("LI"));
+            replace_port(ci, ctx->id("O[" + std::to_string(i) + "]"), xorcy.get(), ctx->id("O"));
+            NetInfo *co = get_net_or_empty(ci, ctx->id("CO[" + std::to_string(i) + "]"));
+            disconnect_port(ctx, ci, ctx->id("CO[" + std::to_string(i) + "]"));
+            if (co == nullptr)
+                co = create_internal_net(ci->name, "$split$co" + std::to_string(i), false);
+            connect_port(ctx, co, muxcy.get(), ctx->id("O"));
+            cin = co;
+            new_cells.push_back(std::move(xorcy));
+            new_cells.push_back(std::move(muxcy));
+        }
+        packed_cells.insert(ci->name);
+    }
+    flush_cells();
+}
+
 void XC7Packer::pack_carries()
 {
     log_info("Packing carries..\n");
+    split_carry4s();
     std::vector<CellInfo *> root_muxcys;
     // Find MUXCYs
     for (auto cell : sorted(ctx->cells)) {
