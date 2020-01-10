@@ -66,7 +66,8 @@ bool XC7Packer::has_illegal_fanout(NetInfo *carry)
     return false;
 }
 
-void XilinxPacker::split_carry4s() {
+void XilinxPacker::split_carry4s()
+{
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
         if (ci->type != ctx->id("CARRY4"))

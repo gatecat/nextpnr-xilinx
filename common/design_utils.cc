@@ -83,6 +83,9 @@ void connect_port(const Context *ctx, NetInfo *net, CellInfo *cell, IdString por
 {
     if (net == nullptr)
         return;
+    if (!cell->ports.count(port_name))
+        log_error("no port named '%s' on %s '%s'\n", ctx->nameOf(port_name), ctx->nameOf(cell->type),
+                  ctx->nameOf(cell));
     PortInfo &port = cell->ports.at(port_name);
     NPNR_ASSERT(port.net == nullptr);
     port.net = net;

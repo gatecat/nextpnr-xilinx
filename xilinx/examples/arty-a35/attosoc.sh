@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
-yosys -p "synth_xilinx -flatten -nowidelut -arch xc7 -top top; write_json attosoc.json" ../attosoc/attosoc.v attosoc_top.v
+yosys -p "synth_xilinx -flatten -nowidelut -abc9 -arch xc7 -top top; write_json attosoc.json" ../attosoc/attosoc.v attosoc_top.v
 ../../../nextpnr-xilinx --chipdb ../../xc7a35t.bin --xdc arty.xdc --json attosoc.json --write attosoc_routed.json --fasm attosoc.fasm
 
 source "${XRAY_DIR}/utils/environment.sh"
