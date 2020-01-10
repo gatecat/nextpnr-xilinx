@@ -132,9 +132,11 @@ struct XilinxPacker
     void split_carry4s();
 
     // DistRAM
-    std::unordered_map<IdString, XFormRule> dram_rules;
+    std::unordered_map<IdString, XFormRule> dram_rules, dram32_6_rules, dram32_5_rules;
     CellInfo *create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
                               std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, int z);
+    CellInfo *create_dram32_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
+                                std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, bool o5, int z);
     void pack_dram();
 
     // Constant pins

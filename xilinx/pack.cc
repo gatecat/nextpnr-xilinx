@@ -916,6 +916,8 @@ void Arch::assignCellInfo(CellInfo *cell)
             if (pn != nullptr)
                 cell->lutInfo.output_sigs[cell->lutInfo.output_count++] = pn;
         }
+        for (int i = cell->lutInfo.output_count; i < 2; i++)
+            cell->lutInfo.output_sigs[i] = nullptr;
         cell->lutInfo.di1_net = get_net_or_empty(cell, id_DI1);
         cell->lutInfo.di2_net = get_net_or_empty(cell, id_DI2);
         cell->lutInfo.wclk = get_net_or_empty(cell, id_CLK);
@@ -924,13 +926,13 @@ void Arch::assignCellInfo(CellInfo *cell)
         cell->lutInfo.is_memory = cell->attrs.count(id("X_LUT_AS_DRAM"));
         cell->lutInfo.only_drives_carry = false;
         if (xc7) {
-            if (cell->constr_parent != nullptr && cell->lutInfo.output_sigs[0] != nullptr &&
-                cell->lutInfo.output_sigs[0]->users.size() == 1 &&
+            if (cell->constr_parent != nullptr && cell->lutInfo.output_count > 0 &&
+                cell->lutInfo.output_sigs[0] != nullptr && cell->lutInfo.output_sigs[0]->users.size() == 1 &&
                 cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY4)
                 cell->lutInfo.only_drives_carry = true;
         } else {
-            if (cell->constr_parent != nullptr && cell->lutInfo.output_sigs[0] != nullptr &&
-                cell->lutInfo.output_sigs[0]->users.size() == 1 &&
+            if (cell->constr_parent != nullptr && cell->lutInfo.output_count > 0 &&
+                cell->lutInfo.output_sigs[0] != nullptr && cell->lutInfo.output_sigs[0]->users.size() == 1 &&
                 cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
                 cell->lutInfo.only_drives_carry = true;
         }

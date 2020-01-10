@@ -47,6 +47,9 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
     bool tile_is_memory = false;
     if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
         tile_is_memory = true;
+    bool small_memory = false;
+    if (lts.cells[(3 << 4) | BEL_5LUT] != nullptr && lts.cells[(3 << 4) | BEL_5LUT]->lutInfo.is_memory)
+        small_memory = true;
     // Check eight-tiles (mostly LUT-related validity)
     for (int i = 0; i < 8; i++) {
         if (lts.eights[i].dirty) {
@@ -199,7 +202,7 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             }
 
             // Collision with top address bits
-            if (tile_is_memory) {
+            if (tile_is_memory && !small_memory) {
                 CellInfo *top_lut = lts.cells[(7 << 4) | BEL_6LUT];
                 if (top_lut != nullptr) {
                     if ((i == 6) && x_net != top_lut->lutInfo.address_msb[0])
@@ -300,6 +303,9 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
     bool tile_is_memory = false;
     if (lts.cells[(3 << 4) | BEL_6LUT] != nullptr && lts.cells[(3 << 4) | BEL_6LUT]->lutInfo.is_memory)
         tile_is_memory = true;
+    bool small_memory = false;
+    if (lts.cells[(3 << 4) | BEL_5LUT] != nullptr && lts.cells[(3 << 4) | BEL_5LUT]->lutInfo.is_memory)
+        small_memory = true;
     NetInfo *wclk = nullptr;
     // Check eight-tiles (mostly LUT-related validity)
     for (int i = 0; i < 8; i++) {
@@ -325,11 +331,15 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                 if (lut5 != nullptr) {
                     // Can't mix memory and non-memory
                     if (lut6->lutInfo.is_memory != lut5->lutInfo.is_memory ||
-                        lut6->lutInfo.is_srl != lut5->lutInfo.is_srl)
+                        lut6->lutInfo.is_srl != lut5->lutInfo.is_srl) {
+                        DBG();
                         return false;
+                    }
                     // If all 6 inputs or 2 outputs are used, 5LUT can't also be present
-                    if (lut6->lutInfo.input_count == 6 || lut6->lutInfo.output_count == 2)
+                    if (lut6->lutInfo.input_count == 6 || lut6->lutInfo.output_count == 2) {
+                        DBG();
                         return false;
+                    }
                     // If more than 5 total inputs are used, need to check number of shared input
                     if ((lut6->lutInfo.input_count + lut5->lutInfo.input_count) > 5) {
                         int shared = 0, need_shared = (lut6->lutInfo.input_count + lut5->lutInfo.input_count - 5);
@@ -441,13 +451,17 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             }
 
             // collision with top address bits
-            if (tile_is_memory) {
+            if (tile_is_memory && !small_memory) {
                 CellInfo *top_lut = lts.cells[(3 << 4) | BEL_6LUT];
                 if (top_lut != nullptr) {
-                    if ((i == 2) && x_net != top_lut->lutInfo.address_msb[0])
+                    if ((i == 2) && x_net != top_lut->lutInfo.address_msb[0]) {
+                        DBG();
                         return false;
-                    if ((i == 1) && x_net != top_lut->lutInfo.address_msb[1])
+                    }
+                    if ((i == 1) && x_net != top_lut->lutInfo.address_msb[1]) {
+                        DBG();
                         return false;
+                    }
                 }
             }
 
@@ -613,6 +627,16 @@ void Arch::fixupPlacement()
                 for (int i = 0; i < lut6->lutInfo.input_count; i++)
                     if (lut6->lutInfo.input_sigs[i])
                         lut6Inputs[lut6->lutInfo.input_sigs[i]->name].push_back(i);
+            }
+            if (lut5->lutInfo.is_memory) {
+                if (lut6) {
+                    if (!lut6->ports.count(id_A6)) {
+                        lut6->ports[id_A6].name = id_A6;
+                        lut6->ports[id_A6].type = PORT_IN;
+                    }
+                    connect_port(getCtx(), nets[id("$PACKER_VCC_NET")].get(), lut6, id_A6);
+                }
+                continue;
             }
             std::set<IdString> uniqueInputs;
             for (auto i5 : lut5Inputs)

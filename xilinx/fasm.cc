@@ -285,6 +285,8 @@ struct FasmBackend
         else if (type == ctx->id("RAMD64E"))
             return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"),
                     ctx->id("RADR3"), ctx->id("RADR4"), ctx->id("RADR5")};
+        else if (type == ctx->id("RAMD32"))
+            return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"), ctx->id("RADR3"), ctx->id("RADR4")};
         else
             NPNR_ASSERT_FALSE("unsupported LUT-type cell");
     }
@@ -519,7 +521,7 @@ struct FasmBackend
                     std::string type = str_or_default(lut->attrs, ctx->id("X_ORIG_TYPE"));
                     if (type == "RAMD64E" || type == "RAMS64E") {
                         is_ram = true;
-                    } else if (type == "RAMD32E" || type == "RAMS32E") {
+                    } else if (type == "RAMD32" || type == "RAMS32") {
                         is_ram = true;
                         is_small = true;
                     } else if (type == "SRL16E") {

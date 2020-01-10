@@ -41,6 +41,15 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("I", PORT_IN);
         add_port("WE", PORT_IN);
         add_port("O", PORT_OUT);
+    } else if (type == ctx->id("RAMD32")) {
+        for (int i = 0; i < 5; i++)
+            add_port("RADR" + std::to_string(i), PORT_IN);
+        for (int i = 0; i < 5; i++)
+            add_port("WADR" + std::to_string(i), PORT_IN);
+        add_port("CLK", PORT_IN);
+        add_port("I", PORT_IN);
+        add_port("WE", PORT_IN);
+        add_port("O", PORT_OUT);
     } else if (type == ctx->id("MUXF7") || type == ctx->id("MUXF8") || type == ctx->id("MUXF9")) {
         add_port("I0", PORT_IN);
         add_port("I1", PORT_IN);
