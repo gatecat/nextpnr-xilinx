@@ -41,6 +41,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
 ## Building the Arty example - XRay database
  - Run `pypy3 xilinx/python/bbaexport.py --device xc7a35tcsg324-1 --bba xilinx/xc7a35t.bba` (regular cpython works as well, but is a lot slower)
  - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
+ - Set `XRAY_DIR` to the path where Project Xray has been cloned and built (you may also need to patch out the Vivado check for `utils/environment.sh` in Xray)
  - Run `attosoc.sh` in `xilinx/examples/arty-a35`.
 
 ## Building the zcu104 example - RapidWright
@@ -62,9 +63,9 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
 
 ## Notes
 
-  - Currently support:
-  - xc7 and xcup: LUTs (including fractured), FFs, DRAM (only RAM64X1D), carry (XORCY and MUXCY), BRAM and IO
-  - xcup: OSERDESE3, ISERDESE3, IDDRE1, ODDRE1, IDELAYE3, ODELAYE3, IDELAYCTRL, BUFGCTRL, BUFG, BUFGCE, BUFG_PS, PLLE4_ADV, PLLE4_BASIC, MMCME4_ADV, MMCME4_BASIC
+  - Currently supported:
+  - xc7 and xcup: LUTs (including fractured), FFs, DRAM (only RAM64X1D), carry (XORCY and MUXCY or CARRY4), SRL16E and SRLC32E (no cascading), BRAM and IO
+  - xcup: OSERDESE3, ISERDESE3, IDDRE1, ODDRE1, IDELAYE3, ODELAYE3, IDELAYCTRL, BUFGCTRL, BUFG, BUFGCE, BUFG_PS, PLLE4_ADV, PLLE4_BASIC, MMCME4_ADV, MMCME4_BASIC, URAM288E, DSP48E2 (no cascading)
   - xc7: OSERDESE2, ISERDESE2, IDELAYE2, IDELAYCTRL, BUFGCTRL, PLLE2_BASIC, PLLE2_ADV
 
   - Bels, tile wires and pips are deduplicated but nodes (connections between tile wires) are not. This means
