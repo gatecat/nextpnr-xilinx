@@ -384,6 +384,52 @@ void XilinxPacker::finalise_muxfs()
     generic_xform(muxf_rules, true);
 }
 
+void XilinxPacker::pack_srls()
+{
+    std::unordered_map<IdString, XFormRule> srl_rules;
+    srl_rules[ctx->id("SRL16E")].new_type = id_SLICE_LUTX;
+    srl_rules[ctx->id("SRL16E")].port_xform[ctx->id("CLK")] = id_CLK;
+    srl_rules[ctx->id("SRL16E")].port_xform[ctx->id("CE")] = id_WE;
+    srl_rules[ctx->id("SRL16E")].port_xform[ctx->id("D")] = id_DI2;
+    srl_rules[ctx->id("SRL16E")].port_xform[ctx->id("Q")] = id_O6;
+    srl_rules[ctx->id("SRL16E")].set_attrs.emplace_back(ctx->id("X_LUT_AS_SRL"), "1");
+
+    srl_rules[ctx->id("SRLC32E")].new_type = id_SLICE_LUTX;
+    srl_rules[ctx->id("SRLC32E")].port_xform[ctx->id("CLK")] = id_CLK;
+    srl_rules[ctx->id("SRLC32E")].port_xform[ctx->id("CE")] = id_WE;
+    srl_rules[ctx->id("SRLC32E")].port_xform[ctx->id("D")] = id_DI1;
+    srl_rules[ctx->id("SRLC32E")].port_xform[ctx->id("Q")] = id_O6;
+    srl_rules[ctx->id("SRLC32E")].set_attrs.emplace_back(ctx->id("X_LUT_AS_SRL"), "1");
+    // FIXME: Q31 support
+    generic_xform(srl_rules, true);
+    // Fixup SRL inputs
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type != id_SLICE_LUTX)
+            continue;
+        std::string orig_type = str_or_default(ci->attrs, ctx->id("X_ORIG_TYPE"));
+        if (orig_type == "SRL16E") {
+            for (int i = 3; i >= 0; i--) {
+                rename_port(ctx, ci, ctx->id("A" + std::to_string(i)), ctx->id("A" + std::to_string(i + 2)));
+            }
+            for (auto tp : {id_A1, id_A6}) {
+                ci->ports[tp].name = tp;
+                ci->ports[tp].type = PORT_IN;
+                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, tp);
+            }
+        } else if (orig_type == "SRLC32E") {
+            for (int i = 4; i >= 0; i--) {
+                rename_port(ctx, ci, ctx->id("A" + std::to_string(i)), ctx->id("A" + std::to_string(i + 2)));
+            }
+            for (auto tp : {id_A1}) {
+                ci->ports[tp].name = tp;
+                ci->ports[tp].type = PORT_IN;
+                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, tp);
+            }
+        }
+    }
+}
+
 void XilinxPacker::pack_constants()
 {
     log_info("Packing constants..\n");
@@ -865,6 +911,7 @@ bool Arch::pack()
         packer.pack_clocking();
         packer.pack_muxfs();
         packer.pack_carries();
+        packer.pack_srls();
         packer.pack_luts();
         packer.pack_dram();
         packer.pack_bram();

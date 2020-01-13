@@ -285,6 +285,10 @@ struct FasmBackend
         else if (type == ctx->id("RAMD64E"))
             return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"),
                     ctx->id("RADR3"), ctx->id("RADR4"), ctx->id("RADR5")};
+        else if (type == ctx->id("SRL16E"))
+            return {ctx->id("A0"), ctx->id("A1"), ctx->id("A2"), ctx->id("A3")};
+        else if (type == ctx->id("SRLC32E"))
+            return {ctx->id("A[0]"), ctx->id("A[1]"), ctx->id("A[2]"), ctx->id("A[3]"), ctx->id("A[4]")};
         else if (type == ctx->id("RAMD32"))
             return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"), ctx->id("RADR3"), ctx->id("RADR4")};
         else

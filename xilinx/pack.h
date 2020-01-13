@@ -129,6 +129,8 @@ struct XilinxPacker
     void create_muxf_tree(CellInfo *base, const std::string &name_base, const std::vector<NetInfo *> &data,
                           const std::vector<NetInfo *> &select, NetInfo *out, int zoffset);
 
+    void pack_srls();
+
     void split_carry4s();
 
     // DistRAM

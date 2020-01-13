@@ -320,6 +320,8 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             if (lut6 != nullptr) {
                 if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
                     return false; // Memory and SRLs only valid in SLICEMs
+                if (lut6->lutInfo.is_srl && (i >= 4))
+                    return false;
                 if (lut6->lutInfo.is_memory) {
                     if (wclk == nullptr)
                         wclk = lut6->lutInfo.wclk;
@@ -628,7 +630,7 @@ void Arch::fixupPlacement()
                     if (lut6->lutInfo.input_sigs[i])
                         lut6Inputs[lut6->lutInfo.input_sigs[i]->name].push_back(i);
             }
-            if (lut5->lutInfo.is_memory) {
+            if (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl) {
                 if (lut6) {
                     if (!lut6->ports.count(id_A6)) {
                         lut6->ports[id_A6].name = id_A6;
