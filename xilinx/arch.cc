@@ -908,8 +908,7 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
         else if (port == id_O5 || port == id_O6)
             return TMG_COMB_OUTPUT;
     } else if (cell->type == id_CARRY4 && cell->bel != BelId()) {
-        return TMG_IGNORE;
-        // return cell->ports.at(port).type == PORT_OUT ? TMG_COMB_OUTPUT : TMG_COMB_INPUT;
+        return cell->ports.at(port).type == PORT_OUT ? TMG_COMB_OUTPUT : TMG_COMB_INPUT;
     } else if (cell->type == id_SLICE_FFX) {
         if (port == (xc7 ? id_CK : id_CLK))
             return TMG_CLOCK_INPUT;

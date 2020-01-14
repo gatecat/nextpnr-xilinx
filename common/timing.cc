@@ -181,6 +181,14 @@ struct Timing
                         if (is_path)
                             port_fanin[o]++;
                     }
+                    // If there is no fanin, add the port as a false startpoint
+                    if (!port_fanin.count(o) && !net_data.count(o->net)) {
+                        topographical_order.emplace_back(o->net);
+                        TimingData td;
+                        td.false_startpoint = true;
+                        td.max_arrival = 0;
+                        net_data[o->net][ClockEvent{async_clock, RISING_EDGE}] = td;
+                    }
                 }
             }
         }
@@ -222,7 +230,10 @@ struct Timing
                     // Decrement the fanin count, and only add to topographical order if all its fanins have already
                     // been visited
                     auto it = port_fanin.find(&port.second);
-                    NPNR_ASSERT(it != port_fanin.end());
+                    if (it == port_fanin.end()) {
+                        log_error("Internal timing error (negative fanin count) for %s.%s\n", ctx->nameOf(usr.cell),
+                                  ctx->nameOf(port.first));
+                    }
                     if (--it->second == 0) {
                         topographical_order.emplace_back(port.second.net);
                         queue.emplace_back(port.second.net);
