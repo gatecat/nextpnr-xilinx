@@ -125,9 +125,11 @@ enum DSP48E2BelTypeZ
 };
 
 NPNR_PACKED_STRUCT(struct BelInfoPOD {
-    int32_t name;    // bel name (in site) constid
-    int32_t type;    // compatible type name constid
-    int32_t xl_type; // xilinx type name constid
+    int32_t name;        // bel name (in site) constid
+    int32_t type;        // compatible type name constid
+    int32_t xl_type;     // xilinx type name constid
+    int32_t timing_inst; // timing instance index in tile
+
     int32_t num_bel_wires;
     RelPtr<BelWirePOD> bel_wires;
     int16_t z;
@@ -153,7 +155,8 @@ enum PipType
 
 NPNR_PACKED_STRUCT(struct PipInfoPOD {
     int32_t src_index, dst_index;
-    int16_t delay;
+    int32_t timing_class;
+    int16_t padding;
     int16_t flags;
 
     int32_t bel;          // name of bel containing pip
@@ -165,6 +168,7 @@ NPNR_PACKED_STRUCT(struct PipInfoPOD {
 NPNR_PACKED_STRUCT(struct TileWireInfoPOD {
     int32_t name;
     int32_t num_uphill, num_downhill;
+    int32_t timing_class;
     // Pip index inside tile
     RelPtr<int32_t> pips_uphill, pips_downhill;
     // Bel index inside tile
@@ -199,6 +203,9 @@ NPNR_PACKED_STRUCT(struct TileTypeInfoPOD {
 
     int32_t num_pips;
     RelPtr<PipInfoPOD> pip_data;
+
+    // Cell timing data index
+    int32_t timing_index;
 });
 
 NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
@@ -231,6 +238,71 @@ NPNR_PACKED_STRUCT(struct ConstIDDataPOD {
     RelPtr<RelPtr<char>> bba_ids;
 });
 
+NPNR_PACKED_STRUCT(struct CellPropDelayPOD {
+    int32_t from_port;
+    int32_t to_port;
+    int32_t min_delay;
+    int32_t max_delay;
+});
+
+enum TimingCheckType : int32_t
+{
+    TIMING_CHECK_SETUP = 0,
+    TIMING_CHECK_HOLD = 1,
+    TIMING_CHECK_WIDTH = 2,
+};
+
+NPNR_PACKED_STRUCT(struct CellTimingCheckPOD {
+    int32_t check_type;
+    int32_t sig_port;
+    int32_t clock_port;
+    int32_t min_value;
+    int32_t max_value;
+});
+
+NPNR_PACKED_STRUCT(struct CellTimingPOD {
+    int32_t variant_name;
+    int32_t num_delays, num_checks;
+    RelPtr<CellPropDelayPOD> delays;
+    RelPtr<CellTimingCheckPOD> checks;
+});
+
+NPNR_PACKED_STRUCT(struct InstanceTimingPOD {
+    // Variants, sorted by name IdString
+    int32_t inst_name;
+    int32_t num_celltypes;
+    RelPtr<CellTimingPOD> celltypes;
+});
+
+NPNR_PACKED_STRUCT(struct TileCellTimingPOD {
+    int32_t tile_type_name;
+    // Instances, sorted by name IdString
+    int32_t num_instances;
+    RelPtr<InstanceTimingPOD> instances;
+});
+
+/*
+delay in ps
+R in mOhm
+C in fF
+*/
+
+NPNR_PACKED_STRUCT(struct WireTimingPOD { int32_t resistance, capacitance; });
+
+NPNR_PACKED_STRUCT(struct PipTimingPOD {
+    int16_t is_buffered;
+    int16_t padding;
+    int32_t min_delay, max_delay;
+    int32_t resistance, capacitance;
+});
+
+NPNR_PACKED_STRUCT(struct TimingDataPOD {
+    int32_t num_tile_types, num_wire_classes, num_pip_classes;
+    RelPtr<TileCellTimingPOD> tile_cell_timings;
+    RelPtr<WireTimingPOD> wire_timing_classes;
+    RelPtr<PipTimingPOD> pip_timing_classes;
+});
+
 NPNR_PACKED_STRUCT(struct ChipInfoPOD {
     RelPtr<char> name;
     RelPtr<char> generator;
@@ -243,6 +315,9 @@ NPNR_PACKED_STRUCT(struct ChipInfoPOD {
     RelPtr<NodeInfoPOD> nodes;
 
     RelPtr<ConstIDDataPOD> extra_constids;
+
+    int32_t num_speed_grades;
+    RelPtr<TimingDataPOD> timing_data;
 });
 
 /************************ End of chipdb section. ************************/
@@ -600,7 +675,7 @@ struct Arch : BaseCtx
 
     std::unordered_map<WireId, NetInfo *> wire_to_net;
     std::unordered_map<PipId, NetInfo *> pip_to_net;
-
+    std::unordered_map<WireId, std::pair<int, int>> driving_pip_loc;
     std::unordered_map<WireId, NetInfo *> reserved_wires;
 
     struct LogicTileStatus
@@ -1021,6 +1096,7 @@ struct Arch : BaseCtx
         NPNR_ASSERT(wire_to_net[dst] == nullptr || wire_to_net[dst] == net);
 
         pip_to_net[pip] = net;
+        driving_pip_loc[dst] = std::make_pair(pip.tile % chip_info->width, pip.tile / chip_info->width);
 
         wire_to_net[dst] = net;
         net->wires[dst].pip = pip;
@@ -1288,8 +1364,31 @@ struct Arch : BaseCtx
             } else if (dst_intent == ID_NODE_LAGUNA_DATA) {
                 delay.delay = 5000;
             } else {
-                const delay_t pip_epsilon = 75;
-                delay.delay = pip_epsilon;
+                const delay_t pip_epsilon = 35;
+                auto &pip_data = locInfo(pip).pip_data[pip.index];
+                auto &pip_timing = chip_info->timing_data->pip_timing_classes[pip_data.timing_class];
+                int src_len = 1;
+                auto found_srcloc = driving_pip_loc.find(getPipSrcWire(pip));
+                if (found_srcloc != driving_pip_loc.end()) {
+                    src_len =
+                            std::max(1, std::abs(found_srcloc->second.first - (pip.tile % chip_info->width)) +
+                                                std::abs(found_srcloc->second.second - (pip.tile / chip_info->width)));
+                }
+                auto &src_timing =
+                        chip_info->timing_data
+                                ->wire_timing_classes[locInfo(pip).wire_data[pip_data.src_index].timing_class];
+                delay_t pip_delay =
+                        pip_timing.max_delay + delay_t((float(src_len * src_timing.resistance + pip_timing.resistance) *
+                                                        pip_timing.capacitance) /
+                                                       1e9);
+                if (!pip_timing.is_buffered) {
+                    auto &dst_timing =
+                            chip_info->timing_data
+                                    ->wire_timing_classes[locInfo(pip).wire_data[pip_data.dst_index].timing_class];
+                    pip_delay += delay_t(
+                            (float(src_timing.resistance + pip_timing.resistance) * dst_timing.capacitance) / 1e9);
+                }
+                delay.delay = std::max(pip_delay, pip_epsilon);
             }
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
             delay.delay = 300;
@@ -1399,6 +1498,9 @@ struct Arch : BaseCtx
 
     // Perform placement validity checks, returning false on failure (all
     // implemented in arch_place.cc)
+
+    bool xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdString from_port, IdString to_port,
+                                DelayInfo &delay) const;
 
     // Whether or not a given cell can be placed at a given Bel
     // This is not intended for Bel type checks, but finer-grained constraints

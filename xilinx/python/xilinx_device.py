@@ -2,6 +2,7 @@ import json
 import os
 from gridinfo import parse_gridinfo
 from tileconn import apply_tileconn
+from parse_sdf import parse_sdf_file
 # Represents Xilinx device data from PrjXray etc
 
 class WireData:
@@ -10,6 +11,8 @@ class WireData:
 		self.name = name
 		self.intent = intent
 		self.tied_value = tied_value
+		self.resistance = 0
+		self.capacitance = 0
 
 class PIPData:
 	def __init__(self, index, from_wire, to_wire, is_bidi, is_route_thru):
@@ -18,6 +21,11 @@ class PIPData:
 		self.to_wire = to_wire
 		self.is_bidi = is_bidi
 		self.is_route_thru = is_route_thru
+		self.is_buffered = False
+		self.min_delay = 0
+		self.max_delay = 0
+		self.resistance = 0
+		self.capacitance = 0
 
 class SiteWireData:
 	def __init__(self, name, is_pin=False):
@@ -60,13 +68,22 @@ class SiteData:
 		self.pins = []
 		self.variants = {}
 
+class TileSitePinData:
+	def __init__(self, wire_idx):
+		self.wire_idx = wire_idx
+		self.min_delay = 0
+		self.max_delay = 0
+		self.resistance = 0
+		self.capacitance = 0
+
 class TileData:
 	def __init__(self, tile_type):
 		self.tile_type = tile_type
 		self.wires = []
 		self.wires_by_name = {}
 		self.pips = []
-		self.sitepin_to_wire = {} # (type, relxy, pin) -> wireidx
+		self.sitepin_data = {} # (type, relxy, pin) -> TileSitePinData
+		self.cell_timing = None
 
 class PIP:
 	def __init__(self, tile, index):
@@ -81,6 +98,16 @@ class PIP:
 		return self.data.is_route_thru
 	def is_bidi(self):
 		return self.data.is_bidi
+	def is_buffered(self):
+		return self.data.is_buffered
+	def min_delay(self):
+		return self.data.min_delay
+	def max_delay(self):
+		return self.data.max_delay
+	def resistance(self):
+		return self.data.resistance
+	def capacitance(self):
+		return self.data.capacitance
 
 class Wire:
 	def __init__(self, tile, index):
@@ -99,6 +126,10 @@ class Wire:
 		return "GND_WIRE" in self.name()
 	def is_vcc(self):
 		return "VCC_WIRE" in self.name()
+	def resistance(self):
+		return self.data.resistance
+	def capacitance(self):
+		return self.data.capacitance
 
 class SiteWire:
 	def __init__(self, site, index):
@@ -161,6 +192,14 @@ class SitePin:
 		return SiteWire(self.site, self.data.site_wire_idx)
 	def tile_wire(self):
 		return self.site.tile.site_pin_wire(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name)
+	def min_delay(self):
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).min_delay
+	def max_delay(self):
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).max_delay
+	def resistance(self):
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).resistance
+	def capacitance(self):
+		return self.site.tile.site_pin_timing(self.site.primary.site_type(), self.site.rel_xy(), self.data.prim_pin_name).capacitance
 
 class Site:
 	def __init__(self, tile, name, index, grid_xy, data, primary=None):
@@ -244,8 +283,12 @@ class Tile:
 	def sites(self):
 		return self.site_insts
 	def site_pin_wire(self, sitetype, rel_xy, pin):
-		wire_idx = self.data.sitepin_to_wire[(sitetype, rel_xy, pin)]
+		wire_idx = self.data.sitepin_data[(sitetype, rel_xy, pin)].wire_idx
 		return Wire(self, wire_idx) if wire_idx is not None else None
+	def site_pin_timing(self, sitetype, rel_xy, pin):
+		return self.data.sitepin_data[(sitetype, rel_xy, pin)]
+	def cell_timing(self):
+		return self.data.cell_timing
 
 class Node:
 	def __init__(self, tile, wires=[]):
@@ -345,28 +388,55 @@ def import_device(name, prjxray_root, metadata_root):
 			td = TileData(tiletype)
 			# Import wires and pips 
 			tj = read_tile_type_json(tiletype)
-			for wire in sorted(tj["wires"].keys()):
+			for wire, wire_data in sorted(tj["wires"].items()):
 				wire_id = len(td.wires)
 				wd = WireData(index=wire_id, name=wire, tied_value=None) # FIXME: tied_value
 				wd.intent = get_wire_intent(tiletype, wire)
+				if wire_data is not None:
+					if "res" in wire_data:
+						wd.resistance = float(wire_data["res"])
+					if "cap" in wire_data:
+						wd.capacitance = float(wire_data["cap"])
 				td.wires.append(wd)
-				td.wires_by_name[wire] = wd
+				td.wires_by_name[wire] = wd					
 			for pip, pipdata in sorted(tj["pips"].items()):
 				# FIXME: pip/wire delays
 				pip_id = len(td.pips)
 				pd = PIPData(index=pip_id,
 					from_wire=td.wires_by_name[pipdata["src_wire"]].index, to_wire=td.wires_by_name[pipdata["dst_wire"]].index,
 					is_bidi=(not bool(int(pipdata["is_directional"]))), is_route_thru=bool(int(pipdata["is_pseudo"])))
+				if "is_pass_transistor" in pipdata:
+					pd.is_buffered = (not bool(int(pipdata["is_pass_transistor"])))
+				if "src_to_dst" in pipdata:
+					s2d = pipdata["src_to_dst"]
+					if "delay" in s2d and s2d["delay"] is not None:
+						pd.min_delay = min(float(s2d["delay"][0]), float(s2d["delay"][1]))
+						pd.max_delay = max(float(s2d["delay"][2]), float(s2d["delay"][3]))
+					if "res" in s2d and s2d["res"] is not None:
+						pd.resistance = float(s2d["res"])
+					if "in_cap" in s2d and s2d["in_cap"] is not None:
+						pd.capacitance = float(s2d["in_cap"])
 				td.pips.append(pd)
 			for sitedata in tj["sites"]:
 				rel_xy = parse_xy(sitedata["name"])
 				sitetype = sitedata["type"]
 				for sitepin, pindata in sorted(sitedata["site_pins"].items()):
 					if pindata is None:
-						pinwire = None
+						tspd = TileSitePinData(None)
 					else:
 						pinwire = td.wires_by_name[pindata["wire"]].index
-					td.sitepin_to_wire[(sitetype, rel_xy, sitepin)] = pinwire
+						tspd = TileSitePinData(pinwire)
+						if "delay" in pindata:
+							tspd.min_delay = min(float(pindata["delay"][0]), float(pindata["delay"][1]))
+							tspd.max_delay = max(float(pindata["delay"][2]), float(pindata["delay"][3]))
+						if "res" in pindata:
+							tspd.resistance = float(pindata["res"])
+						if "cap" in pindata:
+							tspd.capacitance = float(pindata["cap"])
+					td.sitepin_data[(sitetype, rel_xy, sitepin)] = tspd
+			if os.path.exists(prjxray_root + "/timings/" + tiletype + ".sdf"):
+				td.cell_timing = parse_sdf_file(prjxray_root + "/timings/" + tiletype + ".sdf")
+
 			tile_type_cache[tiletype] = td
 
 		return tile_type_cache[tiletype]
