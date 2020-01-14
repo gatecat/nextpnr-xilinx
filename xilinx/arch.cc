@@ -608,10 +608,21 @@ void Arch::routeClock()
     // Special pass for faster routing of global clock psuedo-net
     for (auto net : sorted(nets)) {
         NetInfo *ni = net.second;
-        if (ni->driver.cell == nullptr ||
-            (ni->driver.cell->type != id_BUFGCTRL && ni->driver.cell->type != id_BUFCE_BUFG_PS &&
-             ni->driver.cell->type != id_BUFCE_BUFCE && ni->driver.cell->type != id_BUFGCE_DIV_BUFGCE_DIV) ||
-            ni->driver.port != id("O"))
+        if (ni->driver.cell == nullptr)
+            continue;
+        bool is_global = false;
+        if ((ni->driver.cell->type == id_BUFGCTRL || ni->driver.cell->type == id_BUFCE_BUFG_PS ||
+             ni->driver.cell->type == id_BUFCE_BUFCE || ni->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
+            ni->driver.port == id("O"))
+            is_global = true;
+        else if (ni->driver.cell->type == id("PLLE2_ADV_PLLE2_ADV") && ni->users.size() == 1 &&
+                 (ni->users.front().cell->type == id_BUFGCTRL || ni->users.front().cell->type == id_BUFCE_BUFCE ||
+                  ni->users.front().cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
+            is_global = true;
+        else if (ni->users.size() == 1 && ni->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
+                 ni->users.front().port == id("CLKIN1"))
+            is_global = true;
+        if (!is_global)
             continue;
         log_info("    routing clock '%s'\n", ni->name.c_str(this));
         bindWire(getCtx()->getNetinfoSourceWire(ni), ni, STRENGTH_LOCKED);
