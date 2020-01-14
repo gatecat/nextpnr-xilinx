@@ -800,6 +800,7 @@ public class bbaexport {
                 bba.printf("u32 %d\n", b.name); //name constid
                 bba.printf("u32 %d\n", b.type); //type (compatible type for nextpnr) constid
                 bba.printf("u32 %d\n", b.nativeType); //native type (original type in RapidWright) constid
+                bba.printf("u32 %d\n", -1); //FIXME: timing instance ID
                 bba.printf("u32 %d\n", b.belports.size()); //number of bel port wires
                 bba.printf("ref t%db%d_wires\n", tt.index, b.index); //ref to list of bel wires
                 bba.printf("u16 %d\n", b.z); // bel z position
@@ -814,6 +815,7 @@ public class bbaexport {
                 bba.printf("u32 %d\n", w.name); //name constid
                 bba.printf("u32 %d\n", w.pips_uh.size()); //number of uphill pips
                 bba.printf("u32 %d\n", w.pips_dh.size()); //number of downhill pips
+                bba.printf("u32 %d\n", 0); //FIXME: timing class
                 bba.printf("ref t%dw%d_uh\n", tt.index, w.index); //ref to list of uphill pips
                 bba.printf("ref t%dw%d_dh\n", tt.index, w.index); //ref to list of downhill pips
                 bba.printf("u32 %d\n",  w.belpins.size()); // number of bel pins
@@ -829,6 +831,7 @@ public class bbaexport {
             for (NextpnrPip p : tt.pips) {
                 bba.printf("u32 %d\n", p.from); //src tile wire index
                 bba.printf("u32 %d\n", p.to); //dst tile wire index
+                bba.printf("u32 %d\n", 0); //FIXME: timing class
                 bba.printf("u16 %d\n", p.delay); //"delay" (actually distance)
                 bba.printf("u16 %d\n", p.type.ordinal()); // pip type/flags
 
@@ -848,6 +851,7 @@ public class bbaexport {
             bba.printf("ref t%d_wires\n", tt.index); //ref to list of wires
             bba.printf("u32 %d\n", tt.pips.size()); //number of pips
             bba.printf("ref t%d_pips\n", tt.index); //ref to list of pips
+            bba.printf("u32 %d\n", -1); //FIXME: timing class
         }
 
         // Nodes
@@ -987,6 +991,26 @@ public class bbaexport {
             bba.printf("u32 %d\n", nodeIntent.get(i)); //node intent constid
             bba.printf("ref n%d_tw\n", i); //ref to list of tilewires
         }
+        // FIXME: Placeholder timing data
+        bba.println("label tile_cell_timing");
+        // Nothing here yet
+        bba.printf("label wire_timing_classes\n");
+        bba.printf("u32 %d\n", 1); // resistance
+        bba.printf("u32 %d\n", 0); // capacitance
+        bba.printf("label pip_timing_classes\n");
+        bba.printf("u16 %d\n", 1); // is buffered
+        bba.printf("u16 %d\n", 0); // padding
+        bba.printf("u32 %d\n", 75); // min delay
+        bba.printf("u32 %d\n", 75); // max delay
+        bba.printf("u32 %d\n", 1); // resistance
+        bba.printf("u32 %d\n", 0); // capacitance
+        bba.println("label timing");
+        bba.printf("u32 %d\n", 0); // number of tile types with cell timing info
+        bba.printf("u32 %d\n", 1); // number of wire classes
+        bba.printf("u32 %d\n", 1); // number of pip classes
+        bba.printf("ref tile_cell_timing\n");
+        bba.printf("ref wire_timing_classes\n");
+        bba.printf("ref pip_timing_classes\n");
         // Chip info
         bba.println("label chip_info");
         bba.printf("str |%s|\n", d.getDeviceName()); //device name
@@ -1001,6 +1025,8 @@ public class bbaexport {
         bba.println("ref tile_insts"); // reference to tile instances
         bba.println("ref nodes"); // reference to node data
         bba.println("ref extra_constids"); // reference to bel data
+        bba.printf("u32 %d\n", 1); // number of speed grades
+        bba.println("ref timing"); // reference to bel data
         bba.println("pop");
         bbaf.close();
     }
