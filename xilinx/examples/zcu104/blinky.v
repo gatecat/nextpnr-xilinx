@@ -1,4 +1,4 @@
-module top (input clk_p, clk_n, output [3:0] led);
+module top (input clk_p, clk_n, reset, output [3:0] led);
     wire clk_i;
     IBUFDS clk_ibuf (
         .I(clk_p),
