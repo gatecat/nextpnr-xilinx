@@ -150,7 +150,8 @@ enum PipType
     PIP_SITE_EXIT = 2,
     PIP_SITE_INTERNAL = 3,
     PIP_LUT_PERMUTATION = 4,
-    PIP_LUT_ROUTETHRU = 5
+    PIP_LUT_ROUTETHRU = 5,
+    PIP_CONST_DRIVER = 6,
 };
 
 NPNR_PACKED_STRUCT(struct PipInfoPOD {
@@ -1137,6 +1138,11 @@ struct Arch : BaseCtx
                         return true; // Ground driver only available if lowest 5LUT and 6LUT not used
                 }
             }
+        } else if (locInfo(pip).pip_data[pip.index].flags == PIP_CONST_DRIVER) {
+            WireId dst = getPipDstWire(pip);
+            LogicTileStatus *lts = tileStatus[dst.tile].lts;
+            if (lts != nullptr && (lts->cells[BEL_5LUT] != nullptr || lts->cells[BEL_6LUT] != nullptr))
+                return true; // Ground driver only available if lowest 5LUT and 6LUT not used
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL) {
             auto &pd = locInfo(pip).pip_data[pip.index];
             if (pd.bel == ID_TRIBUF)

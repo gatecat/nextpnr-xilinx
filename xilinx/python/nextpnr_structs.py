@@ -10,6 +10,7 @@ class NextpnrPipType(Enum):
 	SITE_INTERNAL = 3
 	LUT_PERMUTATION = 4
 	LUT_ROUTETHRU = 5
+	CONST_DRIVER = 6
 
 class NextpnrBelPin:
 	def __init__(self, bel, port):
@@ -425,6 +426,10 @@ class NextpnrTileType:
 		if pindir in ("OUTPUT", "BIDIR"):
 			if s.primary.site_type() == "IPAD" and pn == "O":
 				return None
+			if s.rel_xy()[0] == 0 and s.primary.site_type() == "SLICEL" and pin.site_wire().name() == "A":
+				# Add ground pip
+				self.add_pseudo_pip(self.row_gnd_wire_index, self.sitewire_to_tilewire(pin.site_wire()),
+					pip_type=NextpnrPipType.CONST_DRIVER)
 			np = NextpnrPip(index=len(self.pips),
 				from_wire=self.sitewire_to_tilewire(pin.site_wire()),
 				to_wire=pin.tile_wire().index,
@@ -479,11 +484,11 @@ class NextpnrTileType:
 		self.pips.append(np)
 		return np
 
-	def add_pseudo_pip(self, from_wire, to_wire):
+	def add_pseudo_pip(self, from_wire, to_wire, pip_type=NextpnrPipType.TILE_ROUTING):
 		timing_class = self.timing.get_pip_class(is_buffered=0, min_delay=0, max_delay=0, r=0.001, c=0)
 		np = NextpnrPip(index=len(self.pips),
 			from_wire=from_wire, to_wire=to_wire,
-			timing_class=timing_class, pip_type=NextpnrPipType.TILE_ROUTING
+			timing_class=timing_class, pip_type=pip_type
 		)
 		self.wires[np.from_wire].pips_dh.append(np.index)
 		self.wires[np.to_wire].pips_uh.append(np.index)
