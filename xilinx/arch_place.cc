@@ -396,12 +396,12 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             }
 
             CellInfo *out_fmux = nullptr;
-            // Eights B, D, F, H: F7MUX connects to F7F8 out
-            if (i == 1 || i == 3 || i == 5 || i == 7)
-                out_fmux = lts.cells[(i - 1) << 4 | BEL_F7MUX];
-            // Eights C, G: F8MUX connects to F7F8 out
-            if (i == 2 || i == 6)
-                out_fmux = lts.cells[(i - 2) << 4 | BEL_F8MUX];
+            // Subslices A, C: F7MUX connects to F7F8 out
+            if (i == 0 || i == 2)
+                out_fmux = lts.cells[(i << 4) | BEL_F7MUX];
+            // Subslices B: F8MUX connects to F7F8 out
+            if (i == 1 || i == 5)
+                out_fmux = lts.cells[(i - 1) << 4 | BEL_F8MUX];
 
             CellInfo *carry4 = lts.cells[((i / 4) << 6) | BEL_CARRY4];
 
