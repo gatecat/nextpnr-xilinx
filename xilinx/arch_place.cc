@@ -761,6 +761,28 @@ void Arch::fixupPlacement()
                 }
                 connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
             }
+        } else if (ci->type == id_PS7_PS7) {
+            log_info("Tieing unused PS7 inputs to constants...\n");
+            for (IdString pname : getBelPins(ci->bel)) {
+                if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr &&
+                    ci->ports.at(pname).net->driver.cell != nullptr)
+                    continue;
+                if (getBelPinType(ci->bel, pname) == PORT_OUT)
+                    continue;
+                std::string name = pname.str(this);
+                if (name.find("_PAD_") != std::string::npos)
+                    continue;
+                if (boost::starts_with(name, "TEST") || boost::starts_with(name, "DEBUGSELECT"))
+                    continue;
+                bool constval = false;
+                ci->ports[pname].name = pname;
+                ci->ports[pname].type = PORT_IN;
+                if (ci->ports[pname].net != nullptr) {
+                    disconnect_port(getCtx(), ci, pname);
+                    ci->attrs.erase(id("X_ORIG_PORT_" + name));
+                }
+                connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
+            }
         } else if (ci->type == id("BITSLICE_CONTROL_BEL")) {
             std::unordered_map<IdString, bool> constpins;
             constpins[id("EN_VTC")] = true;

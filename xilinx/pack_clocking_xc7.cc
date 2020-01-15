@@ -113,6 +113,13 @@ void XC7Packer::pack_gbs()
 
     generic_xform(gb_rules);
 
+    // Make sure prerequisites are set up first
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("PS7_PS7"))
+            preplace_unique(ci);
+    }
+
     // Preplace global buffers to make use of dedicated/short routing
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
