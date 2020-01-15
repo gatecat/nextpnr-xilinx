@@ -296,6 +296,8 @@ void XC7Packer::pack_io()
     hrio_rules[ctx->id("INV")].port_xform[ctx->id("I")] = ctx->id("IN");
     hrio_rules[ctx->id("INV")].port_xform[ctx->id("O")] = ctx->id("OUT");
 
+    hrio_rules[ctx->id("PS7")].new_type = ctx->id("PS7_PS7");
+
     generic_xform(hrio_rules, true);
 
     for (auto cell : sorted(ctx->cells)) {
