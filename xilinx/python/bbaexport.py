@@ -20,7 +20,12 @@ def main():
 	with open(args.constids, "r") as cf:
 		constid.read_base(cf)
 	# Read and parse X-ray database
-	d = import_device(args.device, args.xray, args.metadata)
+	metadata_root = args.metadata
+	xraydb_root = args.xray
+	if "xc7z" in args.device:
+		metadata_root = metadata_root.replace("artix7", "zynq7")
+		xraydb_root = xraydb_root.replace("artix7", "zynq7")
+	d = import_device(args.device, xraydb_root, metadata_root)
 	# Import tile types
 	seen_tiletypes = set()
 	tile_types = []
