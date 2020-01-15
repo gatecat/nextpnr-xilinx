@@ -488,11 +488,11 @@ def import_device(name, prjxray_root, metadata_root):
 	with open(prjxray_root + "/" + name + "_package_pins.csv") as ppf:
 		for line in ppf:
 			sl = line.strip().split(",")
-			if len(sl) < 2:
+			if len(sl) < 3:
 				continue
-			if sl[1] == "site":
+			if sl[2] == "site":
 				continue # header
-			d.sites_by_name[sl[1]].package_pin = sl[0]
+			d.sites_by_name[sl[2]].package_pin = sl[0]
 	with open(prjxray_root + "/tileconn.json", "r") as tcf:
 		apply_tileconn(tcf, d)
 	return d
