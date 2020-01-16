@@ -789,7 +789,8 @@ void Arch::findSourceSinkLocations()
                 if (wireInfo(cursor).site == -1) {
                     int intent = wireIntent(cursor);
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
-                        intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY) {
+                        intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
+                        intent != ID_NODE_OUTPUT && intent != ID_NODE_INT_INTERFACE) {
                         int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
                         source_locs[source] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
