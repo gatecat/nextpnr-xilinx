@@ -767,12 +767,13 @@ void Arch::fixupPlacement()
                 if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr &&
                     ci->ports.at(pname).net->driver.cell != nullptr)
                     continue;
-                if (getBelPinType(ci->bel, pname) == PORT_OUT)
+                if (getBelPinType(ci->bel, pname) != PORT_IN)
                     continue;
                 std::string name = pname.str(this);
                 if (name.find("_PAD_") != std::string::npos)
                     continue;
-                if (boost::starts_with(name, "TEST") || boost::starts_with(name, "DEBUGSELECT"))
+                if (boost::starts_with(name, "TEST") || boost::starts_with(name, "DEBUGSELECT") ||
+                    boost::starts_with(name, "MIO") || boost::starts_with(name, "DDR"))
                     continue;
                 bool constval = false;
                 ci->ports[pname].name = pname;

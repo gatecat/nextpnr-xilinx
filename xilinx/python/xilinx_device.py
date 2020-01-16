@@ -379,8 +379,11 @@ def import_device(name, prjxray_root, metadata_root):
 
 	def read_tile_type_json(tiletype):
 		if tiletype not in tile_json_cache:
-			with open(prjxray_root + "/tile_type_" + tiletype + ".json", "r") as jf:
-				tile_json_cache[tiletype] = json.load(jf)
+			if not os.path.exists(prjxray_root + "/tile_type_" + tiletype + ".json"):
+				tile_json_cache[tiletype] = dict(wires={}, pips={}, sites=[])
+			else:
+				with open(prjxray_root + "/tile_type_" + tiletype + ".json", "r") as jf:
+					tile_json_cache[tiletype] = json.load(jf)
 		return tile_json_cache[tiletype]
 
 	def get_tile_type_data(tiletype):
@@ -471,6 +474,8 @@ def import_device(name, prjxray_root, metadata_root):
 			if tile in tilesites:
 				for idx, site in enumerate(tilesites[tile]):
 					sitetype = siteprops[site]["SITE_TYPE"]
+					if sitetype == "PLLE2_ADV" and tiletype != "CMT_TOP_L_UPPER_T":
+						continue
 					si = Site(t, site, idx, parse_xy(site), get_site_type_data(sitetype))
 					t.site_insts.append(si)
 					d.sites_by_name[site] = si
