@@ -37,6 +37,9 @@ void Arch::parseXdc(std::istream &in)
         if (str.at(0) == '"') {
             NPNR_ASSERT(str.back() == '"');
             return str.substr(1, str.size() - 2);
+        } else if (str.at(0) == '{') {
+            NPNR_ASSERT(str.back() == '}');
+            return str.substr(1, str.size() - 2);
         } else {
             return str;
         }
@@ -83,7 +86,7 @@ void Arch::parseXdc(std::istream &in)
             log_error("failed to parse target (on line %d)\n", lineno);
         if (split.front() != "get_ports")
             log_error("targets other than 'get_ports' are not supported (on line %d)\n", lineno);
-        IdString cellname = id(split.at(1));
+        IdString cellname = id(strip_quotes(split.at(1)));
         if (cells.count(cellname))
             tgt_cells.push_back(cells.at(cellname).get());
         return tgt_cells;

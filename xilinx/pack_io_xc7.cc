@@ -224,6 +224,9 @@ void XC7Packer::pack_io()
     for (auto &iob : pad_and_buf) {
         CellInfo *pad = iob.first;
         // Process location constraints
+        if (pad->attrs.count(ctx->id("PACKAGE_PIN"))) {
+            pad->attrs[ctx->id("LOC")] = pad->attrs.at(ctx->id("PACKAGE_PIN"));
+        }
         if (pad->attrs.count(ctx->id("LOC"))) {
             std::string loc = pad->attrs.at(ctx->id("LOC")).as_string();
             std::string site = ctx->getPackagePinSite(loc);
