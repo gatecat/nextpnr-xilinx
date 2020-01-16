@@ -19,7 +19,7 @@ Currently two flows are supported:
  - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
  - Install [yosys](https://github.com/YosysHQ/yosys)
 
-## Prerequisites - Artix-7
+## Prerequisites - Artix-7/Zynq-7
 
  - Run `git submodule init` and `git submodule update` to fetch the database and metadata
  - Download and build [Project Xray](https://github.com/SymbiFlow/prjxray)
@@ -28,7 +28,7 @@ Currently two flows are supported:
 A brief (academic) paper describing the Yosys+nextpnr flow can be found
 on [arXiv](https://arxiv.org/abs/1903.10407).
 
-## Building - Artix-7
+## Building - Artix-7/Zynq-7
 
  - Run `cmake -DARCH=xilinx .`
  - Run `make` (with -jN as appropriate)
@@ -38,7 +38,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
  - Run `cmake -DARCH=xilinx -DRAPIDWRIGHT_PATH=/path/to/rapidwright -DGSON_PATH=/path/to/gson-2.8.5.jar .`
  - Run `make` (with -jN as appropriate)
 
-## Building the Arty example - XRay database
+## Building the Arty 35T example - XRay database
  - Run `pypy3 xilinx/python/bbaexport.py --device xc7a35tcsg324-1 --bba xilinx/xc7a35t.bba` (regular cpython works as well, but is a lot slower)
  - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
  - Set `XRAY_DIR` to the path where Project Xray has been cloned and built (you may also need to patch out the Vivado check for `utils/environment.sh` in Xray)
@@ -48,6 +48,14 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
  - Run `java -jar rapidwright_bbaexport.jar xczu7ev-ffvc1156-2-e xilinx/constids.inc xilinx/xczu7ev.bba`
  - Run `./bbasm xilinx/xczu7ev.bba xilinx/xczu7ev.bin`
  - Run `blinky.sh` in `xilinx/examples/zcu104`.
+
+## Building the Arty Z7-20 example - XRay database
+ - Run `select-db.sh` in `xilinx/examples/artyz7-20` to get a version of `prjxray-db` with Zynq 7020 support
+ - Run `pypy3 xilinx/python/bbaexport.py --device xc7z020clg400-1 --bba xilinx/xc7z020.bba` (regular cpython works as well, but is a lot slower)
+ - Run `./bbasm xilinx/xc7z020.bba xilinx/xc7z020.bin`
+ - Set `XRAY_DIR` to the path where Project Xray has been cloned and built (you may also need to patch out the Vivado check for `utils/environment.sh` in Xray)
+ - Run `blinky.sh` in `xilinx/examples/artyz7-20`.
+
 
 ## Creating chip database from RapidWright
 
@@ -66,7 +74,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
   - Currently supported:
   - xc7 and xcup: LUTs (including fractured), FFs, DRAM (only RAM64X1D), carry (XORCY and MUXCY or CARRY4), SRL16E and SRLC32E (no cascading), BRAM and IO
   - xcup: OSERDESE3, ISERDESE3, IDDRE1, ODDRE1, IDELAYE3, ODELAYE3, IDELAYCTRL, BUFGCTRL, BUFG, BUFGCE, BUFG_PS, PLLE4_ADV, PLLE4_BASIC, MMCME4_ADV, MMCME4_BASIC, URAM288E, DSP48E2 (no cascading)
-  - xc7: OSERDESE2, ISERDESE2, IDELAYE2, IDELAYCTRL, BUFGCTRL, PLLE2_BASIC, PLLE2_ADV
+  - xc7: OSERDESE2, ISERDESE2, IDELAYE2, IDELAYCTRL, BUFGCTRL, PLLE2_BASIC, PLLE2_ADV, PS7
 
   - Bels, tile wires and pips are deduplicated but nodes (connections between tile wires) are not. This means
     that databases for larger devices will be several gigabytes in size (but significantly smaller than a fully flat database).
