@@ -340,6 +340,16 @@ void Arch::setup_pip_blacklist()
             for (int j = 0; j < td.num_pips; j++) {
                 blacklist_pips[td.type].insert(j);
             }
+        } else if (boost::starts_with(type, "CLK_HROW_TOP")) {
+            for (int j = 0; j < td.num_pips; j++) {
+                auto &pd = td.pip_data[j];
+                std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
+                std::string src_name = IdString(td.wire_data[pd.src_index].name).str(this);
+
+                if (dest_name.find("CK_BUFG_CASCO") != std::string::npos &&
+                    src_name.find("CK_BUFG_CASCIN") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
+            }
         } else if (boost::starts_with(type, "HCLK_IOI3")) {
             for (int j = 0; j < td.num_pips; j++) {
                 auto &pd = td.pip_data[j];
