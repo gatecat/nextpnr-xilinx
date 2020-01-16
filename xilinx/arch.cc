@@ -745,7 +745,7 @@ void Arch::findSinkLocations()
         NetInfo *ni = net.second;
         for (auto &usr : ni->users) {
             BelId bel = usr.cell->bel;
-            if (bel == BelId() || isLogicTile(bel))
+            if (bel == BelId() || isLogicTile(bel) || (xc7 && isBRAMTile(bel)))
                 continue; // don't need to do this for logic bels, which are always next to their INT
             WireId sink = getCtx()->getNetinfoSinkWire(ni, usr);
             if (sink == WireId() || sink_locs.count(sink))
