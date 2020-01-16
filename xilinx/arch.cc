@@ -276,6 +276,8 @@ void Arch::setup_pip_blacklist()
 
                 if (dest_name.find("CLKB") != std::string::npos && src_name.find("IMUX22") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
+                if (dest_name.find("IOI_I2GCLK") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
             }
         }
     }
@@ -662,9 +664,38 @@ void Arch::routeClock()
                 }
             }
             if (dest == WireId()) {
-                if (getCtx()->debug)
-                    log_info("            failed to find a route using dedicated resources.\n");
-                continue;
+                log_info("            failed to find a route using dedicated resources.\n");
+                if (ni->users.size() == 1 && ni->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
+                    ni->users.front().port == id("CLKIN1")) {
+                    // Due to some missing pips, currently special case more lenient solution
+                    std::queue<WireId> empty;
+                    std::swap(visit, empty);
+                    backtrace.clear();
+                    visit.push(getCtx()->getNetinfoSinkWire(ni, usr));
+                    while (!visit.empty()) {
+                        WireId curr = visit.front();
+                        visit.pop();
+                        if (getBoundWireNet(curr) == ni) {
+                            dest = curr;
+                            break;
+                        }
+                        for (auto uh : getPipsUphill(curr)) {
+                            if (!checkPipAvail(uh))
+                                continue;
+                            WireId src = getPipSrcWire(uh);
+                            if (backtrace.count(src))
+                                continue;
+                            if (!checkWireAvail(src) && getBoundWireNet(src) != ni)
+                                continue;
+                            backtrace[src] = uh;
+                            visit.push(src);
+                        }
+                    }
+                    if (dest == WireId())
+                        continue;
+                } else {
+                    continue;
+                }
             }
             while (backtrace.count(dest)) {
                 auto uh = backtrace[dest];

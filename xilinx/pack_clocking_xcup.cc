@@ -47,6 +47,8 @@ BelId XilinxPacker::find_bel_with_short_route(WireId source, IdString beltype, I
             if (bp.pin == belpin && ctx->getBelType(bp.bel) == beltype && !used_bels.count(bp.bel))
                 return bp.bel;
         for (auto pip : ctx->getPipsDownhill(cursor)) {
+            if (!ctx->checkPipAvail(pip))
+                continue;
             WireId dst = ctx->getPipDstWire(pip);
             if (visited.count(dst))
                 continue;
