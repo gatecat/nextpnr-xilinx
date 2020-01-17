@@ -276,8 +276,6 @@ void Arch::setup_pip_blacklist()
 
                 if (dest_name.find("CLKB") != std::string::npos && src_name.find("IMUX22") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
-                if (dest_name.find("IOI_I2GCLK") != std::string::npos)
-                    blacklist_pips[td.type].insert(j);
             }
         }
     }
