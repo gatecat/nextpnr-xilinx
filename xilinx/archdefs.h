@@ -167,7 +167,7 @@ struct ArchCellInfo
         } lutInfo;
         struct
         {
-            bool is_latch, is_clkinv, is_srinv;
+            bool is_latch, is_clkinv, is_srinv, ffsync;
             bool is_paired;
             NetInfo *clk, *sr, *ce, *d;
         } ffInfo;

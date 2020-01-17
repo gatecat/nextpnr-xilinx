@@ -761,7 +761,7 @@ struct Arch : BaseCtx
         if (tts.lts == nullptr)
             tts.lts = new LogicTileStatus();
         auto &ts = *(tts.lts);
-        if (z == (((xc7 ? 3 : 7) << 4) | BEL_6LUT)) {
+        if ((z == (((xc7 ? 3 : 7) << 4) | BEL_6LUT)) || (z == (((xc7 ? 3 : 7) << 4) | BEL_5LUT))) {
             if ((cell != nullptr && cell->lutInfo.is_memory) ||
                 (ts.cells[z] != nullptr && ts.cells[z]->lutInfo.is_memory)) {
                 // Special case - memory write port invalidates everything

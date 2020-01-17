@@ -515,7 +515,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             lts.halfs[i].valid = false;
             bool found_ff[2] = {false, false};
             NetInfo *clk = nullptr, *sr = nullptr, *ce = nullptr;
-            bool clkinv = false, srinv = false, islatch = false;
+            bool clkinv = false, srinv = false, islatch = false, ffsync = false;
             for (int z = 4 * i; z < 4 * (i + 1); z++) {
                 for (int k = 0; k < 2; k++) {
                     CellInfo *ff = lts.cells[z << 4 | (BEL_FF + k)];
@@ -536,6 +536,8 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                             return false;
                         if (ff->ffInfo.is_latch != islatch)
                             return false;
+                        if (ff->ffInfo.ffsync != ffsync)
+                            return false;
                     } else {
                         clk = ff->ffInfo.clk;
                         if (i == 0 && wclk != nullptr && clk != wclk)
@@ -545,6 +547,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                         clkinv = ff->ffInfo.is_clkinv;
                         srinv = ff->ffInfo.is_srinv;
                         islatch = ff->ffInfo.is_latch;
+                        ffsync = ff->ffInfo.ffsync;
                     }
                     found_ff[k] = true;
                 }

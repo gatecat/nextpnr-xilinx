@@ -212,11 +212,13 @@ void XilinxPacker::pack_ffs()
     ff_rules[ctx->id("FDRE")].new_type = id_SLICE_FFX;
     ff_rules[ctx->id("FDRE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDRE")].port_xform[ctx->id("R")] = id_SR;
+    ff_rules[ctx->id("FDRE")].set_attrs.emplace_back(ctx->id("X_FFSYNC"), "1");
     // ff_rules[ctx->id("FDRE")].param_xform[ctx->id("IS_R_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
     ff_rules[ctx->id("FDSE")].new_type = id_SLICE_FFX;
     ff_rules[ctx->id("FDSE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDSE")].port_xform[ctx->id("S")] = id_SR;
+    ff_rules[ctx->id("FDSE")].set_attrs.emplace_back(ctx->id("X_FFSYNC"), "1");
     // ff_rules[ctx->id("FDSE")].param_xform[ctx->id("IS_S_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
     generic_xform(ff_rules, true);
@@ -1002,6 +1004,7 @@ void Arch::assignCellInfo(CellInfo *cell)
                                 bool_or_default(cell->params, id("IS_CLR_INVERTED"), false) ||
                                 bool_or_default(cell->params, id("IS_PRE_INVERTED"), false);
         cell->ffInfo.is_latch = cell->attrs.count(id("X_FF_AS_LATCH"));
+        cell->ffInfo.ffsync = cell->attrs.count(id("X_FFSYNC"));
     } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
                cell->type == id("SELMUX2_1")) {
         cell->muxInfo.sel = get_net_or_empty(cell, id_S0);
