@@ -730,12 +730,9 @@ void XC7Packer::pack_bram()
                 .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
     }
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 8; i++) {
         sdp_bram_rules[ctx->id("RAMB36E1")]
                 .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
-                .clear();
-        sdp_bram_rules[ctx->id("RAMB36E1")]
-                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
                 .clear();
         // Connects to two WEBWE bel pins
         sdp_bram_rules[ctx->id("RAMB36E1")]
@@ -744,12 +741,6 @@ void XC7Packer::pack_bram()
         sdp_bram_rules[ctx->id("RAMB36E1")]
                 .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))]
                 .push_back(ctx->id("WEBWEU" + std::to_string(i)));
-        sdp_bram_rules[ctx->id("RAMB36E1")]
-                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
-                .push_back(ctx->id("WEAL" + std::to_string(i)));
-        sdp_bram_rules[ctx->id("RAMB36E1")]
-                .port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i + 4) + "]"))]
-                .push_back(ctx->id("WEAU" + std::to_string(i)));
         // Not used in SDP mode
         sdp_bram_rules[ctx->id("RAMB36E1")]
                 .port_multixform[ctx->id(std::string("WEA[" + std::to_string(i) + "]"))] = {};
@@ -862,6 +853,18 @@ void XC7Packer::pack_bram()
                 for (std::string s : {"L", "U"}) {
                     for (int i = 4; i < 8; i++) {
                         IdString port = ctx->id("WEBWE" + s + std::to_string(i));
+                        if (!ci->ports.count(port)) {
+                            ci->ports[port].name = port;
+                            ci->ports[port].type = PORT_IN;
+                            connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                        }
+                    }
+                }
+            } else {
+                // Tie WEA low
+                for (std::string s : {"L", "U"}) {
+                    for (int i = 0; i < 4; i++) {
+                        IdString port = ctx->id("WEA" + s + std::to_string(i));
                         if (!ci->ports.count(port)) {
                             ci->ports[port].name = port;
                             ci->ports[port].type = PORT_IN;

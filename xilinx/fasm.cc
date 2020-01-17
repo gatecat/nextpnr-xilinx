@@ -911,7 +911,7 @@ struct FasmBackend
         }
     }
 
-    void write_bram_width(CellInfo *ci, const std::string &name, bool is_36)
+    void write_bram_width(CellInfo *ci, const std::string &name, bool is_36, bool is_y1)
     {
         int width = int_or_default(ci->params, ctx->id(name), 0);
         if (width == 0)
@@ -922,6 +922,9 @@ struct FasmBackend
                 actual_width = 1;
             else
                 actual_width = width / 2;
+        }
+        if (((is_36 && width == 72) || (is_y1 && actual_width == 36)) && name == "READ_WIDTH_A") {
+            write_bit(name + "_18");
         }
         if (actual_width == 36) {
             write_bit("SDP_" + name.substr(0, name.length() - 2) + "_36");
@@ -980,10 +983,10 @@ struct FasmBackend
         if (ci != nullptr) {
             bool is_36 = ci->type == id_RAMB36E1_RAMB36E1;
             write_bit("IN_USE");
-            write_bram_width(ci, "READ_WIDTH_A", is_36);
-            write_bram_width(ci, "READ_WIDTH_B", is_36);
-            write_bram_width(ci, "WRITE_WIDTH_A", is_36);
-            write_bram_width(ci, "WRITE_WIDTH_B", is_36);
+            write_bram_width(ci, "READ_WIDTH_A", is_36, half == 1);
+            write_bram_width(ci, "READ_WIDTH_B", is_36, half == 1);
+            write_bram_width(ci, "WRITE_WIDTH_A", is_36, half == 1);
+            write_bram_width(ci, "WRITE_WIDTH_B", is_36, half == 1);
             write_bit("DOA_REG", bool_or_default(ci->params, ctx->id("DOA_REG"), false));
             write_bit("DOB_REG", bool_or_default(ci->params, ctx->id("DOB_REG"), false));
             for (auto &invpin : invertible_pins[ctx->id(ci->attrs[ctx->id("X_ORIG_TYPE")].as_string())])
