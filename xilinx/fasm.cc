@@ -888,6 +888,13 @@ struct FasmBackend
                     write_bit(s + "_ACTIVE");
                     write_bit(s + "_USED");
                 }
+                auto used_hclk = used_wires_starting_with(tile, "HCLK_CMT_CK_", true);
+                for (auto s : used_hclk) {
+                    if (s.find("BUFHCLK") != std::string::npos) {
+                        write_bit(s + "_USED");
+                        hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
+                    }
+                }
             }
             pop();
             blank();
