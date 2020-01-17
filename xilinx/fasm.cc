@@ -860,7 +860,7 @@ struct FasmBackend
         for (int tile = 0; tile < int(tt.size()); tile++) {
             std::tie(name, type) = tt.at(tile);
             push(name);
-            if (type == "HCLK_L" || type == "HCLK_R") {
+            if (type == "HCLK_L" || type == "HCLK_R" || type == "HCLK_L_BOT_UTURN" || type == "HCLK_R_BOT_UTURN") {
                 auto used_sources = used_wires_starting_with(tile, "HCLK_CK_", true);
                 push("ENABLE_BUFFER");
                 for (auto s : used_sources) {
