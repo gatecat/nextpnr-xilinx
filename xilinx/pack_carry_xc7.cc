@@ -156,6 +156,8 @@ void XC7Packer::pack_carries()
                 break;
             if (has_illegal_fanout(mux_ci))
                 break;
+            if (group.muxcys.size() > 90)
+                break;
             muxcy = nullptr;
             for (auto &user : mux_ci->users) {
                 if (user.cell->type == ctx->id("MUXCY")) {
