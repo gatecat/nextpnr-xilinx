@@ -89,6 +89,23 @@ void Arch::parseXdc(std::istream &in)
         return tgt_cells;
     };
 
+    auto get_nets = [&](std::string str) {
+        std::vector<NetInfo *> tgt_nets;
+        if (str.empty() || str.front() != '[')
+            log_error("failed to parse target (on line %d)\n", lineno);
+        str = str.substr(1, str.size() - 2);
+        auto split = split_to_args(str, false);
+        if (split.size() < 2)
+            log_error("failed to parse target (on line %d)\n", lineno);
+        if (split.front() != "get_ports" && split.front() != "get_nets")
+            log_error("targets other than 'get_ports' or 'get_nets' are not supported (on line %d)\n", lineno);
+        IdString netname = id(split.at(1));
+        NetInfo *maybe_net = getNetByAlias(netname);
+        if (maybe_net != nullptr)
+            tgt_nets.push_back(maybe_net);
+        return tgt_nets;
+    };
+
     while (std::getline(in, line)) {
         ++lineno;
         // Trim comments, from # until end of the line
@@ -110,12 +127,36 @@ void Arch::parseXdc(std::istream &in)
             std::vector<CellInfo *> dest = get_cells(arguments.at(3));
             for (auto c : dest)
                 c->attrs[id(arguments.at(1))] = std::string(arguments.at(2));
+        } else if (cmd == "create_clock") {
+            double period = 0;
+            bool got_period = false;
+            int cursor = 1;
+            for (cursor = 1; cursor < int(arguments.size()); cursor++) {
+                std::string opt = arguments.at(cursor);
+                if (opt == "-name" || opt == "-waveform")
+                    cursor++;
+                else if (opt == "-period") {
+                    cursor++;
+                    period = std::stod(arguments.at(cursor));
+                    got_period = true;
+                } else
+                    break;
+            }
+            if (!got_period)
+                log_error("found create_clock without period (on line %d)", lineno);
+            std::vector<NetInfo *> dest = get_nets(arguments.at(cursor));
+            for (auto n : dest) {
+                n->clkconstr = std::unique_ptr<ClockConstraint>(new ClockConstraint);
+                n->clkconstr->period = getDelayFromNS(period);
+                n->clkconstr->high.delay = n->clkconstr->period.delay / 2;
+                n->clkconstr->low.delay = n->clkconstr->period.delay / 2;
+            }
         } else {
-            log_info("ignoring unsupported LPF command '%s' (on line %d)\n", cmd.c_str(), lineno);
+            log_info("ignoring unsupported XDC command '%s' (on line %d)\n", cmd.c_str(), lineno);
         }
     }
     if (!isempty(linebuf))
-        log_error("unexpected end of LPF file\n");
+        log_error("unexpected end of XDC file\n");
 }
 
 NEXTPNR_NAMESPACE_END
