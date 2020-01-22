@@ -36,8 +36,8 @@ void XC7Packer::prepare_clocking()
 {
     log_info("Preparing clocking...\n");
     std::unordered_map<IdString, IdString> upgrade;
-    upgrade[ctx->id("MMCME2_BASIC")] = ctx->id("MMCME2_ADV");
-    upgrade[ctx->id("PLLE2_BASIC")] = ctx->id("PLLE2_ADV");
+    upgrade[ctx->id("MMCME2_BASE")] = ctx->id("MMCME2_ADV");
+    upgrade[ctx->id("PLLE2_BASE")] = ctx->id("PLLE2_ADV");
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
