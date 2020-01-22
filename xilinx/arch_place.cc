@@ -322,7 +322,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                     return false; // Memory and SRLs only valid in SLICEMs
                 if (lut6->lutInfo.is_srl && (i >= 4))
                     return false;
-                if (lut6->lutInfo.is_memory) {
+                if (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl) {
                     if (wclk == nullptr)
                         wclk = lut6->lutInfo.wclk;
                     else if (lut6->lutInfo.wclk != wclk) {
@@ -364,6 +364,14 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                 if (!is_slicem && (lut5->lutInfo.is_memory || lut5->lutInfo.is_srl)) {
                     DBG();
                     return false; // Memory and SRLs only valid in SLICEMs
+                }
+                if (lut5->lutInfo.is_srl) {
+                    if (wclk == nullptr)
+                        wclk = lut5->lutInfo.wclk;
+                    else if (lut5->lutInfo.wclk != wclk) {
+                        DBG();
+                        return false;
+                    }
                 }
                 // 5LUT can use at most 5 inputs and 1 output
                 if (lut5->lutInfo.input_count > 5 || lut5->lutInfo.output_count == 2) {
@@ -514,6 +522,22 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
         if (lts.halfs[i].dirty) {
             lts.halfs[i].valid = false;
             bool found_ff[2] = {false, false};
+            if (i == 0 && wclk == nullptr) {
+                // Need to check wclk too
+                for (int z = 4 * i; z < 4 * (i + 1); z++) {
+                    for (int k = 0; k < 2; k++) {
+                        CellInfo *lut = lts.cells[z << 4 | (BEL_6LUT + k)];
+                        if (lut == nullptr)
+                            continue;
+                        if (!lut->lutInfo.is_memory && !lut->lutInfo.is_srl)
+                            continue;
+                        if (lut->lutInfo.wclk != nullptr) {
+                            wclk = lut->lutInfo.wclk;
+                            break;
+                        }
+                    }
+                }
+            }
             NetInfo *clk = nullptr, *sr = nullptr, *ce = nullptr;
             bool clkinv = false, srinv = false, islatch = false, ffsync = false;
             for (int z = 4 * i; z < 4 * (i + 1); z++) {

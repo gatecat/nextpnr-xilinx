@@ -771,6 +771,14 @@ struct Arch : BaseCtx
                     ts.halfs[0].dirty = true; // WCLK and CLK0 shared
             }
         }
+        if ((((z & 0xF) == BEL_6LUT) || ((z & 0xF) == BEL_5LUT)) &&
+            ((cell != nullptr && cell->lutInfo.is_srl) || (ts.cells[z] != nullptr && ts.cells[z]->lutInfo.is_srl))) {
+            // SRLs invalidate everything due to write clock
+            for (int i = 0; i < 8; i++)
+                ts.eights[i].dirty = true;
+            if (xc7)
+                ts.halfs[0].dirty = true; // WCLK and CLK0 shared
+        }
         ts.cells[z] = cell;
         // determine which sections to mark as dirty
         switch (z & 0xF) {
