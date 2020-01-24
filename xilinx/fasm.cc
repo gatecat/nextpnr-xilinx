@@ -227,6 +227,11 @@ struct FasmBackend
             std::string dst_name = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx);
             std::string src_name = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx);
 
+            if (boost::starts_with(tile_name, "DSP_L") || boost::starts_with(tile_name, "DSP_R")) {
+                // FIXME: PPIPs missing for DSPs
+                return;
+            }
+
             if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
                 if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
@@ -1140,6 +1145,51 @@ struct FasmBackend
         pop(2);
     }
 
+    void write_dsp_cell(CellInfo *ci)
+    {
+        push(get_tile_name(ci->bel.tile));
+        push("DSP48");
+        auto xy = ctx->getSiteLocInTile(ci->bel);
+        push("DSP_" + std::to_string(xy.y));
+        // FIXME: waiting for proper DSP48E1 docs in xray, this is
+        // enough for minimal combinational DSPs
+        write_bit("ZALUMODEREG[0]");
+        write_bit("ZCARRYINREG[0]");
+        write_bit("ZCARRYINSELREG[0]");
+        write_bit("ZINMODEREG[0]");
+        write_bit("ZMREG[0]");
+        write_bit("ZOPMODEREG[0]");
+        write_bit("ZPREG[0]");
+        write_bit("USE_DPORT[0]", str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE") == "TRUE");
+        write_bit("ZIS_CLK_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED")));
+        write_bit("ZIS_CARRYIN_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CARRYIN_INVERTED")));
+        auto write_bus_zinv = [&](std::string name, int width) {
+            for (int i = 0; i < width; i++) {
+                std::string b = stringf("[%d]", i);
+                bool inv = (int_or_default(ci->params, ctx->id("IS_" + name + "_INVERTED"), 0) >> i) & 0x1;
+                inv |= bool_or_default(ci->params, ctx->id("IS_" + name + b + "_INVERTED"), false);
+                write_bit("ZIS_" + name + "_INVERTED" + b, !inv);
+            }
+        };
+        write_bit("AREG_" + std::to_string(int_or_default(ci->params, ctx->id("AREG"), 0)));
+        write_bit("BREG_" + std::to_string(int_or_default(ci->params, ctx->id("BREG"), 0)));
+        write_bus_zinv("ALUMODE", 4);
+        write_bus_zinv("INMODE", 5);
+        write_bus_zinv("OPMODE", 7);
+        pop(3);
+    }
+
+    void write_ip()
+    {
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->type == ctx->id("DSP48E1_DSP48E1")) {
+                write_dsp_cell(ci);
+                blank();
+            }
+        }
+    }
+
     void write_fasm()
     {
         get_invertible_pins(ctx, invertible_pins);
@@ -1148,6 +1198,7 @@ struct FasmBackend
         write_routing();
         write_bram();
         write_clocking();
+        write_ip();
     }
 };
 
