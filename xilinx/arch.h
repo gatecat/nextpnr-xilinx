@@ -1155,7 +1155,7 @@ struct Arch : BaseCtx
             }
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_CONST_DRIVER) {
             WireId dst = getPipDstWire(pip);
-            LogicTileStatus *lts = tileStatus[dst.tile].lts;
+            LogicTileStatus *lts = tileStatus[xc7 ? dst.tile : pip.tile].lts;
             if (lts != nullptr && (lts->cells[BEL_5LUT] != nullptr || lts->cells[BEL_6LUT] != nullptr))
                 return true; // Ground driver only available if lowest 5LUT and 6LUT not used
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL) {

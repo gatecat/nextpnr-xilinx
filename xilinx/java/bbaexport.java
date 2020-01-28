@@ -34,6 +34,7 @@ public class bbaexport {
         SITE_INTERNAL,
         LUT_PERMUTATION,
         LUT_ROUTETHRU,
+        CONST_DRIVER,
     }
 
     static class NextpnrBelPin {
@@ -224,6 +225,9 @@ public class bbaexport {
                 if (s.getSiteTypeEnum() == si.getSiteTypeEnum())
                     sitePin = sitePinName;
                 //System.out.println(s.getName() + " " + sitePinName + " " + si.getPrimarySitePinName(sitePinName) + " " + sitePin + " " + si.getSiteTypeEnum() + " " + s.getTileWireNameFromPinName(sitePin));
+                if (s.getSiteTypeEnum() == SiteTypeEnum.SLICEL && sitePinName.equals("A_O")) {
+                    addPseudoPIP(row_gnd_wire_index, s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)), NextpnrPipType.CONST_DRIVER);
+                }
                 np = new NextpnrPip(pips.size(), siteWireToWire(s, bp.getSiteWireName()), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)),
                         0, NextpnrPipType.SITE_EXIT);
             } else {
@@ -288,7 +292,11 @@ public class bbaexport {
         }
 
         private NextpnrPip addPseudoPIP(int from, int to) {
-            NextpnrPip np = new NextpnrPip(pips.size(), from, to, 0, NextpnrPipType.TILE_ROUTING);
+            return addPseudoPIP(from, to,  NextpnrPipType.TILE_ROUTING);
+        }
+
+        private NextpnrPip addPseudoPIP(int from, int to, NextpnrPipType t) {
+            NextpnrPip np = new NextpnrPip(pips.size(), from, to, 0, t);
             wires.get(np.from).pips_dh.add(np.index);
             wires.get(np.to).pips_uh.add(np.index);
             pips.add(np);
