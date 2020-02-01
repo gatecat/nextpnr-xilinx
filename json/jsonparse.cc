@@ -321,14 +321,6 @@ bool is_blackbox(JsonNode *node)
         wbox_node = attr_node->data_dict.at("whitebox");
     if (bbox_node == NULL && wbox_node == NULL)
         return false;
-    if (bbox_node && bbox_node->type != 'N')
-        log_error("JSON module blackbox attribute value is not a number\n");
-    if (bbox_node && bbox_node->data_number == 0)
-        return false;
-    if (wbox_node && wbox_node->type != 'N')
-        log_error("JSON module whitebox attribute value is not a number\n");
-    if (wbox_node && wbox_node->data_number == 0)
-        return false;
     return true;
 }
 
