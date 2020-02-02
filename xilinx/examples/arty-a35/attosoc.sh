@@ -7,4 +7,4 @@ yosys -p "synth_xilinx -flatten -nowidelut -abc9 -arch xc7 -top top; write_json 
 source "${XRAY_DIR}/utils/environment.sh"
 
 "${XRAY_UTILS_DIR}/fasm2frames.py" --db-root "${XRAY_DATABASE_DIR}/artix7" --part xc7a35tcsg324-1 attosoc.fasm > attosoc.frames
-"${XRAY_TOOLS_DIR}/xc7frames2bit" --part_file "${XRAY_DATABASE_DIR}/artix7/xc7a35tcsg324-1.yaml" --part_name xc7a35tcsg324-1 --frm_file attosoc.frames --output_file attosoc.bit
+"${XRAY_TOOLS_DIR}/xc7frames2bit" --part_file "${XRAY_DATABASE_DIR}/artix7/xc7a35tcsg324-1/part.yaml" --part_name xc7a35tcsg324-1 --frm_file attosoc.frames --output_file attosoc.bit
