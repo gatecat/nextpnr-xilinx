@@ -236,6 +236,9 @@ struct XC7Packer : public XilinxPacker
 
     // BRAM
     void pack_bram();
+
+    // DSP
+    void pack_dsps();
 };
 
 NEXTPNR_NAMESPACE_END
