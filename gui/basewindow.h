@@ -56,6 +56,7 @@ class BaseMainWindow : public QMainWindow
   protected:
     void createMenusAndBars();
     void disableActions();
+    void enableDisableDecals();
 
     virtual void onDisableActions(){};
     virtual void onUpdateActions(){};
@@ -81,6 +82,9 @@ class BaseMainWindow : public QMainWindow
     void taskCanceled();
     void taskStarted();
     void taskPaused();
+
+    void screenshot();
+    void saveMovie();
 
   Q_SIGNALS:
     void contextChanged(Context *ctx);
@@ -122,6 +126,14 @@ class BaseMainWindow : public QMainWindow
     QAction *actionPlay;
     QAction *actionPause;
     QAction *actionStop;
+
+    QAction *actionDisplayBel;
+    QAction *actionDisplayWire;
+    QAction *actionDisplayPip;
+    QAction *actionDisplayGroups;
+
+    QAction *actionScreenshot;
+    QAction *actionMovie;
 };
 
 NEXTPNR_NAMESPACE_END

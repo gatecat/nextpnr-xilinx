@@ -153,4 +153,14 @@ void rename_port(Context *ctx, CellInfo *cell, IdString old_name, IdString new_n
     cell->ports[new_name] = pi;
 }
 
+void rename_net(Context *ctx, NetInfo *net, IdString new_name)
+{
+    if (net == nullptr)
+        return;
+    NPNR_ASSERT(!ctx->nets.count(new_name));
+    std::swap(ctx->nets[net->name], ctx->nets[new_name]);
+    ctx->nets.erase(net->name);
+    net->name = new_name;
+}
+
 NEXTPNR_NAMESPACE_END

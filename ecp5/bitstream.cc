@@ -178,7 +178,7 @@ static std::string get_pio_tile(Context *ctx, BelId bel)
 {
     static const std::set<std::string> pioabcd_l = {"PICL1", "PICL1_DQS0", "PICL1_DQS3"};
     static const std::set<std::string> pioabcd_r = {"PICR1", "PICR1_DQS0", "PICR1_DQS3"};
-    static const std::set<std::string> pioa_b = {"PICB0", "EFB0_PICB0", "EFB2_PICB0"};
+    static const std::set<std::string> pioa_b = {"PICB0", "EFB0_PICB0", "EFB2_PICB0", "SPICB0"};
     static const std::set<std::string> piob_b = {"PICB1", "EFB1_PICB1", "EFB3_PICB1"};
 
     std::string pio_name = ctx->locInfo(bel)->bel_data[bel.index].name.get();
@@ -215,7 +215,7 @@ static std::string get_pic_tile(Context *ctx, BelId bel)
     static const std::set<std::string> picab_r = {"PICR0", "PICR0_DQS2"};
     static const std::set<std::string> piccd_r = {"PICR2", "PICR2_DQS1", "MIB_CIB_LR_A"};
 
-    static const std::set<std::string> pica_b = {"PICB0", "EFB0_PICB0", "EFB2_PICB0"};
+    static const std::set<std::string> pica_b = {"PICB0", "EFB0_PICB0", "EFB2_PICB0", "SPICB0"};
     static const std::set<std::string> picb_b = {"PICB1", "EFB1_PICB1", "EFB3_PICB1"};
 
     std::string pio_name = ctx->locInfo(bel)->bel_data[bel.index].name.get();
@@ -254,6 +254,18 @@ static std::string get_pic_tile(Context *ctx, BelId bel)
     } else {
         NPNR_ASSERT_FALSE("bad PIO location");
     }
+}
+
+// Get the complement PIC and PIO tiles for a pseudo differential IO
+static std::string get_comp_pio_tile(Context *ctx, BelId bel)
+{
+    NPNR_ASSERT(bel.location.y == 0);
+    return ctx->getTileByTypeAndLocation(0, bel.location.x + 1, "PIOT1");
+}
+static std::string get_comp_pic_tile(Context *ctx, BelId bel)
+{
+    NPNR_ASSERT(bel.location.y == 0);
+    return ctx->getTileByTypeAndLocation(1, bel.location.x + 1, "PICT1");
 }
 
 // Get the list of tiles corresponding to a blockram
@@ -600,6 +612,8 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
         }
     }
 
+    cc.metadata.push_back("Part: " + ctx->getFullChipName());
+
     // Clear out DCU tieoffs in base config if DCU used
     for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
@@ -757,6 +771,10 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
                                      str_or_default(ci->params, ctx->id("REG0_REGSET"), "RESET"));
             cc.tiles[tname].add_enum(slice + ".REG1.REGSET",
                                      str_or_default(ci->params, ctx->id("REG1_REGSET"), "RESET"));
+            cc.tiles[tname].add_enum(slice + ".REG0.LSRMODE",
+                                     str_or_default(ci->params, ctx->id("REG0_LSRMODE"), "LSR"));
+            cc.tiles[tname].add_enum(slice + ".REG1.LSRMODE",
+                                     str_or_default(ci->params, ctx->id("REG1_LSRMODE"), "LSR"));
             cc.tiles[tname].add_enum(slice + ".CEMUX", str_or_default(ci->params, ctx->id("CEMUX"), "1"));
 
             if (ci->sliceInfo.using_dff) {
@@ -823,18 +841,29 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             cc.tiles[pio_tile].add_enum(pio + ".BASE_TYPE", dir + "_" + iotype);
             cc.tiles[pic_tile].add_enum(pio + ".BASE_TYPE", dir + "_" + iotype);
             if (is_differential(ioType_from_str(iotype))) {
-                // Explicitly disable other pair
-                std::string other;
-                if (pio == "PIOA")
-                    other = "PIOB";
-                else if (pio == "PIOC")
-                    other = "PIOD";
-                else
-                    log_error("cannot place differential IO at location %s\n", pio.c_str());
-                // cc.tiles[pio_tile].add_enum(other + ".BASE_TYPE", "_NONE_");
-                // cc.tiles[pic_tile].add_enum(other + ".BASE_TYPE", "_NONE_");
-                cc.tiles[pio_tile].add_enum(other + ".PULLMODE", "NONE");
-                cc.tiles[pio_tile].add_enum(pio + ".PULLMODE", "NONE");
+                if (bel.location.y == 0) {
+                    // Pseudo differential top IO
+                    NPNR_ASSERT(dir == "OUTPUT");
+                    NPNR_ASSERT(pio == "PIOA");
+                    std::string cpio_tile = get_comp_pio_tile(ctx, bel);
+                    std::string cpic_tile = get_comp_pic_tile(ctx, bel);
+                    cc.tiles[cpio_tile].add_enum(pio + ".BASE_TYPE", dir + "_" + iotype);
+                    cc.tiles[cpic_tile].add_enum(pio + ".BASE_TYPE", dir + "_" + iotype);
+                } else {
+                    // Explicitly disable other pair
+                    std::string other;
+                    if (pio == "PIOA")
+                        other = "PIOB";
+                    else if (pio == "PIOC")
+                        other = "PIOD";
+                    else
+                        log_error("cannot place differential IO at location %s\n", pio.c_str());
+                    // cc.tiles[pio_tile].add_enum(other + ".BASE_TYPE", "_NONE_");
+                    // cc.tiles[pic_tile].add_enum(other + ".BASE_TYPE", "_NONE_");
+                    cc.tiles[pio_tile].add_enum(other + ".PULLMODE", "NONE");
+                    cc.tiles[pio_tile].add_enum(pio + ".PULLMODE", "NONE");
+                }
+
             } else if (is_referenced(ioType_from_str(iotype))) {
                 cc.tiles[pio_tile].add_enum(pio + ".PULLMODE", "NONE");
             }
@@ -863,6 +892,16 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             if (ci->attrs.count(ctx->id("DIFFRESISTOR")))
                 cc.tiles[pio_tile].add_enum(pio + ".DIFFRESISTOR",
                                             str_or_default(ci->attrs, ctx->id("DIFFRESISTOR"), "OFF"));
+            if (ci->attrs.count(ctx->id("DRIVE"))) {
+                static bool drive_3v3_warning_done = false;
+                if (iotype == "LVCMOS33") {
+                    cc.tiles[pio_tile].add_enum(pio + ".DRIVE", str_or_default(ci->attrs, ctx->id("DRIVE"), "8"));
+                } else {
+                    if (!drive_3v3_warning_done)
+                        log_warning("Trellis limitation: DRIVE can only be set on 3V3 IO pins.\n");
+                    drive_3v3_warning_done = true;
+                }
+            }
             if (ci->attrs.count(ctx->id("TERMINATION"))) {
                 auto vccio = get_vccio(ioType_from_str(iotype));
                 switch (vccio) {
@@ -886,31 +925,69 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             std::string datamux_oddr = str_or_default(ci->params, ctx->id("DATAMUX_ODDR"), "PADDO");
             if (datamux_oddr != "PADDO")
                 cc.tiles[pic_tile].add_enum(pio + ".DATAMUX_ODDR", datamux_oddr);
+            std::string datamux_oreg = str_or_default(ci->params, ctx->id("DATAMUX_OREG"), "PADDO");
+            if (datamux_oreg != "PADDO")
+                cc.tiles[pic_tile].add_enum(pio + ".DATAMUX_OREG", datamux_oreg);
             std::string datamux_mddr = str_or_default(ci->params, ctx->id("DATAMUX_MDDR"), "PADDO");
             if (datamux_mddr != "PADDO")
                 cc.tiles[pic_tile].add_enum(pio + ".DATAMUX_MDDR", datamux_mddr);
+            std::string trimux_tsreg = str_or_default(ci->params, ctx->id("TRIMUX_TSREG"), "PADDT");
+            if (trimux_tsreg != "PADDT")
+                cc.tiles[pic_tile].add_enum(pio + ".TRIMUX_TSREG", trimux_tsreg);
         } else if (ci->type == ctx->id("DCCA")) {
-            // Nothing to do
+            const NetInfo *cen = get_net_or_empty(ci, ctx->id("CE"));
+            if (cen != nullptr) {
+                std::string belname = ctx->locInfo(bel)->bel_data[bel.index].name.get();
+                Loc loc = ctx->getBelLocation(bel);
+                TileGroup tg;
+                switch (belname[0]) {
+                case 'B':
+                    tg.tiles.push_back(
+                            ctx->getTileByTypeAndLocation(loc.y, loc.x, std::set<std::string>{"BMID_0H", "BMID_0V"}));
+                    tg.tiles.push_back(ctx->getTileByTypeAndLocation(loc.y, loc.x + 1,
+                                                                     std::set<std::string>{"BMID_2", "BMID_2V"}));
+                    break;
+                case 'T':
+                    tg.tiles.push_back(ctx->getTileByTypeAndLocation(loc.y, loc.x, "TMID_0"));
+                    tg.tiles.push_back(ctx->getTileByTypeAndLocation(loc.y, loc.x + 1, "TMID_1"));
+                    break;
+                case 'L':
+                    tg.tiles.push_back(ctx->getTileByTypeAndLocation(loc.y, loc.x, "LMID_0"));
+                    break;
+                case 'R':
+                    tg.tiles.push_back(ctx->getTileByTypeAndLocation(loc.y, loc.x, "RMID_0"));
+                    break;
+                default:
+                    NPNR_ASSERT_FALSE("bad DCC for gating");
+                    break;
+                }
+                tg.config.add_enum(std::string("DCC_") + belname[0] + belname.substr(4) + ".MODE", "DCCA");
+                cc.tilegroups.push_back(tg);
+            }
         } else if (ci->type == ctx->id("DP16KD")) {
             TileGroup tg;
             Loc loc = ctx->getBelLocation(ci->bel);
             tg.tiles = get_bram_tiles(ctx, ci->bel);
             std::string ebr = "EBR" + std::to_string(loc.z);
 
-            tg.config.add_enum(ebr + ".MODE", "DP16KD");
+            if (ci->ramInfo.is_pdp) {
+                tg.config.add_enum(ebr + ".MODE", "PDPW16KD");
+                tg.config.add_enum(ebr + ".PDPW16KD.DATA_WIDTH_R",
+                                   intstr_or_default(ci->params, ctx->id("DATA_WIDTH_B"), "36"));
+            } else {
+                tg.config.add_enum(ebr + ".MODE", "DP16KD");
+                tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_A",
+                                   intstr_or_default(ci->params, ctx->id("DATA_WIDTH_A"), "18"));
+                tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_B",
+                                   intstr_or_default(ci->params, ctx->id("DATA_WIDTH_B"), "18"));
+                tg.config.add_enum(ebr + ".DP16KD.WRITEMODE_A",
+                                   str_or_default(ci->params, ctx->id("WRITEMODE_A"), "NORMAL"));
+                tg.config.add_enum(ebr + ".DP16KD.WRITEMODE_B",
+                                   str_or_default(ci->params, ctx->id("WRITEMODE_B"), "NORMAL"));
+            }
 
             auto csd_a = str_to_bitvector(str_or_default(ci->params, ctx->id("CSDECODE_A"), "0b000"), 3),
                  csd_b = str_to_bitvector(str_or_default(ci->params, ctx->id("CSDECODE_B"), "0b000"), 3);
-
-            tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_A",
-                               intstr_or_default(ci->params, ctx->id("DATA_WIDTH_A"), "18"));
-            tg.config.add_enum(ebr + ".DP16KD.DATA_WIDTH_B",
-                               intstr_or_default(ci->params, ctx->id("DATA_WIDTH_B"), "18"));
-
-            tg.config.add_enum(ebr + ".DP16KD.WRITEMODE_A",
-                               str_or_default(ci->params, ctx->id("WRITEMODE_A"), "NORMAL"));
-            tg.config.add_enum(ebr + ".DP16KD.WRITEMODE_B",
-                               str_or_default(ci->params, ctx->id("WRITEMODE_B"), "NORMAL"));
 
             tg.config.add_enum(ebr + ".REGMODE_A", str_or_default(ci->params, ctx->id("REGMODE_A"), "NOREG"));
             tg.config.add_enum(ebr + ".REGMODE_B", str_or_default(ci->params, ctx->id("REGMODE_B"), "NOREG"));
@@ -925,6 +1002,8 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
 
             // Tie signals as appropriate
             for (auto port : ci->ports) {
+                if (ci->ramInfo.is_pdp && (port.first == id_WEA || port.first == id_WEB || port.first == id_ADA4))
+                    continue;
                 if (port.second.net == nullptr && port.second.type == PORT_IN) {
                     if (port.first == id_CLKA || port.first == id_CLKB || port.first == id_WEA ||
                         port.first == id_WEB || port.first == id_RSTA || port.first == id_RSTB) {
@@ -957,7 +1036,7 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             }
 
             // Invert CSDECODE bits to emulate inversion muxes on CSA/CSB signals
-            for (auto port : {std::make_pair("CSA", std::ref(csd_a)), std::make_pair("CSB", std::ref(csd_b))}) {
+            for (auto &port : {std::make_pair("CSA", std::ref(csd_a)), std::make_pair("CSB", std::ref(csd_b))}) {
                 for (int bit = 0; bit < 3; bit++) {
                     std::string sig = port.first + std::to_string(bit);
                     if (str_or_default(ci->params, ctx->id(sig + "MUX"), sig) == "INV")
@@ -970,9 +1049,10 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
 
             tg.config.add_enum(ebr + ".RSTAMUX", str_or_default(ci->params, ctx->id("RSTAMUX"), "RSTA"));
             tg.config.add_enum(ebr + ".RSTBMUX", str_or_default(ci->params, ctx->id("RSTBMUX"), "RSTB"));
-            tg.config.add_enum(ebr + ".WEAMUX", str_or_default(ci->params, ctx->id("WEAMUX"), "WEA"));
-            tg.config.add_enum(ebr + ".WEBMUX", str_or_default(ci->params, ctx->id("WEBMUX"), "WEB"));
-
+            if (!ci->ramInfo.is_pdp) {
+                tg.config.add_enum(ebr + ".WEAMUX", str_or_default(ci->params, ctx->id("WEAMUX"), "WEA"));
+                tg.config.add_enum(ebr + ".WEBMUX", str_or_default(ci->params, ctx->id("WEBMUX"), "WEB"));
+            }
             tg.config.add_enum(ebr + ".CEAMUX", str_or_default(ci->params, ctx->id("CEAMUX"), "CEA"));
             tg.config.add_enum(ebr + ".CEBMUX", str_or_default(ci->params, ctx->id("CEBMUX"), "CEB"));
             tg.config.add_enum(ebr + ".OCEAMUX", str_or_default(ci->params, ctx->id("OCEAMUX"), "OCEA"));
@@ -1240,6 +1320,9 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
                 else
                     cc.tiles[pic_tile].add_enum(prim + "." + param.first.str(ctx), param.second.as_string());
             }
+            if (get_net_or_empty(ci, id_LOADN) != nullptr) {
+                cc.tiles[pic_tile].add_enum(prim + ".LOADNMUX", "LOADN");
+            }
         } else if (ci->type == id_DCUA) {
             TileGroup tg;
             tg.tiles = get_dcu_tiles(ctx, ci->bel);
@@ -1277,7 +1360,7 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             cc.tiles[ctx->getTileByType("EFB3_PICB1")].add_enum("CCLK.MODE", "USRMCLK");
         } else if (ci->type == id_GSR) {
             cc.tiles[ctx->getTileByType("EFB0_PICB0")].add_enum(
-                    "GSR.GSRMODE", str_or_default(ci->params, ctx->id("MODE"), "ACTIVE_HIGH"));
+                    "GSR.GSRMODE", str_or_default(ci->params, ctx->id("MODE"), "ACTIVE_LOW"));
             cc.tiles[ctx->getTileByType("VIQ_BUF")].add_enum("GSR.SYNCMODE",
                                                              str_or_default(ci->params, ctx->id("SYNCMODE"), "ASYNC"));
         } else if (ci->type == id_JTAGG) {
@@ -1330,12 +1413,20 @@ void write_bitstream(Context *ctx, std::string base_config_file, std::string tex
             std::string tile = ctx->getTileByType(std::string("ECLK_") + (r ? "R" : "L"));
             if (get_net_or_empty(ci, id_STOP) != nullptr)
                 cc.tiles[tile].add_enum(eclksync + ".MODE", "ECLKSYNCB");
+        } else if (ci->type == id_ECLKBRIDGECS) {
+            Loc loc = ctx->getBelLocation(ci->bel);
+            bool r = loc.x > 5;
+            std::string eclkb = ctx->locInfo(bel)->bel_data[bel.index].name.get();
+            std::string tile = ctx->getTileByType(std::string("ECLK_") + (r ? "R" : "L"));
+            if (get_net_or_empty(ci, id_STOP) != nullptr)
+                cc.tiles[tile].add_enum(eclkb + ".MODE", "ECLKBRIDGECS");
         } else if (ci->type == id_DDRDLL) {
             Loc loc = ctx->getBelLocation(ci->bel);
             bool u = loc.y<15, r = loc.x> 15;
             std::string tiletype = fmt_str("DDRDLL_" << (u ? 'U' : 'L') << (r ? 'R' : 'L'));
-            if (ctx->args.type == ArchArgs::LFE5U_25F || ctx->args.type == ArchArgs::LFE5UM_25F ||
-                ctx->args.type == ArchArgs::LFE5UM5G_25F)
+            if ((ctx->args.type == ArchArgs::LFE5U_25F || ctx->args.type == ArchArgs::LFE5UM_25F ||
+                 ctx->args.type == ArchArgs::LFE5UM5G_25F) &&
+                u)
                 tiletype += "A";
             std::string tile = ctx->getTileByType(tiletype);
             cc.tiles[tile].add_enum("DDRDLL.MODE", "DDRDLLA");

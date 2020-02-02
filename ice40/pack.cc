@@ -459,7 +459,6 @@ static void pack_io(Context *ctx)
 {
     std::unordered_set<IdString> packed_cells;
     std::unordered_set<IdString> delete_nets;
-
     std::vector<std::unique_ptr<CellInfo>> new_cells;
     log_info("Packing IOs..\n");
 
@@ -478,8 +477,7 @@ static void pack_io(Context *ctx)
                     rgb = net->driver.cell;
             }
             if (sb != nullptr) {
-                // Trivial case, SB_IO used. Just destroy the net and the
-                // iobuf
+                // Trivial case, SB_IO used. Just destroy the iobuf
                 log_info("%s feeds SB_IO %s, removing %s %s.\n", ci->name.c_str(ctx), sb->name.c_str(ctx),
                          ci->type.c_str(ctx), ci->name.c_str(ctx));
                 NetInfo *net = sb->ports.at(ctx->id("PACKAGE_PIN")).net;
@@ -490,13 +488,23 @@ static void pack_io(Context *ctx)
                               sb->type.c_str(ctx), sb->name.c_str(ctx));
 
                 if (net != nullptr) {
-                    delete_nets.insert(net->name);
-                    sb->ports.at(ctx->id("PACKAGE_PIN")).net = nullptr;
-                }
-                if (ci->type == ctx->id("$nextpnr_iobuf")) {
-                    NetInfo *net2 = ci->ports.at(ctx->id("I")).net;
-                    if (net2 != nullptr) {
-                        delete_nets.insert(net2->name);
+                    if (net->clkconstr != nullptr) {
+                        if (sb->ports.count(id_D_IN_0)) {
+                            NetInfo *din0_net = sb->ports.at(id_D_IN_0).net;
+                            if (din0_net != nullptr && !din0_net->clkconstr) {
+                                // Copy clock constraint from IO pad to input buffer output
+                                din0_net->clkconstr =
+                                        std::unique_ptr<ClockConstraint>(new ClockConstraint(*net->clkconstr));
+                            }
+                        }
+                        if (is_sb_gb_io(ctx, sb) && sb->ports.count(id_GLOBAL_BUFFER_OUTPUT)) {
+                            NetInfo *gb_net = sb->ports.at(id_GLOBAL_BUFFER_OUTPUT).net;
+                            if (gb_net != nullptr && !gb_net->clkconstr) {
+                                // Copy clock constraint from IO pad to global buffer output
+                                gb_net->clkconstr =
+                                        std::unique_ptr<ClockConstraint>(new ClockConstraint(*net->clkconstr));
+                            }
+                        }
                     }
                 }
             } else if (rgb != nullptr) {
@@ -513,11 +521,15 @@ static void pack_io(Context *ctx)
                 new_cells.push_back(std::move(ice_cell));
                 sb = new_cells.back().get();
             }
+            for (auto port : ci->ports)
+                disconnect_port(ctx, ci, port.first);
             packed_cells.insert(ci->name);
             std::copy(ci->attrs.begin(), ci->attrs.end(), std::inserter(sb->attrs, sb->attrs.begin()));
         } else if (is_sb_io(ctx, ci) || is_sb_gb_io(ctx, ci)) {
             NetInfo *net = ci->ports.at(ctx->id("PACKAGE_PIN")).net;
-            if ((net != nullptr) && (net->users.size() > 1))
+            if ((net != nullptr) && ((net->users.size() > 2) ||
+                                     (net->driver.cell != nullptr &&
+                                      net->driver.cell->type == ctx->id("$nextpnr_obuf") && net->users.size() > 1)))
                 log_error("PACKAGE_PIN of %s '%s' connected to more than a single top level IO.\n", ci->type.c_str(ctx),
                           ci->name.c_str(ctx));
         }
@@ -1246,7 +1258,21 @@ static void pack_special(Context *ctx)
                         log_error("Invalid PLL output selection '%s'\n", param.second.as_string().c_str());
                     packed->params[pos_map_name.at(param.first)] = pos_map_val.at(param.second.as_string());
                 }
-
+            const std::map<IdString, IdString> delmodes = {
+                    {ctx->id("DELAY_ADJUSTMENT_MODE_FEEDBACK"), ctx->id("DELAY_ADJMODE_FB")},
+                    {ctx->id("DELAY_ADJUSTMENT_MODE_RELATIVE"), ctx->id("DELAY_ADJMODE_REL")},
+            };
+            for (auto delmode : delmodes) {
+                if (ci->params.count(delmode.first)) {
+                    std::string value = str_or_default(ci->params, delmode.first, "");
+                    if (value == "DYNAMIC")
+                        packed->params[delmode.second] = 1;
+                    else if (value == "FIXED")
+                        packed->params[delmode.second] = 0;
+                    else
+                        log_error("Invalid PLL %s selection '%s'\n", delmode.first.c_str(ctx), value.c_str());
+                }
+            }
             auto feedback_path = packed->params[ctx->id("FEEDBACK_PATH")].is_string
                                          ? packed->params[ctx->id("FEEDBACK_PATH")].as_string()
                                          : std::to_string(packed->params[ctx->id("FEEDBACK_PATH")].as_int64());
@@ -1461,6 +1487,7 @@ bool Arch::pack()
             promote_globals(ctx);
         ctx->assignArchInfo();
         constrain_chains(ctx);
+        ctx->fixupHierarchy();
         ctx->assignArchInfo();
         ctx->settings[ctx->id("pack")] = 1;
         archInfoToAttributes();

@@ -84,6 +84,8 @@ NPNR_PACKED_STRUCT(struct PipLocatorPOD {
 
 NPNR_PACKED_STRUCT(struct WireInfoPOD {
     RelPtr<char> name;
+    int32_t type;
+    int32_t tile_wire;
     int32_t num_uphill, num_downhill;
     RelPtr<PipLocatorPOD> pips_uphill, pips_downhill;
 
@@ -194,6 +196,7 @@ NPNR_PACKED_STRUCT(struct ChipInfoPOD {
     int32_t num_tiles;
     int32_t num_location_types;
     int32_t num_packages, num_pios;
+    int32_t const_id_count;
     RelPtr<LocationTypePOD> locations;
     RelPtr<int32_t> location_type;
     RelPtr<GlobalInfoPOD> location_glbinfo;
@@ -491,6 +494,7 @@ struct Arch : BaseCtx
     Arch(ArchArgs args);
 
     std::string getChipName() const;
+    std::string getFullChipName() const;
 
     IdString archId() const { return id("ecp5"); }
     ArchArgs archArgs() const { return args; }
@@ -638,13 +642,15 @@ struct Arch : BaseCtx
         return id(name.str());
     }
 
-    IdString getWireType(WireId wire) const { return IdString(); }
-
-    std::vector<std::pair<IdString, std::string>> getWireAttrs(WireId) const
+    IdString getWireType(WireId wire) const
     {
-        std::vector<std::pair<IdString, std::string>> ret;
-        return ret;
+        NPNR_ASSERT(wire != WireId());
+        IdString id;
+        id.index = locInfo(wire)->wire_data[wire.index].type;
+        return id;
     }
+
+    std::vector<std::pair<IdString, std::string>> getWireAttrs(WireId) const;
 
     uint32_t getWireChecksum(WireId wire) const { return wire.index; }
 
@@ -655,6 +661,7 @@ struct Arch : BaseCtx
         wire_to_net[wire] = net;
         net->wires[wire].pip = PipId();
         net->wires[wire].strength = strength;
+        refreshUiWire(wire);
     }
 
     void unbindWire(WireId wire)
@@ -674,6 +681,7 @@ struct Arch : BaseCtx
 
         net_wires.erase(it);
         wire_to_net[wire] = nullptr;
+        refreshUiWire(wire);
     }
 
     bool checkWireAvail(WireId wire) const
@@ -929,13 +937,13 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
 
-    GroupId getGroupByName(IdString name) const { return GroupId(); }
-    IdString getGroupName(GroupId group) const { return IdString(); }
-    std::vector<GroupId> getGroups() const { return std::vector<GroupId>(); }
-    std::vector<BelId> getGroupBels(GroupId group) const { return std::vector<BelId>(); }
-    std::vector<WireId> getGroupWires(GroupId group) const { return std::vector<WireId>(); }
-    std::vector<PipId> getGroupPips(GroupId group) const { return std::vector<PipId>(); }
-    std::vector<GroupId> getGroupGroups(GroupId group) const { return std::vector<GroupId>(); }
+    GroupId getGroupByName(IdString name) const;
+    IdString getGroupName(GroupId group) const;
+    std::vector<GroupId> getGroups() const;
+    std::vector<BelId> getGroupBels(GroupId group) const;
+    std::vector<WireId> getGroupWires(GroupId group) const;
+    std::vector<PipId> getGroupPips(GroupId group) const;
+    std::vector<GroupId> getGroupGroups(GroupId group) const;
 
     // -------------------------------------------------
 
@@ -1027,7 +1035,7 @@ struct Arch : BaseCtx
                 if (chip_info->tiletype_names[tileloc.tile_names[j].type_idx].get() == type)
                     return tileloc.tile_names[j].name.get();
         }
-        NPNR_ASSERT_FALSE_STR("no with type " + type);
+        NPNR_ASSERT_FALSE_STR("no tile with type " + type);
     }
 
     GlobalInfoPOD globalInfoAtLoc(Location loc);
@@ -1043,6 +1051,15 @@ struct Arch : BaseCtx
     IdString id_clk, id_lsr;
     IdString id_clkmux, id_lsrmux;
     IdString id_srmode, id_mode;
+
+    // Special case for delay estimates due to its physical location
+    // being far from the logical location of its primitive
+    WireId gsrclk_wire;
+    // Improves directivity of routing to DSP inputs, avoids issues
+    // with different routes to the same physical reset wire causing
+    // conflicts and slow routing
+    std::unordered_map<WireId, std::pair<int, int>> wire_loc_overrides;
+    void setupWireLocations();
 
     mutable std::unordered_map<DelayKey, std::pair<bool, DelayInfo>> celldelay_cache;
 

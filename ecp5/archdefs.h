@@ -52,17 +52,23 @@ struct DelayInfo
 
 // -----------------------------------------------------------------------
 
+// https://bugreports.qt.io/browse/QTBUG-80789
+
+#ifndef Q_MOC_RUN
 enum ConstIds
 {
     ID_NONE
 #define X(t) , ID_##t
 #include "constids.inc"
 #undef X
+    ,
+    DB_CONST_ID_COUNT
 };
 
 #define X(t) static constexpr auto id_##t = IdString(ID_##t);
 #include "constids.inc"
 #undef X
+#endif
 
 NPNR_PACKED_STRUCT(struct LocationPOD { int16_t x, y; });
 
@@ -122,10 +128,15 @@ struct PipId
 
 struct GroupId
 {
-    int32_t index = -1;
+    enum : int8_t
+    {
+        TYPE_NONE,
+        TYPE_SWITCHBOX
+    } type = TYPE_NONE;
+    Location location;
 
-    bool operator==(const GroupId &other) const { return index == other.index; }
-    bool operator!=(const GroupId &other) const { return index != other.index; }
+    bool operator==(const GroupId &other) const { return (type == other.type) && (location == other.location); }
+    bool operator!=(const GroupId &other) const { return (type != other.type) || (location != other.location); }
 };
 
 struct DecalId
@@ -133,8 +144,11 @@ struct DecalId
     enum
     {
         TYPE_NONE,
-        TYPE_BEL
-    } type;
+        TYPE_BEL,
+        TYPE_WIRE,
+        TYPE_PIP,
+        TYPE_GROUP
+    } type = TYPE_NONE;
     Location location;
     uint32_t z = 0;
     bool active = false;
@@ -163,6 +177,10 @@ struct ArchCellInfo
         IdString clk_sig, lsr_sig, clkmux, lsrmux, srmode;
         int sd0, sd1;
     } sliceInfo;
+    struct
+    {
+        bool is_pdp;
+    } ramInfo;
 };
 
 NEXTPNR_NAMESPACE_END
@@ -212,7 +230,10 @@ template <> struct hash<NEXTPNR_NAMESPACE_PREFIX GroupId>
 {
     std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX GroupId &group) const noexcept
     {
-        return std::hash<int>()(group.index);
+        std::size_t seed = 0;
+        boost::hash_combine(seed, hash<int>()(group.type));
+        boost::hash_combine(seed, hash<NEXTPNR_NAMESPACE_PREFIX Location>()(group.location));
+        return seed;
     }
 };
 

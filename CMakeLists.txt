@@ -12,11 +12,26 @@ option(STATIC_BUILD "Create static build" OFF)
 option(EXTERNAL_CHIPDB "Create build with pre-built chipdb binaries" OFF)
 option(SERIALIZE_CHIPDB "Never build chipdb in parallel to reduce peak memory use" ON)
 
+set(Boost_NO_BOOST_CMAKE ON)
+
 set(link_param "")
 if (STATIC_BUILD)
     set(Boost_USE_STATIC_LIBS   ON)
-    if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows" AND MSVC)
+        set(CMAKE_CXX_FLAGS_RELEASE "/MT")
+        set(CMAKE_CXX_FLAGS_DEBUG "/MTd")
+        if (BUILD_PYTHON)
+            add_definitions(-DBOOST_PYTHON_STATIC_LIB)
+        endif()
+    else()
+        set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
         set(link_param "-static")
+        if (BUILD_PYTHON)
+            find_package(ZLIB)
+            find_package(EXPAT)
+            find_package(Threads)
+        endif()
     endif()
 endif()
 
@@ -82,7 +97,7 @@ endif()
 find_package(Sanitizers)
 
 # List of Boost libraries to include
-set(boost_libs filesystem thread program_options iostreams)
+set(boost_libs filesystem thread program_options iostreams system)
 
 if (BUILD_GUI AND NOT BUILD_PYTHON)
     message(FATAL_ERROR "GUI requires Python to build")
@@ -106,13 +121,17 @@ else()
     add_definitions("-DNO_GUI")
 endif()
 
-# Get the latest abbreviated commit hash of the working branch
-execute_process(
-  COMMAND git log -1 --format=%h
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  OUTPUT_VARIABLE GIT_COMMIT_HASH
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
+if (NOT DEFINED CURRENT_GIT_VERSION)
+    # Get the latest abbreviated commit hash of the working branch
+    # if not already defined outside (e.g. by package manager when building
+    # outside of git repository)
+    execute_process(
+      COMMAND git describe --tags --always
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      OUTPUT_VARIABLE CURRENT_GIT_VERSION
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+endif()
 
 if (BUILD_TESTS)
     add_subdirectory(3rdparty/googletest/googletest ${CMAKE_CURRENT_BINARY_DIR}/generated/3rdparty/googletest EXCLUDE_FROM_ALL)
@@ -122,8 +141,6 @@ endif()
 if (BUILD_GUI)
     add_subdirectory(3rdparty/QtPropertyBrowser ${CMAKE_CURRENT_BINARY_DIR}/generated/3rdparty/QtPropertyBrowser EXCLUDE_FROM_ALL)
 endif()
-
-add_definitions("-DGIT_COMMIT_HASH=${GIT_COMMIT_HASH}")
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/common/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/version.h
@@ -136,46 +153,35 @@ if (BUILD_PYTHON)
     # Original source: https://github.com/BVLC/caffe/blob/master/cmake/Dependencies.cmake#L148
     set(version ${PYTHONLIBS_VERSION_STRING})
 
-    STRING(REGEX REPLACE "[^0-9]" "" boost_py_version ${version})
+    STRING(REGEX REPLACE "[^0-9]" "" boost_py_version "${version}")
     find_package(Boost QUIET COMPONENTS "python-py${boost_py_version}" ${boost_libs})
     set(Boost_PYTHON_FOUND ${Boost_PYTHON-PY${boost_py_version}_FOUND})
 
     while (NOT "${version}" STREQUAL "" AND NOT Boost_PYTHON_FOUND)
-        STRING(REGEX REPLACE "([0-9.]+).[0-9]+" "\\1" version ${version})
+        STRING(REGEX REPLACE "([0-9.]+).[0-9]+" "\\1" version "${version}")
 
-        STRING(REGEX REPLACE "[^0-9]" "" boost_py_version ${version})
+        STRING(REGEX REPLACE "[^0-9]" "" boost_py_version "${version}")
         find_package(Boost QUIET COMPONENTS "python-py${boost_py_version}" ${boost_libs})
         set(Boost_PYTHON_FOUND ${Boost_PYTHON-PY${boost_py_version}_FOUND})
 
-        STRING(REGEX MATCHALL "([0-9.]+).[0-9]+" has_more_version ${version})
+        STRING(REGEX MATCHALL "([0-9.]+).[0-9]+" has_more_version "${version}")
         if ("${has_more_version}" STREQUAL "")
             break()
         endif ()
     endwhile ()
 
     if (NOT Boost_PYTHON_FOUND)
-        find_package(Boost QUIET COMPONENTS python3 ${boost_libs})
-        if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
-            set(Boost_PYTHON_FOUND TRUE)
-        endif ()
+        foreach (PyVer 3 36 37 38 39)
+            find_package(Boost QUIET COMPONENTS python${PyVer} ${boost_libs})
+            if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
+                set(Boost_PYTHON_FOUND TRUE)
+                break()
+            endif ()
+        endforeach ()
     endif ()
 
     if (NOT Boost_PYTHON_FOUND)
-        find_package(Boost QUIET COMPONENTS python36 ${boost_libs})
-        if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
-            set(Boost_PYTHON_FOUND TRUE)
-        endif ()
-    endif ()
-
-    if (NOT Boost_PYTHON_FOUND)
-        find_package(Boost QUIET COMPONENTS python37 ${boost_libs})
-        if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
-            set(Boost_PYTHON_FOUND TRUE)
-        endif ()
-    endif ()
-
-    if (NOT Boost_PYTHON_FOUND)
-        STRING(REGEX REPLACE "([0-9]+\\.[0-9]+).*" "\\1" gentoo_version ${PYTHONLIBS_VERSION_STRING})
+        STRING(REGEX REPLACE "([0-9]+\\.[0-9]+).*" "\\1" gentoo_version "${PYTHONLIBS_VERSION_STRING}")
         find_package(Boost QUIET COMPONENTS python-${gentoo_version} ${boost_libs})
         if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
             set(Boost_PYTHON_FOUND TRUE)
@@ -187,7 +193,7 @@ if (BUILD_PYTHON)
     endif ()
 endif()
 
-include_directories(common/ json/ ${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+include_directories(common/ json/ frontend/ 3rdparty/json11/ ${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
 
 if(BUILD_HEAP)
     find_package (Eigen3 REQUIRED NO_MODULE)
@@ -198,7 +204,10 @@ endif()
 
 aux_source_directory(common/ COMMON_SRC_FILES)
 aux_source_directory(json/ JSON_PARSER_FILES)
-set(COMMON_FILES ${COMMON_SRC_FILES} ${JSON_PARSER_FILES})
+aux_source_directory(3rdparty/json11 EXT_JSON11_FILES)
+aux_source_directory(frontend/ FRONTEND_FILES)
+
+set(COMMON_FILES ${COMMON_SRC_FILES} ${EXT_JSON11_FILES} ${JSON_PARSER_FILES} ${FRONTEND_FILES})
 set(CMAKE_BUILD_TYPE Release)
 
 if(MINGW)
@@ -271,6 +280,14 @@ foreach (family ${ARCH})
         endif()
         if (BUILD_PYTHON)
             target_link_libraries(${target} LINK_PUBLIC ${PYTHON_LIBRARIES})
+            if (STATIC_BUILD)
+                target_link_libraries(${target} LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${ZLIB_LIBRARIES} ${EXPAT_LIBRARIES})
+                if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+                elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows" AND MSVC)
+                else()
+                    target_link_libraries(${target} LINK_PUBLIC -lutil)
+                endif()
+            endif()
         endif()
     endforeach (target)
 endforeach (family)

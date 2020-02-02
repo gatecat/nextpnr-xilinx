@@ -112,18 +112,6 @@ static void pack_nonlut_ffs(Context *ctx)
     }
 }
 
-static bool net_is_constant(const Context *ctx, NetInfo *net, bool &value)
-{
-    if (net == nullptr)
-        return false;
-    if (net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET")) {
-        value = (net->name == ctx->id("$PACKER_VCC_NET"));
-        return true;
-    } else {
-        return false;
-    }
-}
-
 // Merge a net into a constant net
 static void set_net_constant(const Context *ctx, NetInfo *orig, NetInfo *constnet, bool constval)
 {
@@ -150,20 +138,21 @@ static void pack_constants(Context *ctx)
     log_info("Packing constants..\n");
 
     std::unique_ptr<CellInfo> gnd_cell = create_generic_cell(ctx, ctx->id("GENERIC_SLICE"), "$PACKER_GND");
-    gnd_cell->params[ctx->id("INIT")] = 0;
+    gnd_cell->params[ctx->id("INIT")] = Property(0, 1 << ctx->args.K);
     std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
     gnd_net->name = ctx->id("$PACKER_GND_NET");
     gnd_net->driver.cell = gnd_cell.get();
-    gnd_net->driver.port = ctx->id("Q");
-    gnd_cell->ports.at(ctx->id("Q")).net = gnd_net.get();
+    gnd_net->driver.port = ctx->id("F");
+    gnd_cell->ports.at(ctx->id("F")).net = gnd_net.get();
 
     std::unique_ptr<CellInfo> vcc_cell = create_generic_cell(ctx, ctx->id("GENERIC_SLICE"), "$PACKER_VCC");
-    vcc_cell->params[ctx->id("INIT")] = 1;
+    // Fill with 1s
+    vcc_cell->params[ctx->id("INIT")] = Property(Property::S1).extract(0, (1 << ctx->args.K), Property::S1);
     std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
     vcc_net->name = ctx->id("$PACKER_VCC_NET");
     vcc_net->driver.cell = vcc_cell.get();
-    vcc_net->driver.port = ctx->id("Q");
-    vcc_cell->ports.at(ctx->id("Q")).net = vcc_net.get();
+    vcc_net->driver.port = ctx->id("F");
+    vcc_cell->ports.at(ctx->id("F")).net = vcc_net.get();
 
     std::vector<IdString> dead_nets;
 
@@ -249,6 +238,10 @@ static void pack_io(Context *ctx)
                         delete_nets.insert(net2->name);
                     }
                 }
+            } else if (bool_or_default(ctx->settings, ctx->id("disable_iobs"))) {
+                // No IO buffer insertion; just remove nextpnr_[io]buf
+                for (auto &p : ci->ports)
+                    disconnect_port(ctx, ci, p.first);
             } else {
                 // Create a GENERIC_IOB buffer
                 std::unique_ptr<CellInfo> ice_cell =

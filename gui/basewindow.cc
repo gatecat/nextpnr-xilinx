@@ -23,12 +23,13 @@
 #include <QFileDialog>
 #include <QGridLayout>
 #include <QIcon>
+#include <QImageWriter>
 #include <QInputDialog>
+#include <QMessageBox>
 #include <QSplitter>
 #include <fstream>
 #include "designwidget.h"
 #include "fpgaviewwidget.h"
-#include "jsonparse.h"
 #include "jsonwrite.h"
 #include "log.h"
 #include "mainwindow.h"
@@ -225,6 +226,50 @@ void BaseMainWindow::createMenusAndBars()
     actionZoomOutbound->setIcon(QIcon(":/icons/resources/shape_square.png"));
     connect(actionZoomOutbound, &QAction::triggered, fpgaView, &FPGAViewWidget::zoomOutbound);
 
+    actionDisplayBel = new QAction("Enable/Disable Bels", this);
+    actionDisplayBel->setIcon(QIcon(":/icons/resources/bel.png"));
+    actionDisplayBel->setCheckable(true);
+    actionDisplayBel->setChecked(true);
+    connect(actionDisplayBel, &QAction::triggered, this, &BaseMainWindow::enableDisableDecals);
+
+    actionDisplayWire = new QAction("Enable/Disable Wires", this);
+    actionDisplayWire->setIcon(QIcon(":/icons/resources/wire.png"));
+    actionDisplayWire->setCheckable(true);
+    actionDisplayWire->setChecked(true);
+    connect(actionDisplayWire, &QAction::triggered, this, &BaseMainWindow::enableDisableDecals);
+
+    actionDisplayPip = new QAction("Enable/Disable Pips", this);
+    actionDisplayPip->setIcon(QIcon(":/icons/resources/pip.png"));
+    actionDisplayPip->setCheckable(true);
+#ifdef ARCH_ECP5
+    actionDisplayPip->setChecked(false);
+#else
+    actionDisplayPip->setChecked(true);
+#endif
+    connect(actionDisplayPip, &QAction::triggered, this, &BaseMainWindow::enableDisableDecals);
+
+    actionDisplayGroups = new QAction("Enable/Disable Groups", this);
+    actionDisplayGroups->setIcon(QIcon(":/icons/resources/group.png"));
+    actionDisplayGroups->setCheckable(true);
+    actionDisplayGroups->setChecked(true);
+    connect(actionDisplayGroups, &QAction::triggered, this, &BaseMainWindow::enableDisableDecals);
+
+    actionScreenshot = new QAction("Screenshot", this);
+    actionScreenshot->setIcon(QIcon(":/icons/resources/camera.png"));
+    actionScreenshot->setStatusTip("Taking a screenshot");
+    connect(actionScreenshot, &QAction::triggered, this, &BaseMainWindow::screenshot);
+
+    actionMovie = new QAction("Recording", this);
+    actionMovie->setIcon(QIcon(":/icons/resources/film.png"));
+    actionMovie->setStatusTip("Saving a movie");
+    actionMovie->setCheckable(true);
+    actionMovie->setChecked(false);
+    connect(actionMovie, &QAction::triggered, this, &BaseMainWindow::saveMovie);
+
+    // set initial state
+    fpgaView->enableDisableDecals(actionDisplayBel->isChecked(), actionDisplayWire->isChecked(),
+                                  actionDisplayPip->isChecked(), actionDisplayGroups->isChecked());
+
     // Add main menu
     menuBar = new QMenuBar();
     menuBar->setGeometry(QRect(0, 0, 1024, 27));
@@ -281,6 +326,14 @@ void BaseMainWindow::createMenusAndBars()
     deviceViewToolBar->addAction(actionZoomOut);
     deviceViewToolBar->addAction(actionZoomSelected);
     deviceViewToolBar->addAction(actionZoomOutbound);
+    deviceViewToolBar->addSeparator();
+    deviceViewToolBar->addAction(actionDisplayBel);
+    deviceViewToolBar->addAction(actionDisplayWire);
+    deviceViewToolBar->addAction(actionDisplayPip);
+    deviceViewToolBar->addAction(actionDisplayGroups);
+    deviceViewToolBar->addSeparator();
+    deviceViewToolBar->addAction(actionScreenshot);
+    deviceViewToolBar->addAction(actionMovie);
 
     // Add status bar with progress bar
     statusBar = new QStatusBar();
@@ -291,6 +344,13 @@ void BaseMainWindow::createMenusAndBars()
     progressBar->setValue(0);
     progressBar->setEnabled(false);
     setStatusBar(statusBar);
+}
+
+void BaseMainWindow::enableDisableDecals()
+{
+    fpgaView->enableDisableDecals(actionDisplayBel->isChecked(), actionDisplayWire->isChecked(),
+                                  actionDisplayPip->isChecked(), actionDisplayGroups->isChecked());
+    ctx->refreshUi();
 }
 
 void BaseMainWindow::open_json()
@@ -319,6 +379,43 @@ void BaseMainWindow::save_json()
     }
 }
 
+void BaseMainWindow::screenshot()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, QString("Save screenshot"), QString(), QString("*.png"));
+    if (!fileName.isEmpty()) {
+        QImage image = fpgaView->grabFramebuffer();
+        if (!fileName.endsWith(".png"))
+            fileName += ".png";
+        QImageWriter imageWriter(fileName, "png");
+        if (imageWriter.write(image))
+            log("Saving screenshot successful.\n");
+        else
+            log("Saving screenshot failed.\n");
+    }
+}
+
+void BaseMainWindow::saveMovie()
+{
+    if (actionMovie->isChecked()) {
+        QString dir = QFileDialog::getExistingDirectory(this, tr("Select Movie Directory"), QDir::currentPath(),
+                                                        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+        if (!dir.isEmpty()) {
+            bool ok;
+            int frames =
+                    QInputDialog::getInt(this, "Recording", tr("Frames to skip (1 frame = 50ms):"), 5, 0, 1000, 1, &ok);
+            if (ok) {
+                QMessageBox::StandardButton reply =
+                        QMessageBox::question(this, "Recording", "Skip identical frames ?",
+                                              QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+                fpgaView->movieStart(dir, frames, (reply == QMessageBox::Yes));
+            } else
+                actionMovie->setChecked(false);
+        } else
+            actionMovie->setChecked(false);
+    } else {
+        fpgaView->movieStop();
+    }
+}
 void BaseMainWindow::pack_finished(bool status)
 {
     disableActions();

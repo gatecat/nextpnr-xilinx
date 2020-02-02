@@ -22,6 +22,9 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QImageWriter>
 #include <QMouseEvent>
 #include <QWidget>
 
@@ -35,7 +38,7 @@
 NEXTPNR_NAMESPACE_BEGIN
 
 FPGAViewWidget::FPGAViewWidget(QWidget *parent)
-        : QOpenGLWidget(parent), ctx_(nullptr), paintTimer_(this), lineShader_(this), zoom_(10.0f),
+        : QOpenGLWidget(parent), movieSaving(false), ctx_(nullptr), paintTimer_(this), lineShader_(this), zoom_(10.0f),
           rendererArgs_(new FPGAViewWidget::RendererArgs), rendererData_(new FPGAViewWidget::RendererData)
 {
     colors_.background = QColor("#000000");
@@ -66,6 +69,11 @@ FPGAViewWidget::FPGAViewWidget(QWidget *parent)
     renderRunner_->start();
     renderRunner_->startTimer(1000 / 2); // render lines 2 times per second
     setMouseTracking(true);
+
+    displayBel_ = false;
+    displayWire_ = false;
+    displayPip_ = false;
+    displayGroup_ = false;
 }
 
 FPGAViewWidget::~FPGAViewWidget() {}
@@ -317,6 +325,26 @@ void FPGAViewWidget::paintGL()
     lineShader_.draw(GraphicElement::STYLE_SELECTED, colors_.selected, thick11Px, matrix);
     lineShader_.draw(GraphicElement::STYLE_HOVER, colors_.hovered, thick2Px, matrix);
 
+    if (movieSaving) {
+        if (movieCounter == currentFrameSkip) {
+            QMutexLocker lock(&rendererArgsLock_);
+            movieCounter = 0;
+            QImage image = grabFramebuffer();
+            if (!movieSkipSame || movieLastImage != image) {
+                currentMovieFrame++;
+
+                QString number = QString("movie_%1.png").arg(currentMovieFrame, 5, 10, QChar('0'));
+
+                QFileInfo fileName = QFileInfo(QDir(movieDir), number);
+                QImageWriter imageWriter(fileName.absoluteFilePath(), "png");
+                imageWriter.write(image);
+                movieLastImage = image;
+            }
+        } else {
+            movieCounter++;
+        }
+    }
+
     // Render ImGui
     QtImGui::newFrame();
     QMutexLocker lock(&rendererArgsLock_);
@@ -332,6 +360,14 @@ void FPGAViewWidget::paintGL()
 }
 
 void FPGAViewWidget::pokeRenderer(void) { renderRunner_->poke(); }
+
+void FPGAViewWidget::enableDisableDecals(bool bels, bool wires, bool pips, bool groups)
+{
+    displayBel_ = bels;
+    displayWire_ = wires;
+    displayPip_ = pips;
+    displayGroup_ = groups;
+}
 
 void FPGAViewWidget::renderLines(void)
 {
@@ -379,17 +415,25 @@ void FPGAViewWidget::renderLines(void)
 
         // Local copy of decals, taken as fast as possible to not block the P&R.
         if (decalsChanged) {
-            for (auto bel : ctx_->getBels()) {
-                belDecals.push_back({ctx_->getBelDecal(bel), bel});
+            if (displayBel_) {
+                for (auto bel : ctx_->getBels()) {
+                    belDecals.push_back({ctx_->getBelDecal(bel), bel});
+                }
             }
-            for (auto wire : ctx_->getWires()) {
-                wireDecals.push_back({ctx_->getWireDecal(wire), wire});
+            if (displayWire_) {
+                for (auto wire : ctx_->getWires()) {
+                    wireDecals.push_back({ctx_->getWireDecal(wire), wire});
+                }
             }
-            for (auto pip : ctx_->getPips()) {
-                pipDecals.push_back({ctx_->getPipDecal(pip), pip});
+            if (displayPip_) {
+                for (auto pip : ctx_->getPips()) {
+                    pipDecals.push_back({ctx_->getPipDecal(pip), pip});
+                }
             }
-            for (auto group : ctx_->getGroups()) {
-                groupDecals.push_back({ctx_->getGroupDecal(group), group});
+            if (displayGroup_) {
+                for (auto group : ctx_->getGroups()) {
+                    groupDecals.push_back({ctx_->getGroupDecal(group), group});
+                }
             }
         }
     }
@@ -430,20 +474,28 @@ void FPGAViewWidget::renderLines(void)
         data->bbGlobal.clear();
 
         // Draw Bels.
-        for (auto const &decal : belDecals) {
-            renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+        if (displayBel_) {
+            for (auto const &decal : belDecals) {
+                renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+            }
         }
         // Draw Wires.
-        for (auto const &decal : wireDecals) {
-            renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+        if (displayWire_) {
+            for (auto const &decal : wireDecals) {
+                renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+            }
         }
         // Draw Pips.
-        for (auto const &decal : pipDecals) {
-            renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+        if (displayPip_) {
+            for (auto const &decal : pipDecals) {
+                renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+            }
         }
         // Draw Groups.
-        for (auto const &decal : groupDecals) {
-            renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+        if (displayGroup_) {
+            for (auto const &decal : groupDecals) {
+                renderArchDecal(data->gfxByStyle, data->bbGlobal, decal.first);
+            }
         }
 
         // Bounding box should be calculated by now.
@@ -548,6 +600,24 @@ void FPGAViewWidget::renderLines(void)
             rendererArgs_->zoomOutbound = false;
         }
     }
+}
+
+void FPGAViewWidget::movieStart(QString dir, long frameSkip, bool skipSame)
+{
+    QMutexLocker locker(&rendererArgsLock_);
+    movieLastImage = QImage();
+    movieSkipSame = skipSame;
+    movieDir = dir;
+    currentMovieFrame = 0;
+    movieCounter = 0;
+    currentFrameSkip = frameSkip;
+    movieSaving = true;
+}
+
+void FPGAViewWidget::movieStop()
+{
+    QMutexLocker locker(&rendererArgsLock_);
+    movieSaving = false;
 }
 
 void FPGAViewWidget::onSelectedArchItem(std::vector<DecalXY> decals, bool keep)

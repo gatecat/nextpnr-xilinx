@@ -119,7 +119,7 @@ inline const NetInfo *get_net_or_empty(const CellInfo *cell, const IdString port
         return found->second.net;
     else
         return nullptr;
-};
+}
 
 inline NetInfo *get_net_or_empty(CellInfo *cell, const IdString port)
 {
@@ -128,7 +128,7 @@ inline NetInfo *get_net_or_empty(CellInfo *cell, const IdString port)
         return found->second.net;
     else
         return nullptr;
-};
+}
 
 NEXTPNR_NAMESPACE_END
 

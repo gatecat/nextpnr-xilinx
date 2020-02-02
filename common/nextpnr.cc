@@ -19,7 +19,9 @@
 
 #include "nextpnr.h"
 #include <boost/algorithm/string.hpp>
+#include "design_utils.h"
 #include "log.h"
+#include "util.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
@@ -143,6 +145,27 @@ Property::Property(int64_t intval, int width) : is_string(false), intval(intval)
 Property::Property(const std::string &strval) : is_string(true), str(strval), intval(0xDEADBEEF) {}
 
 Property::Property(State bit) : is_string(false), str(std::string("") + char(bit)), intval(bit == S1) {}
+
+void CellInfo::addInput(IdString name)
+{
+    ports[name].name = name;
+    ports[name].type = PORT_IN;
+}
+void CellInfo::addOutput(IdString name)
+{
+    ports[name].name = name;
+    ports[name].type = PORT_OUT;
+}
+void CellInfo::addInout(IdString name)
+{
+    ports[name].name = name;
+    ports[name].type = PORT_INOUT;
+}
+
+void CellInfo::setParam(IdString name, Property value) { params[name] = value; }
+void CellInfo::unsetParam(IdString name) { params.erase(name); }
+void CellInfo::setAttr(IdString name, Property value) { attrs[name] = value; }
+void CellInfo::unsetAttr(IdString name) { attrs.erase(name); }
 
 std::string Property::to_string() const
 {
@@ -502,7 +525,16 @@ void BaseCtx::createRectangularRegion(IdString name, int x0, int y0, int x1, int
 void BaseCtx::addBelToRegion(IdString name, BelId bel) { region[name]->bels.insert(bel); }
 void BaseCtx::constrainCellToRegion(IdString cell, IdString region_name)
 {
-    cells[cell]->region = region[region_name].get();
+    // Support hierarchical cells as well as leaf ones
+    if (hierarchy.count(cell)) {
+        auto &hc = hierarchy.at(cell);
+        for (auto &lc : hc.leaf_cells)
+            constrainCellToRegion(lc.second, region_name);
+        for (auto &hsc : hc.hier_cells)
+            constrainCellToRegion(hsc.second, region_name);
+    }
+    if (cells.count(cell))
+        cells.at(cell)->region = region[region_name].get();
 }
 DecalXY BaseCtx::constructDecalXY(DecalId decal, float x, float y)
 {
@@ -639,5 +671,140 @@ void BaseCtx::attributesToArchInfo()
     }
     getCtx()->assignArchInfo();
 }
+
+NetInfo *BaseCtx::createNet(IdString name)
+{
+    NPNR_ASSERT(!nets.count(name));
+    NPNR_ASSERT(!net_aliases.count(name));
+    std::unique_ptr<NetInfo> net{new NetInfo};
+    net->name = name;
+    net_aliases[name] = name;
+    NetInfo *ptr = net.get();
+    nets[name] = std::move(net);
+    refreshUi();
+    return ptr;
+}
+
+void BaseCtx::connectPort(IdString net, IdString cell, IdString port)
+{
+    NetInfo *net_info = getNetByAlias(net);
+    CellInfo *cell_info = cells.at(cell).get();
+    connect_port(getCtx(), net_info, cell_info, port);
+}
+
+void BaseCtx::disconnectPort(IdString cell, IdString port)
+{
+    CellInfo *cell_info = cells.at(cell).get();
+    disconnect_port(getCtx(), cell_info, port);
+}
+
+void BaseCtx::ripupNet(IdString name)
+{
+    NetInfo *net_info = getNetByAlias(name);
+    std::vector<WireId> to_unbind;
+    for (auto &wire : net_info->wires)
+        to_unbind.push_back(wire.first);
+    for (auto &unbind : to_unbind)
+        getCtx()->unbindWire(unbind);
+}
+void BaseCtx::lockNetRouting(IdString name)
+{
+    NetInfo *net_info = getNetByAlias(name);
+    for (auto &wire : net_info->wires)
+        wire.second.strength = STRENGTH_USER;
+}
+
+CellInfo *BaseCtx::createCell(IdString name, IdString type)
+{
+    NPNR_ASSERT(!cells.count(name));
+    std::unique_ptr<CellInfo> cell{new CellInfo};
+    cell->name = name;
+    cell->type = type;
+    CellInfo *ptr = cell.get();
+    cells[name] = std::move(cell);
+    refreshUi();
+    return ptr;
+}
+
+void BaseCtx::copyBelPorts(IdString cell, BelId bel)
+{
+    CellInfo *cell_info = cells.at(cell).get();
+    for (auto pin : getCtx()->getBelPins(bel)) {
+        cell_info->ports[pin].name = pin;
+        cell_info->ports[pin].type = getCtx()->getBelPinType(bel, pin);
+    }
+}
+
+namespace {
+struct FixupHierarchyWorker
+{
+    FixupHierarchyWorker(Context *ctx) : ctx(ctx){};
+    Context *ctx;
+    void run()
+    {
+        trim_hierarchy(ctx->top_module);
+        rebuild_hierarchy();
+    };
+    // Remove cells and nets that no longer exist in the netlist
+    std::vector<IdString> todelete_cells, todelete_nets;
+    void trim_hierarchy(IdString path)
+    {
+        auto &h = ctx->hierarchy.at(path);
+        todelete_cells.clear();
+        todelete_nets.clear();
+        for (auto &lc : h.leaf_cells) {
+            if (!ctx->cells.count(lc.second))
+                todelete_cells.push_back(lc.first);
+        }
+        for (auto &n : h.nets)
+            if (!ctx->nets.count(n.second))
+                todelete_nets.push_back(n.first);
+        for (auto tdc : todelete_cells) {
+            h.leaf_cells_by_gname.erase(h.leaf_cells.at(tdc));
+            h.leaf_cells.erase(tdc);
+        }
+        for (auto tdn : todelete_nets) {
+            h.nets_by_gname.erase(h.nets.at(tdn));
+            h.nets.erase(tdn);
+        }
+        for (auto &sc : h.hier_cells)
+            trim_hierarchy(sc.second);
+    }
+
+    IdString construct_local_name(HierarchicalCell &hc, IdString global_name, bool is_cell)
+    {
+        std::string gn = global_name.str(ctx);
+        auto dp = gn.find_last_of('.');
+        if (dp != std::string::npos)
+            gn = gn.substr(dp + 1);
+        IdString name = ctx->id(gn);
+        // Make sure name is unique
+        int adder = 0;
+        while (is_cell ? hc.leaf_cells.count(name) : hc.nets.count(name)) {
+            ++adder;
+            name = ctx->id(gn + "$" + std::to_string(adder));
+        }
+        return name;
+    }
+
+    // Update hierarchy structure for nets and cells that have hiercell set
+    void rebuild_hierarchy()
+    {
+        for (auto cell : sorted(ctx->cells)) {
+            CellInfo *ci = cell.second;
+            if (ci->hierpath == IdString())
+                ci->hierpath = ctx->top_module;
+            auto &hc = ctx->hierarchy.at(ci->hierpath);
+            if (hc.leaf_cells_by_gname.count(ci->name))
+                continue; // already known
+            IdString local_name = construct_local_name(hc, ci->name, true);
+            hc.leaf_cells_by_gname[ci->name] = local_name;
+            hc.leaf_cells[local_name] = ci->name;
+        }
+    }
+};
+} // namespace
+
+void Context::fixupHierarchy() { FixupHierarchyWorker(this).run(); }
 
 NEXTPNR_NAMESPACE_END
