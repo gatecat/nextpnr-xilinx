@@ -970,6 +970,43 @@ std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const
         }
     }
 
+    const float swb_x0 = 0.2;
+    const float swb_x1 = 0.7;
+    const float swb_y0 = 0.2;
+    const float swb_y1 = 0.7;
+    const float wire_len = 0.03;
+    const float wire_space = 0.001;
+    const float wire_margin = 0.005;
+
+    if (decal.type == DecalId::TYPE_WIRE) {
+        WireId wire;
+        wire.tile = decal.tile_type;
+        wire.index = decal.index;
+        auto style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_INACTIVE;
+
+        int wire_tile = (wire.tile == -1) ? 0 : wire.tile;
+        int wires_per_side = int(((swb_x1 - swb_x0) - 2 * wire_margin) / wire_space);
+
+        for (auto w : getTileWireRange(wire)) {
+            auto wire_data = locInfo(w).wire_data[w.index];
+            if (wire_data.site != -1)
+                continue;
+            int wx = (w.tile % chip_info->width) - (wire_tile % chip_info->width),
+                wy = (w.tile / chip_info->width) - (wire_tile / chip_info->width);
+            int side = w.index / wires_per_side;
+            int offset = w.index % wires_per_side;
+            if (side == 1 || side == 3) {
+                float y = wy + swb_y0 + wire_margin + offset * wire_space;
+                ret.emplace_back(GraphicElement::TYPE_LINE, style, wx + ((side == 3) ? swb_x1 : (swb_x0 - wire_len)), y,
+                                 wx + ((side == 3) ? (swb_x1 + wire_len) : swb_x0), y, 1);
+            } else if (side == 0 || side == 2) {
+                float x = wx + swb_x0 + wire_margin + offset * wire_space;
+                ret.emplace_back(GraphicElement::TYPE_LINE, style, x, wy + ((side == 2) ? swb_y1 : (swb_y0 - wire_len)),
+                                 x, wy + ((side == 2) ? (swb_y1 + wire_len) : swb_y0), 1);
+            }
+        }
+    }
+
     return ret;
 }
 
@@ -985,7 +1022,18 @@ DecalXY Arch::getBelDecal(BelId bel) const
     return decalxy;
 }
 
-DecalXY Arch::getWireDecal(WireId wire) const { return {}; }
+DecalXY Arch::getWireDecal(WireId wire) const
+{
+    DecalXY decalxy;
+    decalxy.decal.type = DecalId::TYPE_WIRE;
+    decalxy.decal.index = wire.index;
+    decalxy.decal.tile_type = wire.tile;
+    decalxy.decal.active = getBoundWireNet(wire) != nullptr;
+    int wire_tile = (wire.tile == -1) ? 0 : wire.tile;
+    decalxy.x = wire_tile % chip_info->width;
+    decalxy.y = wire_tile / chip_info->width;
+    return decalxy;
+}
 
 DecalXY Arch::getPipDecal(PipId pip) const { return {}; };
 
