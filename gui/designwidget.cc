@@ -318,6 +318,12 @@ void DesignWidget::newContext(Context *ctx)
                 wireMap[std::pair<int, int>(wire.location.x, wire.location.y)].push_back(wire);
             }
 #endif
+#ifdef ARCH_XILINX
+            for (const auto &wire : ctx->getWires()) {
+                wireMap[std::pair<int, int>(wire.tile % ctx->chip_info->width, wire.tile / ctx->chip_info->width)]
+                        .push_back(wire);
+            }
+#endif
             auto wireGetter = [](Context *ctx, WireId id) { return ctx->getWireName(id); };
             getTreeByElementType(ElementType::WIRE)
                     ->loadData(ctx,
