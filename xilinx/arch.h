@@ -435,7 +435,7 @@ inline WireId canonicalWireId(const ChipInfoPOD *chip_info, int32_t tile, int32_
 struct WireIterator
 {
     const ChipInfoPOD *chip;
-    int cursor_index;
+    int cursor_index = 0;
     int cursor_tile = -1;
 
     WireIterator operator++()
@@ -443,18 +443,19 @@ struct WireIterator
         // Iterate over nodes first, then tile wires that aren't nodes
         do {
             cursor_index++;
-            if (cursor_tile == -1 && cursor_tile >= chip->num_nodes) {
+            if (cursor_tile == -1 && cursor_index >= chip->num_nodes) {
                 cursor_tile = 0;
                 cursor_index = 0;
             }
-            while (cursor_tile < chip->num_tiles &&
+            while (cursor_tile != -1 && cursor_tile < chip->num_tiles &&
                    cursor_index >= chip->tile_types[chip->tile_insts[cursor_tile].type].num_wires) {
                 cursor_index = 0;
                 cursor_tile++;
             }
-        } while (cursor_tile == -1 ||
-                 (cursor_tile < chip->num_tiles && cursor_index < chip->tile_insts[cursor_tile].num_tile_wires &&
-                  chip->tile_insts[cursor_tile].tile_wire_to_node[cursor_index] == -1));
+
+        } while ((cursor_tile != -1 && cursor_tile < chip->num_tiles &&
+                  cursor_index < chip->tile_insts[cursor_tile].num_tile_wires &&
+                  chip->tile_insts[cursor_tile].tile_wire_to_node[cursor_index] != -1));
 
         return *this;
     }
