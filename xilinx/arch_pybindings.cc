@@ -1,8 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2020  David Shah <dave@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -29,7 +28,7 @@ NEXTPNR_NAMESPACE_BEGIN
 void arch_wrap_python()
 {
     using namespace PythonConversion;
-    class_<ArchArgs>("ArchArgs").def_readwrite("type", &ArchArgs::type);
+    class_<ArchArgs>("ArchArgs");
 
     class_<BelId>("BelId").def_readwrite("index", &BelId::index);
 
@@ -58,16 +57,15 @@ void arch_wrap_python()
     readonly_wrapper<BelPin, decltype(&BelPin::bel), &BelPin::bel, conv_to_str<BelId>>::def_wrap(belpin_cls, "bel");
     readonly_wrapper<BelPin, decltype(&BelPin::pin), &BelPin::pin, conv_to_str<IdString>>::def_wrap(belpin_cls, "pin");
 
-    typedef PipRange AliasPipRange;
-    typedef PipRange UphillPipRange;
-    typedef PipRange DownhillPipRange;
+    typedef UphillPipRange AliasPipRange;
 
 #include "arch_pybindings_shared.h"
 
     WRAP_RANGE(Bel, conv_to_str<BelId>);
     WRAP_RANGE(Wire, conv_to_str<WireId>);
     WRAP_RANGE(AllPip, conv_to_str<PipId>);
-    WRAP_RANGE(Pip, conv_to_str<PipId>);
+    WRAP_RANGE(UphillPip, conv_to_str<PipId>);
+    WRAP_RANGE(DownhillPip, conv_to_str<PipId>);
     WRAP_RANGE(BelPin, wrap_context<BelPin>);
 
     WRAP_MAP_UPTR(CellMap, "IdCellMap");

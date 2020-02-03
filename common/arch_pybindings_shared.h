@@ -91,11 +91,11 @@ fn_wrapper_1a<Context, decltype(&Context::getBoundPipNet), &Context::getBoundPip
 fn_wrapper_1a<Context, decltype(&Context::getConflictingPipNet), &Context::getConflictingPipNet,
               deref_and_wrap<NetInfo>, conv_from_str<PipId>>::def_wrap(ctx_cls, "getConflictingPipNet");
 
-fn_wrapper_1a<Context, decltype(&Context::getPipsDownhill), &Context::getPipsDownhill, wrap_context<PipRange>,
+fn_wrapper_1a<Context, decltype(&Context::getPipsDownhill), &Context::getPipsDownhill, wrap_context<DownhillPipRange>,
               conv_from_str<WireId>>::def_wrap(ctx_cls, "getPipsDownhill");
-fn_wrapper_1a<Context, decltype(&Context::getPipsUphill), &Context::getPipsUphill, wrap_context<PipRange>,
+fn_wrapper_1a<Context, decltype(&Context::getPipsUphill), &Context::getPipsUphill, wrap_context<UphillPipRange>,
               conv_from_str<WireId>>::def_wrap(ctx_cls, "getPipsUphill");
-fn_wrapper_1a<Context, decltype(&Context::getWireAliases), &Context::getWireAliases, wrap_context<PipRange>,
+fn_wrapper_1a<Context, decltype(&Context::getWireAliases), &Context::getWireAliases, wrap_context<AliasPipRange>,
               conv_from_str<WireId>>::def_wrap(ctx_cls, "getWireAliases");
 
 fn_wrapper_1a<Context, decltype(&Context::getPipSrcWire), &Context::getPipSrcWire, conv_to_str<WireId>,
@@ -104,11 +104,6 @@ fn_wrapper_1a<Context, decltype(&Context::getPipDstWire), &Context::getPipDstWir
               conv_from_str<PipId>>::def_wrap(ctx_cls, "getPipDstWire");
 fn_wrapper_1a<Context, decltype(&Context::getPipDelay), &Context::getPipDelay, pass_through<DelayInfo>,
               conv_from_str<PipId>>::def_wrap(ctx_cls, "getPipDelay");
-
-fn_wrapper_1a<Context, decltype(&Context::getPackagePinBel), &Context::getPackagePinBel, conv_to_str<BelId>,
-              pass_through<std::string>>::def_wrap(ctx_cls, "getPackagePinBel");
-fn_wrapper_1a<Context, decltype(&Context::getBelPackagePin), &Context::getBelPackagePin, pass_through<std::string>,
-              conv_from_str<BelId>>::def_wrap(ctx_cls, "getBelPackagePin");
 
 fn_wrapper_0a<Context, decltype(&Context::getChipName), &Context::getChipName, pass_through<std::string>>::def_wrap(
         ctx_cls, "getChipName");

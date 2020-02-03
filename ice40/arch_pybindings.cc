@@ -66,6 +66,10 @@ void arch_wrap_python()
     readonly_wrapper<BelPin, decltype(&BelPin::bel), &BelPin::bel, conv_to_str<BelId>>::def_wrap(belpin_cls, "bel");
     readonly_wrapper<BelPin, decltype(&BelPin::pin), &BelPin::pin, conv_to_str<IdString>>::def_wrap(belpin_cls, "pin");
 
+    typedef PipRange AliasPipRange;
+    typedef PipRange UphillPipRange;
+    typedef PipRange DownhillPipRange;
+
 #include "arch_pybindings_shared.h"
 
     WRAP_RANGE(Bel, conv_to_str<BelId>);

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.3)
 project(nextpnr)
 
 option(BUILD_GUI "Build GUI" OFF)
-option(BUILD_PYTHON "Build Python Integration" OFF)
+option(BUILD_PYTHON "Build Python Integration" ON)
 option(BUILD_TESTS "Build GUI" OFF)
 option(BUILD_HEAP "Build HeAP analytic placer" ON)
 option(USE_OPENMP "Use OpenMP to accelerate analytic placer" ON)
