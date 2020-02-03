@@ -142,6 +142,7 @@ struct DecalId
         TYPE_PIP,
         TYPE_GROUP
     } type = TYPE_NONE;
+    int32_t tile_type = -1;
     int32_t index = -1;
     bool active = false;
 
@@ -242,7 +243,9 @@ template <> struct hash<NEXTPNR_NAMESPACE_PREFIX DecalId>
     {
         std::size_t seed = 0;
         boost::hash_combine(seed, hash<int>()(decal.type));
+        boost::hash_combine(seed, hash<int>()(decal.tile_type));
         boost::hash_combine(seed, hash<int>()(decal.index));
+        boost::hash_combine(seed, hash<int>()(decal.active));
         return seed;
     }
 };

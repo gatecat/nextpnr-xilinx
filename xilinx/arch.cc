@@ -926,15 +926,62 @@ std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const
 {
     std::vector<GraphicElement> ret;
 
+    const float lut6_x0 = 0.9;
+    const float lut6_x1 = 0.92;
+    const float lut6_y0 = 0.1;
+    const float lut6_y1 = 0.16;
+    const float lut5_x0 = 0.905;
+    const float lut5_x1 = 0.915;
+    const float lut5_y0 = 0.11;
+    const float lut5_y1 = 0.15;
+    const float lut_spacing = 0.1;
+
+    const float ff1_x0 = 0.96;
+    const float ff1_x1 = 0.98;
+    const float ff1_y0 = 0.1;
+    const float ff1_y1 = 0.12;
+    const float ff2_x0 = 0.96;
+    const float ff2_x1 = 0.98;
+    const float ff2_y0 = 0.16;
+    const float ff2_y1 = 0.18;
+    const float ff_spacing = 0.1;
+
+    if (decal.type == DecalId::TYPE_BEL) {
+        auto style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_INACTIVE;
+        auto bel_data = chip_info->tile_types[decal.tile_type].bel_data[decal.index];
+        if (bel_data.type == ID_SLICE_LUTX) {
+            int z = bel_data.z >> 4;
+            if ((bel_data.z & 0xF) == BEL_5LUT) {
+                ret.emplace_back(GraphicElement::TYPE_BOX, style, lut5_x0, lut5_y0 + lut_spacing * z, lut5_x1,
+                                 lut5_y1 + lut_spacing * z, 1);
+            } else {
+                ret.emplace_back(GraphicElement::TYPE_BOX, style, lut6_x0, lut6_y0 + lut_spacing * z, lut6_x1,
+                                 lut6_y1 + lut_spacing * z, 1);
+            }
+        } else if (bel_data.type == ID_SLICE_FFX) {
+            int z = bel_data.z >> 4;
+            if ((bel_data.z & 0xF) == BEL_FF2) {
+                ret.emplace_back(GraphicElement::TYPE_BOX, style, ff2_x0, ff2_y0 + ff_spacing * z, ff2_x1,
+                                 ff2_y1 + lut_spacing * z, 1);
+            } else {
+                ret.emplace_back(GraphicElement::TYPE_BOX, style, ff1_x0, ff1_y0 + ff_spacing * z, ff1_x1,
+                                 ff1_y1 + ff_spacing * z, 1);
+            }
+        }
+    }
+
     return ret;
 }
 
 DecalXY Arch::getBelDecal(BelId bel) const
 {
     DecalXY decalxy;
-    decalxy.decal.index = -1;
-    decalxy.x = 0;
-    decalxy.y = 0;
+    decalxy.decal.type = DecalId::TYPE_BEL;
+    decalxy.decal.index = bel.index;
+    decalxy.decal.tile_type = chip_info->tile_insts[bel.tile].type;
+    decalxy.decal.active = getBoundBelCell(bel) != nullptr;
+    decalxy.x = bel.tile % chip_info->width;
+    decalxy.y = bel.tile / chip_info->width;
     return decalxy;
 }
 
