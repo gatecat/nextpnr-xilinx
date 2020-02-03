@@ -253,6 +253,12 @@ WireId Arch::getWireByName(IdString name) const
     return ret;
 }
 
+IdString Arch::getWireType(WireId wire) const { return IdString(wireIntent(wire)); }
+std::vector<std::pair<IdString, std::string>> Arch::getWireAttrs(WireId wire) const
+{
+    return {{id("INTENT"), IdString(wireIntent(wire)).str(this)}};
+}
+
 // -----------------------------------------------------------------------
 
 PipId Arch::getPipByName(IdString name) const
@@ -356,6 +362,10 @@ void Arch::setup_pip_blacklist()
     }
 }
 
+IdString Arch::getPipType(PipId pip) const { return id("PIP"); }
+
+std::vector<std::pair<IdString, std::string>> Arch::getPipAttrs(PipId pip) const { return {}; }
+
 // -----------------------------------------------------------------------
 
 std::vector<IdString> Arch::getBelPins(BelId bel) const
@@ -390,6 +400,8 @@ BelId Arch::getBelByLocation(Loc loc) const
     }
     return BelId();
 }
+
+std::vector<std::pair<IdString, std::string>> Arch::getBelAttrs(BelId bel) const { return {}; }
 
 // -----------------------------------------------------------------------
 

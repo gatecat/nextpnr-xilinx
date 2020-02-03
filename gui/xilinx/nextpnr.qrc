@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>resources/open_xdc.png</file>
+        <file>resources/save_fasm.png</file>
+    </qresource>
+</RCC>
