@@ -41,6 +41,13 @@ static std::pair<std::string, std::string> split_identifier_name(const std::stri
     return std::make_pair(name.substr(0, first_slash), name.substr(first_slash + 1));
 };
 
+static std::pair<std::string, std::string> split_identifier_name_dot(const std::string &name)
+{
+    size_t first_dot = name.find('.');
+    NPNR_ASSERT(first_dot != std::string::npos);
+    return std::make_pair(name.substr(0, first_dot), name.substr(first_dot + 1));
+};
+
 // -----------------------------------------------------------------------
 
 void IdString::initialize_arch(const BaseCtx *ctx)
@@ -99,10 +106,8 @@ IdString Arch::archArgsToId(ArchArgs args) const { return IdString(); }
 
 // -----------------------------------------------------------------------
 
-BelId Arch::getBelByName(IdString name) const
+void Arch::setup_byname() const
 {
-    BelId ret;
-
     if (tile_by_name.empty()) {
         for (int i = 0; i < chip_info->num_tiles; i++) {
             tile_by_name[chip_info->tile_insts[i].name.get()] = i;
@@ -116,6 +121,13 @@ BelId Arch::getBelByName(IdString name) const
                 site_by_name[tile.site_insts[j].name.get()] = std::make_pair(i, j);
         }
     }
+}
+
+BelId Arch::getBelByName(IdString name) const
+{
+    BelId ret;
+
+    setup_byname();
 
     auto split = split_identifier_name(name.str(this));
     if (site_by_name.count(split.first)) {
@@ -203,16 +215,90 @@ PortType Arch::getBelPinType(BelId bel, IdString pin) const
 
 WireId Arch::getWireByName(IdString name) const
 {
-    // FIXME
-    return WireId();
+    if (wire_by_name_cache.count(name))
+        return wire_by_name_cache.at(name);
+    WireId ret;
+    setup_byname();
+
+    const std::string &s = name.str(this);
+    if (s.substr(0, 9) == "SITEWIRE/") {
+        auto sp2 = split_identifier_name(s.substr(9));
+        int tile, site;
+        std::tie(tile, site) = site_by_name.at(sp2.first);
+        auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
+        IdString wirename = id(sp2.second);
+        for (int i = 0; i < tile_info.num_wires; i++) {
+            if (tile_info.wire_data[i].site == site && tile_info.wire_data[i].name == wirename.index) {
+                ret.tile = tile;
+                ret.index = i;
+                break;
+            }
+        }
+    } else {
+        auto sp = split_identifier_name(s);
+        int tile = tile_by_name.at(sp.first);
+        auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
+        IdString wirename = id(sp.second);
+        for (int i = 0; i < tile_info.num_wires; i++) {
+            if (tile_info.wire_data[i].site == -1 && tile_info.wire_data[i].name == wirename.index) {
+                ret.tile = tile;
+                ret.index = i;
+                break;
+            }
+        }
+    }
+
+    wire_by_name_cache[name] = ret;
+
+    return ret;
 }
 
 // -----------------------------------------------------------------------
 
 PipId Arch::getPipByName(IdString name) const
 {
-    // FIXME
-    return PipId();
+    if (pip_by_name_cache.count(name))
+        return pip_by_name_cache.at(name);
+    PipId ret;
+    setup_byname();
+
+    const std::string &s = name.str(this);
+    if (s.substr(0, 8) == "SITEPIP/") {
+        auto sp2 = split_identifier_name(s.substr(8));
+        int tile, site;
+        std::tie(tile, site) = site_by_name.at(sp2.first);
+        auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
+        auto sp3 = split_identifier_name(sp2.second);
+        IdString belname = id(sp3.first), pinname = id(sp3.second);
+        for (int i = 0; i < tile_info.num_pips; i++) {
+            if (tile_info.pip_data[i].site == site && tile_info.pip_data[i].bel == belname.index &&
+                tile_info.pip_data[i].extra_data == pinname.index) {
+                ret.tile = tile;
+                ret.index = i;
+                break;
+            }
+        }
+    } else {
+        auto sp = split_identifier_name(s);
+        int tile = tile_by_name.at(sp.first);
+        auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
+
+        auto spn = split_identifier_name_dot(sp.second);
+        int fromwire = std::stoi(spn.first), towire = std::stoi(spn.second);
+
+        for (int i = 0; i < tile_info.num_pips; i++) {
+            if (tile_info.pip_data[i].site == -1 && tile_info.pip_data[i].src_index == fromwire &&
+                tile_info.pip_data[i].dst_index == towire) {
+                ret.tile = tile;
+                ret.index = i;
+                break;
+            }
+        }
+    }
+
+    pip_by_name_cache[name] = ret;
+
+    return ret;
 }
 
 IdString Arch::getPipName(PipId pip) const

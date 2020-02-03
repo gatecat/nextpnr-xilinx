@@ -736,6 +736,8 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
 
+    void setup_byname() const;
+
     BelId getBelByName(IdString name) const;
 
     IdString getBelName(BelId bel) const
@@ -947,6 +949,8 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
 
+    mutable std::unordered_map<IdString, WireId> wire_by_name_cache;
+
     WireId getWireByName(IdString name) const;
 
     const TileWireInfoPOD &wireInfo(WireId wire) const
@@ -1093,6 +1097,8 @@ struct Arch : BaseCtx
     }
 
     // -------------------------------------------------
+
+    mutable std::unordered_map<IdString, PipId> pip_by_name_cache;
 
     PipId getPipByName(IdString name) const;
 
