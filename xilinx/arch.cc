@@ -29,6 +29,7 @@
 #include "placer1.h"
 #include "placer_heap.h"
 #include "router1.h"
+#include "router2.h"
 #include "timing.h"
 #include "util.h"
 
@@ -521,80 +522,42 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
 
 ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
 {
-    // FIXME: reduce copy and paste with estimateDelay
-    int src_x, src_y, dst_x, dst_y;
-    int src_intent = wireIntent(src);
-    // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
-    //    return 500;
     int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
     int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
 
+    int x0, x1, y0, y1;
+    x0 = src_tile % chip_info->width;
+    x1 = x0;
+    y0 = src_tile / chip_info->width;
+    y1 = y0;
+    auto expand = [&](int x, int y) {
+        x0 = std::min(x0, x);
+        x1 = std::max(x1, x);
+        y0 = std::min(y0, y);
+        y1 = std::max(y1, y);
+    };
+
+    expand(dst_tile % chip_info->width, dst_tile / chip_info->width);
+
+    if (source_locs.count(src))
+        expand(source_locs.at(src).x, source_locs.at(src).y);
+
     if (sink_locs.count(dst)) {
-        dst_x = sink_locs.at(dst).x;
-        dst_y = sink_locs.at(dst).y;
+        expand(sink_locs.at(dst).x, sink_locs.at(dst).y);
     } else if (dst.tile != -1 && chip_info->tile_insts[dst.tile].num_sites > 0) {
         auto &site = chip_info->tile_insts[dst.tile].site_insts[wireInfo(dst).site != -1 ? wireInfo(dst).site : 0];
         if (site.inter_x != -1) {
-            dst_x = site.inter_x;
-            dst_y = site.inter_y;
-        } else {
-            dst_x = dst.tile % chip_info->width;
-            dst_y = dst.tile / chip_info->width;
+            expand(site.inter_x, site.inter_y);
         }
-    } else {
-        dst_x = dst_tile % chip_info->width;
-        dst_y = dst_tile / chip_info->width;
     }
 
-    if (src.tile == -1) {
-        if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC) {
-            if (gnd_glbl == IdString()) {
-                gnd_glbl = id("PSEUDO_GND_WIRE_GLBL");
-                gnd_row = id("PSEUDO_GND_WIRE_ROW");
-                vcc_glbl = id("PSEUDO_VCC_WIRE_GLBL");
-                vcc_row = id("PSEUDO_VCC_WIRE_ROW");
-            }
-
-            src_x = src_tile % chip_info->width;
-            src_y = src_tile / chip_info->width;
-            if (wireInfo(src).name == gnd_row.index || wireInfo(src).name == vcc_row.index)
-                src_x = chip_info->width / 2;
-        } else {
-            auto &src_n = chip_info->nodes[src.index];
-            src_x = -1;
-            src_y = -1;
-            for (int i = 0; i < std::min(200, src_n.num_tile_wires); i++) {
-                // Approximate the nearest location to dest
-                int ti = src_n.tile_wires[i].tile;
-                auto &tw = chip_info->tile_types[chip_info->tile_insts[ti].type].wire_data[src_n.tile_wires[i].index];
-                if (tw.num_downhill == 0 && src_intent != ID_NODE_PINFEED)
-                    continue;
-                int tix = ti % chip_info->width, tiy = ti / chip_info->width;
-                if (src_x == -1 || std::abs(tix - dst_x) < std::abs(src_x - dst_x))
-                    src_x = tix;
-                if (src_y == -1 || std::abs(tiy - dst_y) < std::abs(src_y - dst_y))
-                    src_y = tiy;
-            }
-            if (src_x == -1) {
-                src_x = chip_info->nodes[src.index].tile_wires[0].tile % chip_info->width;
-                src_y = chip_info->nodes[src.index].tile_wires[0].tile / chip_info->width;
-            }
-        }
-
-    } else if (src.tile != -1 && chip_info->tile_insts[src.tile].num_sites > 0) {
-        auto &site = chip_info->tile_insts[src.tile].site_insts[wireInfo(src).site != -1 ? wireInfo(src).site : 0];
+    if (src.tile != -1 && chip_info->tile_insts[src.tile].num_sites > 0) {
+        auto &site = chip_info->tile_insts[dst.tile].site_insts[wireInfo(dst).site != -1 ? wireInfo(dst).site : 0];
         if (site.inter_x != -1) {
-            src_x = site.inter_x;
-            src_y = site.inter_y;
-        } else {
-            src_x = src.tile % chip_info->width;
-            src_y = src.tile / chip_info->width;
+            expand(site.inter_x, site.inter_y);
         }
-    } else {
-        src_x = src_tile % chip_info->width;
-        src_y = src_tile / chip_info->width;
     }
-    return {std::min(src_x, dst_x), std::min(src_y, dst_y), std::max(src_x, dst_x), std::max(src_y, dst_y)};
+    return {x0, y0, x1, y1};
 }
 
 delay_t Arch::getBoundingBoxCost(WireId src, WireId dst, int distance) const
@@ -825,7 +788,7 @@ void Arch::routeClock()
 #endif
 }
 
-void Arch::findSinkLocations()
+void Arch::findSourceSinkLocations()
 {
     // Use a backwards BFS to find the real location of sinks, on a best-effort basis
 #if 1
@@ -833,7 +796,7 @@ void Arch::findSinkLocations()
         NetInfo *ni = net.second;
         for (auto &usr : ni->users) {
             BelId bel = usr.cell->bel;
-            if (bel == BelId() || isLogicTile(bel))
+            if (bel == BelId() || isLogicTile(bel) || (xc7 && isBRAMTile(bel)))
                 continue; // don't need to do this for logic bels, which are always next to their INT
             WireId sink = getCtx()->getNetinfoSinkWire(ni, usr);
             if (sink == WireId() || sink_locs.count(sink))
@@ -852,7 +815,8 @@ void Arch::findSinkLocations()
                 if (wireInfo(cursor).site == -1) {
                     int intent = wireIntent(cursor);
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
-                        intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY) {
+                        intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
+                        intent != ID_PINFEED && intent != ID_INPUT) {
                         int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
                         sink_locs[sink] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
@@ -878,6 +842,56 @@ void Arch::findSinkLocations()
                 }
             }
         }
+
+        auto &drv = ni->driver;
+        if (drv.cell != nullptr) {
+            BelId bel = drv.cell->bel;
+            if (bel == BelId() || isLogicTile(bel))
+                continue; // don't need to do this for logic bels, which are always next to their INT
+            WireId source = getCtx()->getNetinfoSourceWire(ni);
+            if (source == WireId() || source_locs.count(source))
+                continue;
+            std::queue<WireId> visit;
+            std::unordered_map<WireId, WireId> backtrace;
+            int iter = 0;
+            // as this is a best-effort optimisation to slightly improve routing,
+            // don't spend too long with a nice low iteration limit
+            const int iter_max = 500;
+            visit.push(source);
+            while (!visit.empty() && iter < iter_max) {
+                ++iter;
+                WireId cursor = visit.front();
+                visit.pop();
+                if (wireInfo(cursor).site == -1) {
+                    int intent = wireIntent(cursor);
+                    if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
+                        intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
+                        intent != ID_NODE_OUTPUT && intent != ID_NODE_INT_INTERFACE) {
+                        int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
+                        source_locs[source] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
+                        if (getCtx()->debug) {
+                            log_info("%s ----> %s\n", nameOfWire(source), nameOfWire(cursor));
+                        }
+
+                        while (backtrace.count(cursor)) {
+                            cursor = backtrace.at(cursor);
+                            if (!source_locs.count(cursor)) {
+                                source_locs[cursor] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
+                            }
+                        }
+
+                        break;
+                    }
+                }
+                for (auto pip : getPipsDownhill(cursor)) {
+                    WireId dst = getPipDstWire(pip);
+                    if (!backtrace.count(dst)) {
+                        backtrace[dst] = cursor;
+                        visit.push(getPipDstWire(pip));
+                    }
+                }
+            }
+        }
     }
 #endif
 }
@@ -885,12 +899,27 @@ void Arch::findSinkLocations()
 bool Arch::route()
 {
     assign_budget(getCtx(), true);
+
     routeVcc();
     routeClock();
-    findSinkLocations();
-    bool result = router1(getCtx(), Router1Cfg(getCtx()));
+    findSourceSinkLocations();
+
+    std::string router = str_or_default(settings, id("router"), defaultRouter);
+    bool result;
+    if (router == "router1") {
+        result = router1(getCtx(), Router1Cfg(getCtx()));
+    } else if (router == "router2") {
+        auto cfg = Router2Cfg(getCtx());
+        cfg.bb_margin_x = 4;
+        cfg.bb_margin_y = 4;
+        cfg.backwards_max_iter = 200;
+        router2(getCtx(), cfg);
+        result = true;
+    } else {
+        log_error("Xilinx architecture does not support router '%s'\n", router.c_str());
+    }
     fixupRouting();
-    getCtx()->attrs[getCtx()->id("step")] = std::string("route");
+    getCtx()->settings[getCtx()->id("route")] = 1;
     archInfoToAttributes();
     return result;
 }
@@ -1237,5 +1266,8 @@ const std::vector<std::string> Arch::availablePlacers = {"sa",
                                                          "heap"
 #endif
 };
+
+const std::string Arch::defaultRouter = "router2";
+const std::vector<std::string> Arch::availableRouters = {"router1", "router2"};
 
 NEXTPNR_NAMESPACE_END

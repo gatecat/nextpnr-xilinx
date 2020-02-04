@@ -1588,8 +1588,8 @@ struct Arch : BaseCtx
 
     void routeVcc();
     void routeClock();
-    void findSinkLocations();
-    std::unordered_map<WireId, Loc> sink_locs;
+    void findSourceSinkLocations();
+    std::unordered_map<WireId, Loc> sink_locs, source_locs;
     // -------------------------------------------------
 
     void parseXdc(std::istream &file);
@@ -1612,6 +1612,9 @@ struct Arch : BaseCtx
 
     static const std::string defaultPlacer;
     static const std::vector<std::string> availablePlacers;
+
+    static const std::string defaultRouter;
+    static const std::vector<std::string> availableRouters;
 
     // -------------------------------------------------
     template <typename Id> const TileTypeInfoPOD &locInfo(Id &id) const
