@@ -527,7 +527,7 @@ class SAPlacer
             add_move_cell(moveChange, other_cell, newBel);
         }
 
-        if (!ctx->isBelLocationValid(newBel) || ((other_cell != nullptr && !ctx->isBelLocationValid(oldBel)))) {
+        if (!ctx->isBelLocationValid(newBel) || !ctx->isBelLocationValid(oldBel)) {
             ctx->unbindBel(newBel);
             if (other_cell != nullptr)
                 ctx->unbindBel(oldBel);
