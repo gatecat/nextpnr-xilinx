@@ -67,7 +67,7 @@ Arch::Arch(ArchArgs args) : args(args)
 {
     try {
         blob_file.open(args.chipdb);
-        if (!blob_file.is_open())
+        if (args.chipdb.empty() || !blob_file.is_open())
             log_error("Unable to read chipdb %s\n", args.chipdb.c_str());
         const char *blob = reinterpret_cast<const char *>(blob_file.data());
         chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(blob));

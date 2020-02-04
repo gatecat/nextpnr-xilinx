@@ -65,6 +65,9 @@ void UspCommandHandler::customBitstream(Context *ctx)
 std::unique_ptr<Context> UspCommandHandler::createContext(std::unordered_map<std::string, Property> &values)
 {
     ArchArgs chipArgs;
+    if (!vm.count("chipdb")) {
+        log_error("chip database binary must be provided\n");
+    }
     chipArgs.chipdb = vm["chipdb"].as<std::string>();
     return std::unique_ptr<Context>(new Context(chipArgs));
 }
