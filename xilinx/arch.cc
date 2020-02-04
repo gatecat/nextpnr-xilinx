@@ -695,10 +695,21 @@ void Arch::routeClock()
     // Special pass for faster routing of global clock psuedo-net
     for (auto net : sorted(nets)) {
         NetInfo *ni = net.second;
-        if (ni->driver.cell == nullptr ||
-            (ni->driver.cell->type != id_BUFGCTRL && ni->driver.cell->type != id_BUFCE_BUFG_PS &&
-             ni->driver.cell->type != id_BUFCE_BUFCE && ni->driver.cell->type != id_BUFGCE_DIV_BUFGCE_DIV) ||
-            ni->driver.port != id("O"))
+        if (ni->driver.cell == nullptr)
+            continue;
+        bool is_global = false;
+        if ((ni->driver.cell->type == id_BUFGCTRL || ni->driver.cell->type == id_BUFCE_BUFG_PS ||
+             ni->driver.cell->type == id_BUFCE_BUFCE || ni->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
+            ni->driver.port == id("O"))
+            is_global = true;
+        else if (ni->driver.cell->type == id("PLLE2_ADV_PLLE2_ADV") && ni->users.size() == 1 &&
+                 (ni->users.front().cell->type == id_BUFGCTRL || ni->users.front().cell->type == id_BUFCE_BUFCE ||
+                  ni->users.front().cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
+            is_global = true;
+        else if (ni->users.size() == 1 && ni->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
+                 ni->users.front().port == id("CLKIN1"))
+            is_global = true;
+        if (!is_global)
             continue;
         log_info("    routing clock '%s'\n", ni->name.c_str(this));
         bindWire(getCtx()->getNetinfoSourceWire(ni), ni, STRENGTH_LOCKED);
@@ -738,9 +749,38 @@ void Arch::routeClock()
                 }
             }
             if (dest == WireId()) {
-                if (getCtx()->debug)
-                    log_info("            failed to find a route using dedicated resources.\n");
-                continue;
+                log_info("            failed to find a route using dedicated resources.\n");
+                if (ni->users.size() == 1 && ni->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
+                    ni->users.front().port == id("CLKIN1")) {
+                    // Due to some missing pips, currently special case more lenient solution
+                    std::queue<WireId> empty;
+                    std::swap(visit, empty);
+                    backtrace.clear();
+                    visit.push(getCtx()->getNetinfoSinkWire(ni, usr));
+                    while (!visit.empty()) {
+                        WireId curr = visit.front();
+                        visit.pop();
+                        if (getBoundWireNet(curr) == ni) {
+                            dest = curr;
+                            break;
+                        }
+                        for (auto uh : getPipsUphill(curr)) {
+                            if (!checkPipAvail(uh))
+                                continue;
+                            WireId src = getPipSrcWire(uh);
+                            if (backtrace.count(src))
+                                continue;
+                            if (!checkWireAvail(src) && getBoundWireNet(src) != ni)
+                                continue;
+                            backtrace[src] = uh;
+                            visit.push(src);
+                        }
+                    }
+                    if (dest == WireId())
+                        continue;
+                } else {
+                    continue;
+                }
             }
             while (backtrace.count(dest)) {
                 auto uh = backtrace[dest];
