@@ -442,6 +442,155 @@ struct Router2
     }
     bool was_visited(int wire) { return flat_wires.at(wire).visit.visited; }
 
+#ifdef ARCH_XILINX
+    // Special-case constant ground/vcc routing for Xilinx devices
+    void route_xilinx_const(ThreadContext &t, NetInfo *net, size_t i, int src_wire_idx, WireId dst_wire, bool is_mt,
+                            bool is_bb = true)
+    {
+        auto &nd = nets[net->udata];
+        auto &ad = nd.arcs[i];
+
+        int backwards_iter = 0;
+        int backwards_limit = 5000000;
+
+        bool const_val = false;
+        if (net->name == ctx->id("$PACKER_VCC_NET"))
+            const_val = true;
+        else
+            NPNR_ASSERT(net->name == ctx->id("$PACKER_GND_NET"));
+
+        for (int allowed_cong = 0; allowed_cong < 10; allowed_cong++) {
+            backwards_iter = 0;
+            if (!t.backwards_queue.empty()) {
+                std::queue<int> new_queue;
+                t.backwards_queue.swap(new_queue);
+            }
+            t.backwards_queue.push(wire_to_idx.at(dst_wire));
+            reset_wires(t);
+            while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
+                int cursor = t.backwards_queue.front();
+                t.backwards_queue.pop();
+                auto &cwd = flat_wires[cursor];
+                PipId cpip;
+                if (cwd.bound_nets.count(net->udata)) {
+                    // If we can tack onto existing routing; try that
+                    // Only do this if the existing routing is uncontented; however
+                    int cursor2 = cursor;
+                    bool bwd_merge_fail = false;
+                    while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
+                        if (int(flat_wires.at(cursor2).bound_nets.size()) > (allowed_cong + 1)) {
+                            bwd_merge_fail = true;
+                            break;
+                        }
+                        PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                        if (p == PipId())
+                            break;
+                        cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
+                    }
+                    if (!bwd_merge_fail && cursor2 == src_wire_idx) {
+                        // Found a path to merge to existing routing; backwards
+                        cursor2 = cursor;
+                        while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
+                            PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                            if (p == PipId())
+                                break;
+                            cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
+                            set_visited(t, cursor2, p, WireScore());
+                        }
+                        break;
+                    }
+                    cpip = cwd.bound_nets.at(net->udata).second;
+                }
+#if 0
+                log("   explore %s\n", ctx->nameOfWire(cwd.w));
+#endif
+                if (ctx->wireIntent(cwd.w) == (const_val ? ID_PSEUDO_VCC : ID_PSEUDO_GND)) {
+#if 0
+                    log("    Hit global network at %s\n", ctx->nameOfWire(cwd.w));
+#endif
+                    // We've hit the constant pseudo-network, continue from here
+                    int cursor2 = cursor;
+                    while (cursor2 != src_wire_idx) {
+                        auto &c2wd = flat_wires.at(cursor2);
+                        bool found = false;
+                        for (auto p : ctx->getPipsUphill(c2wd.w)) {
+                            if (!ctx->checkPipAvail(p) && ctx->getBoundPipNet(p) != net)
+                                continue;
+                            WireId src = ctx->getPipSrcWire(p);
+                            if (ctx->wireIntent(src) != (const_val ? ID_PSEUDO_VCC : ID_PSEUDO_GND))
+                                continue;
+                            if (is_wire_undriveable(src))
+                                continue;
+                            cursor2 = wire_to_idx.at(src);
+                            set_visited(t, cursor2, p, WireScore());
+                            found = true;
+                            break;
+                        }
+                        if (!found)
+                            log_error("Invalid global constant node '%s'\n", ctx->nameOfWire(c2wd.w));
+                    }
+
+                    break;
+                }
+#if 0
+                std::string name = ctx->nameOfWire(cwd.w);
+                if (name.substr(int(name.size()) - 3) == "A_O") {
+                    for (auto uh : ctx->getPipsUphill(flat_wires[cursor].w)) {
+                        log("   %s <-- %s %d\n", ctx->nameOfWire(flat_wires[cursor].w), ctx->nameOfWire(ctx->getPipSrcWire(uh)), int(!ctx->checkPipAvail(uh) && ctx->getBoundPipNet(uh) != net));
+                    }
+                }
+#endif
+                bool did_something = false;
+                for (auto uh : ctx->getPipsUphill(flat_wires[cursor].w)) {
+                    did_something = true;
+                    if (!ctx->checkPipAvail(uh) && ctx->getBoundPipNet(uh) != net)
+                        continue;
+                    if (cpip != PipId() && cpip != uh)
+                        continue; // don't allow multiple pips driving a wire with a net
+                    int next = wire_to_idx.at(ctx->getPipSrcWire(uh));
+                    if (was_visited(next))
+                        continue; // skip wires that have already been visited
+                    auto &wd = flat_wires[next];
+                    if (wd.unavailable)
+                        continue;
+                    if (wd.reserved_net != -1 && wd.reserved_net != net->udata)
+                        continue;
+                    if (int(wd.bound_nets.size()) > (allowed_cong + 1) ||
+                        (allowed_cong == 0 && wd.bound_nets.size() == 1 && !wd.bound_nets.count(net->udata)))
+                        continue; // never allow congestion in backwards routing
+                    t.backwards_queue.push(next);
+                    set_visited(t, next, uh, WireScore());
+                }
+                if (did_something)
+                    ++backwards_iter;
+            }
+            int dst_wire_idx = wire_to_idx.at(dst_wire);
+            if (was_visited(src_wire_idx)) {
+                ROUTE_LOG_DBG("   Routed (backwards): ");
+                int cursor_fwd = src_wire_idx;
+                bind_pip_internal(net, i, src_wire_idx, PipId());
+                while (was_visited(cursor_fwd)) {
+                    auto &v = flat_wires.at(cursor_fwd).visit;
+                    cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip));
+                    bind_pip_internal(net, i, cursor_fwd, v.pip);
+                    if (ctx->debug) {
+                        auto &wd = flat_wires.at(cursor_fwd);
+                        ROUTE_LOG_DBG("      wire: %s (curr %d hist %f)\n", ctx->nameOfWire(wd.w),
+                                      int(wd.bound_nets.size()) - 1, wd.hist_cong_cost);
+                    }
+                }
+                NPNR_ASSERT(cursor_fwd == dst_wire_idx);
+                ad.routed = true;
+                t.processed_sinks.insert(dst_wire);
+                reset_wires(t);
+                return;
+            }
+        }
+        log_error("Unrouteable %s sink %s.%s (%s)\n", ctx->nameOf(net), ctx->nameOf(net->users.at(i).cell),
+                  ctx->nameOf(net->users.at(i).port), ctx->nameOfWire(dst_wire));
+    }
+#endif
+
     ArcRouteResult route_arc(ThreadContext &t, NetInfo *net, size_t i, bool is_mt, bool is_bb = true)
     {
 
@@ -462,6 +611,14 @@ struct Router2
         // Check if arc was already done _in this iteration_
         if (t.processed_sinks.count(dst_wire))
             return ARC_SUCCESS;
+
+            // Special case
+#ifdef ARCH_XILINX
+        if (net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET")) {
+            route_xilinx_const(t, net, i, src_wire_idx, dst_wire, is_mt, is_bb);
+            return ARC_SUCCESS;
+        }
+#endif
 
         if (!t.queue.empty()) {
             std::priority_queue<QueuedWire, std::vector<QueuedWire>, QueuedWire::Greater> new_queue;
