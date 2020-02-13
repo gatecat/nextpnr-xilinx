@@ -301,7 +301,11 @@ class HeAPPlacer
 
         ctx->check();
 
-        placer1_refine(ctx, Placer1Cfg(ctx));
+        auto placer1_cfg = Placer1Cfg(ctx);
+        placer1_cfg.hpwl_scale_x = cfg.hpwl_scale_x;
+        placer1_cfg.hpwl_scale_y = cfg.hpwl_scale_y;
+        placer1_cfg.netShareWeight = cfg.netShareWeight;
+        placer1_refine(ctx, placer1_cfg);
 
         return true;
     }
@@ -1075,7 +1079,8 @@ class HeAPPlacer
             int idx = 0;
             for (IdString type : sorted(beltype)) {
                 type_index[type] = idx;
-                fb.emplace_back(&(p->fast_bels.at(std::get<0>(p->bel_types.at(type)))));
+                fb.emplace_back(p->bel_types.count(type) ? &(p->fast_bels.at(std::get<0>(p->bel_types.at(type))))
+                                                         : nullptr);
                 ++idx;
             }
         }
@@ -1178,7 +1183,7 @@ class HeAPPlacer
 
         int bels_at(int x, int y, int type)
         {
-            if (x >= int(fb.at(type)->size()) || y >= int(fb.at(type)->at(x).size()))
+            if (fb.at(type) == nullptr || x >= int(fb.at(type)->size()) || y >= int(fb.at(type)->at(x).size()))
                 return 0;
             return int(fb.at(type)->at(x).at(y).size());
         }
