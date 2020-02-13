@@ -628,6 +628,19 @@ bool Arch::place()
         cfg.ioBufTypes.insert(id("IOB_OUTBUF"));
         cfg.ioBufTypes.insert(id_PSEUDO_GND);
         cfg.ioBufTypes.insert(id_PSEUDO_VCC);
+        cfg.alpha = 0.08;
+        cfg.beta = 0.4;
+        cfg.placeAllAtOnce = true;
+        cfg.hpwl_scale_x = 1;
+        cfg.hpwl_scale_y = 2;
+        cfg.spread_scale_x = 1;
+        cfg.spread_scale_y = 2;
+        cfg.netShareWeight = 0.2;
+        cfg.solverTolerance = 0.6e-6;
+        cfg.cellGroups.emplace_back();
+        cfg.cellGroups.back().insert(id_SLICE_LUTX);
+        cfg.cellGroups.back().insert(id_SLICE_FFX);
+        cfg.cellGroups.back().insert(id_CARRY8);
         if (!placer_heap(getCtx(), cfg))
             return false;
     } else if (placer == "sa") {
