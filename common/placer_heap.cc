@@ -97,7 +97,7 @@ template <typename T> struct EquationSystem
 
     void add_rhs(int row, T val) { rhs[row] += val; }
 
-    void solve(std::vector<T> &x)
+    void solve(std::vector<T> &x, float tolerance)
     {
         using namespace Eigen;
         if (x.empty())
@@ -123,7 +123,7 @@ template <typename T> struct EquationSystem
             vb[i] = rhs.at(i);
 
         ConjugateGradient<SparseMatrix<T>, Lower | Upper> solver;
-        solver.setTolerance(0.6e-6);
+        solver.setTolerance(tolerance);
         VectorXd xr = solver.compute(mat).solveWithGuess(vb, vx);
         for (int i = 0; i < int(x.size()); i++)
             x.at(i) = xr[i];
@@ -174,6 +174,7 @@ class HeAPPlacer
         std::vector<std::unordered_set<IdString>> heap_runs;
         std::unordered_set<IdString> all_celltypes;
         std::unordered_map<IdString, int> ct_count;
+
         for (auto cell : place_cells) {
             if (!all_celltypes.count(cell->type)) {
                 heap_runs.push_back(std::unordered_set<IdString>{cell->type});
@@ -189,12 +190,12 @@ class HeAPPlacer
                 break;
             }
 
-#if 1
-        // Never want to deal with LUTs, FFs, MUXFxs seperately,
-        // for now disable all single-cell-type runs and only have heteregenous
-        // runs
-        heap_runs.clear();
-#endif
+        if (cfg.placeAllAtOnce) {
+            // Never want to deal with LUTs, FFs, MUXFxs seperately,
+            // for now disable all single-cell-type runs and only have heteregenous
+            // runs
+            heap_runs.clear();
+        }
 
         heap_runs.push_back(all_celltypes);
         // The main HeAP placer loop
@@ -225,15 +226,12 @@ class HeAPPlacer
 
                 update_all_chains();
 
-                std::unordered_set<IdString> logic_types;
-                logic_types.insert(id_SLICE_LUTX);
-                logic_types.insert(id_SLICE_FFX);
-                if (!ctx->xc7)
-                    logic_types.insert(id_CARRY8);
-                CutSpreader(this, logic_types).run();
+                for (const auto &group : cfg.cellGroups)
+                    CutSpreader(this, group).run();
 
                 for (auto type : sorted(run))
-                    if (!logic_types.count(type))
+                    if (std::all_of(cfg.cellGroups.begin(), cfg.cellGroups.end(),
+                                    [type](const std::unordered_set<IdString> &grp) { return !grp.count(type); }))
                         CutSpreader(this, {type}).run();
 
                 update_all_chains();
@@ -592,7 +590,8 @@ class HeAPPlacer
     {
         const auto &base = cell_locs[cell->name];
         for (auto child : cell->constr_children) {
-            if (root->type != id_CARRY8 || child->type != id_SLICE_LUTX)
+            // FIXME: Improve handling of heterogeneous chains
+            if (child->type == root->type)
                 chain_size[root->name]++;
             if (child->constr_x != child->UNCONSTR)
                 cell_locs[child->name].x = std::max(0, std::min(max_x, base.x + child->constr_x));
@@ -688,7 +687,8 @@ class HeAPPlacer
                         return;
                     int o_pos = cell_pos(other->cell);
                     double weight = 1.0 / (ni->users.size() *
-                                           std::max<double>(1, (yaxis ? 2 : 1) * std::abs(o_pos - this_pos)));
+                                           std::max<double>(1, (yaxis ? cfg.hpwl_scale_y : cfg.hpwl_scale_x) *
+                                                                       std::abs(o_pos - this_pos)));
 
                     if (user_idx != -1 && net_crit.count(ni->name)) {
                         auto &nc = net_crit.at(ni->name);
@@ -714,7 +714,9 @@ class HeAPPlacer
                 int l_pos = legal_pos(solve_cells.at(row));
                 int c_pos = cell_pos(solve_cells.at(row));
 
-                double weight = alpha * iter / std::max<double>(1, (yaxis ? 2 : 1) * std::abs(l_pos - c_pos));
+                double weight =
+                        alpha * iter /
+                        std::max<double>(1, (yaxis ? cfg.hpwl_scale_y : cfg.hpwl_scale_x) * std::abs(l_pos - c_pos));
                 // Add an arc from legalised to current position
                 es.add_coeff(row, row, weight);
                 es.add_rhs(row, weight * l_pos);
@@ -729,7 +731,7 @@ class HeAPPlacer
         auto cell_pos = [&](CellInfo *cell) { return yaxis ? cell_locs.at(cell->name).y : cell_locs.at(cell->name).x; };
         std::vector<double> vals;
         std::transform(solve_cells.begin(), solve_cells.end(), std::back_inserter(vals), cell_pos);
-        es.solve(vals);
+        es.solve(vals, cfg.solverTolerance);
         for (size_t i = 0; i < vals.size(); i++)
             if (yaxis) {
                 cell_locs.at(solve_cells.at(i)->name).rawy = vals.at(i);
@@ -765,7 +767,7 @@ class HeAPPlacer
                 ymin = std::min(ymin, usrloc.y);
                 ymax = std::max(ymax, usrloc.y);
             }
-            hpwl += (xmax - xmin) + 2 * (ymax - ymin);
+            hpwl += cfg.hpwl_scale_x * (xmax - xmin) + cfg.hpwl_scale_y * (ymax - ymin);
         }
         return hpwl;
     }
@@ -1030,7 +1032,6 @@ class HeAPPlacer
         sl_time += std::chrono::duration<float>(endt - startt).count();
     }
     // Implementation of the cut-based spreading as described in the HeAP/SimPL papers
-    static constexpr float beta = 0.4;
 
     template <typename T> T limit_to_reg(Region *reg, T val, bool dir)
     {
@@ -1051,7 +1052,7 @@ class HeAPPlacer
         int id;
         int x0, y0, x1, y1;
         std::vector<int> cells, bels;
-        bool overused() const
+        bool overused(float beta) const
         {
             for (size_t t = 0; t < cells.size(); t++) {
                 if (bels.at(t) < 4) {
@@ -1382,8 +1383,9 @@ class HeAPPlacer
         void expand_regions()
         {
             std::queue<int> overu_regions;
+            float beta = p->cfg.beta;
             for (auto &r : regions) {
-                if (!merged_regions.count(r.id) && r.overused())
+                if (!merged_regions.count(r.id) && r.overused(beta))
                     overu_regions.push(r.id);
             }
             while (!overu_regions.empty()) {
@@ -1392,34 +1394,35 @@ class HeAPPlacer
                 if (merged_regions.count(rid))
                     continue;
                 auto &reg = regions.at(rid);
-                while (reg.overused()) {
+                while (reg.overused(beta)) {
                     bool changed = false;
-                    // 2 x units for every 1 y unit to account for INT gaps between CLBs
-                    for (int j = 0; j < 2; j++) {
+                    for (int j = 0; j < p->cfg.spread_scale_x; j++) {
                         if (reg.x0 > 0) {
                             grow_region(reg, reg.x0 - 1, reg.y0, reg.x1, reg.y1);
                             changed = true;
-                            if (!reg.overused())
+                            if (!reg.overused(beta))
                                 break;
                         }
                         if (reg.x1 < p->max_x) {
                             grow_region(reg, reg.x0, reg.y0, reg.x1 + 1, reg.y1);
                             changed = true;
-                            if (!reg.overused())
+                            if (!reg.overused(beta))
                                 break;
                         }
                     }
-                    if (reg.y0 > 0) {
-                        grow_region(reg, reg.x0, reg.y0 - 1, reg.x1, reg.y1);
-                        changed = true;
-                        if (!reg.overused())
-                            break;
-                    }
-                    if (reg.y1 < p->max_y) {
-                        grow_region(reg, reg.x0, reg.y0, reg.x1, reg.y1 + 1);
-                        changed = true;
-                        if (!reg.overused())
-                            break;
+                    for (int j = 0; j < p->cfg.spread_scale_y; j++) {
+                        if (reg.y0 > 0) {
+                            grow_region(reg, reg.x0, reg.y0 - 1, reg.x1, reg.y1);
+                            changed = true;
+                            if (!reg.overused(beta))
+                                break;
+                        }
+                        if (reg.y1 < p->max_y) {
+                            grow_region(reg, reg.x0, reg.y0, reg.x1, reg.y1 + 1);
+                            changed = true;
+                            if (!reg.overused(beta))
+                                break;
+                        }
                     }
                     if (!changed) {
                         for (auto bt : sorted(beltype)) {
@@ -1713,10 +1716,18 @@ bool placer_heap(Context *ctx, PlacerHeapCfg cfg) { return HeAPPlacer(ctx, cfg).
 
 PlacerHeapCfg::PlacerHeapCfg(Context *ctx)
 {
-    alpha = ctx->setting<float>("placerHeap/alpha", 0.08);
+    alpha = ctx->setting<float>("placerHeap/alpha", 0.1);
+    beta = ctx->setting<float>("placerHeap/beta", 0.9);
     criticalityExponent = ctx->setting<int>("placerHeap/criticalityExponent", 2);
     timingWeight = ctx->setting<int>("placerHeap/timingWeight", 10);
     timing_driven = ctx->setting<bool>("timing_driven");
+    solverTolerance = 1e-5;
+    placeAllAtOnce = false;
+
+    hpwl_scale_x = 1;
+    hpwl_scale_y = 1;
+    spread_scale_x = 1;
+    spread_scale_y = 1;
 }
 
 NEXTPNR_NAMESPACE_END
