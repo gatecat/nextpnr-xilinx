@@ -774,6 +774,16 @@ struct Router2
         // Skip routes where the destination is already bound
         if (dst == WireId() || ctx->getBoundWireNet(dst) == net)
             return true;
+
+        if (dst == src) {
+            NetInfo *bound = ctx->getBoundWireNet(src);
+            if (bound == nullptr)
+                ctx->bindWire(src, net, STRENGTH_WEAK);
+            else
+                NPNR_ASSERT(bound == net);
+            return true;
+        }
+
         // Skip routes where there is no routing (special cases)
         if (!ad.routed)
             return true;

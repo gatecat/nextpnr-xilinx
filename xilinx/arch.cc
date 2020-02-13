@@ -939,12 +939,12 @@ void Arch::findSourceSinkLocations()
 bool Arch::route()
 {
     assign_budget(getCtx(), true);
-
-    routeVcc();
+    std::string router = str_or_default(settings, id("router"), defaultRouter);
+    if (router != "router2")
+        routeVcc();
     routeClock();
     findSourceSinkLocations();
 
-    std::string router = str_or_default(settings, id("router"), defaultRouter);
     bool result;
     if (router == "router1") {
         result = router1(getCtx(), Router1Cfg(getCtx()));
