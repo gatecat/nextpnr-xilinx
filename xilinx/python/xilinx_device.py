@@ -1,6 +1,5 @@
 import json
 import os
-from gridinfo import parse_gridinfo
 from tileconn import apply_tileconn
 from parse_sdf import parse_sdf_file
 # Represents Xilinx device data from PrjXray etc
@@ -452,47 +451,44 @@ def import_device(name, prjxray_root, metadata_root):
 	# Load intent JSON
 	with open(metadata_root + "/wire_intents.json", "r") as ijf:
 		ij = json.load(ijf)
-	grid_name = name
-	if "xc7a35t" in grid_name: # currently missing in prjxray-db
-		grid_name = "xc7a50tfgg484-1"
-	actual_int_tile = {}
-	with open(prjxray_root + "/gridinfo/grid-" + grid_name + "-db.txt", "r") as gf:
-		tileprops, tilesites, siteprops = parse_gridinfo(gf)
-		for tile, props in sorted(tileprops.items()):
-			x = int(props["COLUMN"])
-			y = int(props["ROW"])
-			d.width = max(d.width, x + 1)
-			d.height = max(d.height, y + 1)
-			tiletype = props["TYPE"]
-			interconn_xy = (int(props["INT_TILE_X"]), int(props["INT_TILE_Y"]))
-			t = Tile(x, y, tile, get_tile_type_data(tiletype), interconn_xy, [])
-			if tiletype in ("INT", "INT_L", "INT_R"):
-				actual_int_tile[interconn_xy] = t
-			if tile in tilesites:
-				for idx, site in enumerate(tilesites[tile]):
-					sitetype = siteprops[site]["SITE_TYPE"]
-					si = Site(t, site, idx, parse_xy(site), get_site_type_data(sitetype))
-					t.site_insts.append(si)
-					d.sites_by_name[site] = si
-			d.tiles_by_name[tile] = t
-			d.tiles_by_xy[x, y] = t
-			d.tiles.append(t)
+	with open(prjxray_root + "/" + name + "/tilegrid.json") as gf:
+		tgj = json.load(gf)
+	for tile, tiledata in sorted(tgj.items()):
+		x = int(tiledata["grid_x"])
+		y = int(tiledata["grid_y"])
+		d.width = max(d.width, x + 1)
+		d.height = max(d.height, y + 1)
+		tiletype = tiledata["type"]
+		t = Tile(x, y, tile, get_tile_type_data(tiletype), (-1, -1), [])
+		for idx, (site, sitetype) in enumerate(sorted(tiledata["sites"].items())):
+				si = Site(t, site, idx, parse_xy(site), get_site_type_data(sitetype))
+				t.site_insts.append(si)
+				d.sites_by_name[site] = si
+		d.tiles_by_name[tile] = t
+		d.tiles_by_xy[x, y] = t
+		d.tiles.append(t)
 	# Resolve interconnect tile coordinates
 	for t in d.tiles:
-		icxy = t.interconn_xy
-		if icxy in actual_int_tile:
-			t.interconn_xy = (actual_int_tile[icxy].x, actual_int_tile[icxy].y)
-		else:
-			t.interconn_xy = (-1, -1)
+		for delta in range(0, 30):
+			if t.interconn_xy != (-1, -1):
+				break # found, done
+			for direction in (-1, +1):
+				nxy = (t.x + direction * delta, t.y)
+				if nxy not in d.tiles_by_xy:
+					continue
+				if d.tiles_by_xy[nxy].tile_type not in ("INT", "INT_L", "INT_R"):
+					continue
+				t.interconn_xy = nxy
+				break
 	# Read package pins
-	with open(prjxray_root + "/" + name + "_package_pins.csv") as ppf:
+	with open(prjxray_root + "/" + name + "/package_pins.csv") as ppf:
 		for line in ppf:
 			sl = line.strip().split(",")
-			if len(sl) < 2:
+			if len(sl) < 3:
 				continue
-			if sl[1] == "site":
+			if sl[2] == "site":
 				continue # header
-			d.sites_by_name[sl[1]].package_pin = sl[0]
-	with open(prjxray_root + "/tileconn.json", "r") as tcf:
+			d.sites_by_name[sl[2]].package_pin = sl[0]
+	with open(prjxray_root + "/" + name + "/tileconn.json", "r") as tcf:
 		apply_tileconn(tcf, d)
 	return d
