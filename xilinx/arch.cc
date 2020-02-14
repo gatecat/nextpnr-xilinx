@@ -606,9 +606,11 @@ delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
         else
             return 150;
     } else {
-        delay_t base = 70 * std::min(std::abs(dst_x - src_x), 18) + 50 * std::max(std::abs(dst_x - src_x) - 18, 0) +
-                       210 * std::min(std::abs(dst_y - src_y), 6) + 150 * std::max(std::abs(dst_y - src_y) - 6, 0) +
-                       500;
+        delay_t base = 30 * std::min(std::abs(dst_x - src_x), 18) + 10 * std::max(std::abs(dst_x - src_x) - 18, 0) +
+                       60 * std::min(std::abs(dst_y - src_y), 6) + 20 * std::max(std::abs(dst_y - src_y) - 6, 0) + 300;
+
+        if (xc7)
+            base = (base * 3) / 2;
         return base;
     }
 }
