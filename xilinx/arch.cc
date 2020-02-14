@@ -633,8 +633,8 @@ bool Arch::place()
         cfg.placeAllAtOnce = true;
         cfg.hpwl_scale_x = 1;
         cfg.hpwl_scale_y = 2;
-        cfg.spread_scale_x = 1;
-        cfg.spread_scale_y = 2;
+        cfg.spread_scale_x = 2;
+        cfg.spread_scale_y = 1;
         cfg.netShareWeight = 0.2;
         cfg.solverTolerance = 0.6e-6;
         cfg.cellGroups.emplace_back();
