@@ -136,6 +136,21 @@ struct FasmBackend
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_IN1"), ctx->id("IOB_T_OUT0")}] = {};
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_OUT0"), ctx->id("IOB_T0")}] = {};
                     }
+
+                    pp_config[{ctx->id(s + "IOI" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
+                               ctx->id("IOI_OLOGIC" + i + "_D1")}] = {
+                            "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
+                            "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"};
+                    pp_config[{ctx->id(s + "IOI" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
+                               ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"ILOGIC_Y" + i + ".ZINV_D"};
+                    pp_config[{ctx->id(s + "IOI" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_TQ"),
+                               ctx->id("IOI_OLOGIC" + i + "_T1")}] = {"OLOGIC_Y" + i + ".ZINV_T1"};
+                    if (i == "0") {
+                        pp_config[{ctx->id(s + "IOB18" + s2), ctx->id("IOB_O_IN1"), ctx->id("IOB_O_OUT0")}] = {};
+                        pp_config[{ctx->id(s + "IOB18" + s2), ctx->id("IOB_O_OUT0"), ctx->id("IOB_O0")}] = {};
+                        pp_config[{ctx->id(s + "IOB18" + s2), ctx->id("IOB_T_IN1"), ctx->id("IOB_T_OUT0")}] = {};
+                        pp_config[{ctx->id(s + "IOB18" + s2), ctx->id("IOB_T_OUT0"), ctx->id("IOB_T0")}] = {};
+                    }
                 }
 
         for (std::string s1 : {"TOP", "BOT"}) {
@@ -168,6 +183,9 @@ struct FasmBackend
             std::string yy = std::to_string(y);
             std::string ii = std::to_string(rclk_y_to_i[y]);
             pp_config[{ctx->id("HCLK_IOI3"), ctx->id("HCLK_IOI_RCLK_OUT" + ii),
+                       ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii)}] = {"BUFR_Y" + yy + ".IN_USE",
+                                                                     "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"};
+            pp_config[{ctx->id("HCLK_IOI"), ctx->id("HCLK_IOI_RCLK_OUT" + ii),
                        ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii)}] = {"BUFR_Y" + yy + ".IN_USE",
                                                                      "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"};
         }
@@ -203,7 +221,8 @@ struct FasmBackend
             auto &pp = pp_config.at(ppk);
             std::string tile_name = get_tile_name(pip.tile);
             for (auto c : pp) {
-                if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
+                if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING") ||
+                    boost::starts_with(tile_name, "RIOI_SING") || boost::starts_with(tile_name, "LIOI_SING")) {
                     // Need to flip for top HCLK
                     bool is_top_sing = pip.tile < ctx->getHclkForIoi(pip.tile);
                     if (is_top_sing) {
@@ -232,7 +251,8 @@ struct FasmBackend
                 return;
             }
 
-            if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
+            if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING") ||
+                boost::starts_with(tile_name, "RIOI_SING") || boost::starts_with(tile_name, "LIOI_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
                 if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
                     (dst_name.find("CLK") == std::string::npos))
@@ -260,7 +280,7 @@ struct FasmBackend
             out << dst_name << ".";
             out << src_name << std::endl;
 
-            if (tile_name.find("IOI3") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
+            if (tile_name.find("IOI") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
                 out << tile_name << ".";
                 dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
                 out << dst_name << ".";
@@ -699,6 +719,94 @@ struct FasmBackend
         pop();
     }
 
+    void write_hpio_config(CellInfo *pad)
+    {
+        NetInfo *pad_net = get_net_or_empty(pad, ctx->id("PAD"));
+        NPNR_ASSERT(pad_net != nullptr);
+        std::string iostandard = str_or_default(pad->attrs, ctx->id("IOSTANDARD"), "LVCMOS18");
+        std::string pulltype = str_or_default(pad->attrs, ctx->id("PULLTYPE"), "NONE");
+        std::string slew = str_or_default(pad->attrs, ctx->id("SLEW"), "SLOW");
+
+        Loc ioLoc = ctx->getSiteLocInTile(pad->bel);
+        bool is_output = false, is_input = false;
+        if (pad_net->driver.cell != nullptr)
+            is_output = true;
+        for (auto &usr : pad_net->users)
+            if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
+                is_input = true;
+        std::string tile = get_tile_name(pad->bel.tile);
+        push(tile);
+
+        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
+
+        bool lvds = false;
+        if (iostandard == "LVDS") {
+            lvds = true;
+            if (ioLoc.y == 1) {
+                NPNR_ASSERT(is_input);
+                write_bit("IOB_Y0.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
+                write_bit("IOB_Y0.LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI.IN_ONLY");
+                write_bit("IOB_Y0.LVDS_SSTL135_SSTL15.IN_DIFF");
+                write_bit("IOB_Y0.PULLTYPE.NONE");
+                write_bit("IOB_Y1.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
+                write_bit("IOB_Y1.LVCMOS12_LVCMOS15_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI.IN_ONLY");
+                write_bit("IOB_Y1.PULLTYPE.NONE");
+            }
+        } else {
+            push("IOB_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y)));
+
+            if (boost::starts_with(iostandard, "DIFF_"))
+                iostandard.erase(0, 5);
+
+            int hclk = ctx->getHclkForIob(pad->bel);
+            if (is_output) {
+                if (iostandard == "LVCMOS18")
+                    write_bit("LVCMOS18.DRIVE.I16");
+                else if (iostandard == "LVCMOS15")
+                    write_bit("LVCMOS15.DRIVE.I16");
+
+                if (boost::starts_with(iostandard, "SSTL")) {
+                    std::string base_type = iostandard;
+                    if (iostandard.find('_') != std::string::npos)
+                        base_type = iostandard.substr(0, iostandard.find('_'));
+
+                    std::string prefix = stringf("%s_%s_DCI", base_type.c_str(), base_type.c_str());
+                    write_bit(prefix + ".I_FIXED");
+                    write_bit(prefix + ".SLEW." + slew);
+
+                    if (is_input && (iostandard.find("DCI") != std::string::npos))
+                        write_bit("SSTL135_DCI_SSTL15_DCI.INOUT");
+                } else {
+                    if (slew == "SLOW")
+                        write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
+                    else
+                        write_bit(iostandard + ".SLEW.FAST");
+                }
+            }
+            if (is_input) {
+                if (boost::starts_with(iostandard, "SSTL")) {
+                    if (iostandard.find("DCI") == std::string::npos)
+                        write_bit("SSTL135_SSTL15.IN");
+                    else
+                        write_bit("SSTL135_DCI_SSTL15_DCI.IN");
+                }
+                if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18")
+                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
+                if (!is_output)
+                    write_bit(ioLoc.y == 1 ? "LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI"
+                                           : "LVCMOS12_LVCMOS15_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI.IN_ONLY");
+            }
+            write_bit("PULLTYPE." + pulltype);
+            pop();
+        }
+        std::string site = ctx->getBelSite(pad->bel);
+        BelId inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
+        if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr && !lvds)
+            write_bit("OUT_DIFF");
+        pop();
+    }
+
     void write_iol_config(CellInfo *ci)
     {
         std::string tile = get_tile_name(ci->bel.tile);
@@ -783,7 +891,8 @@ struct FasmBackend
             if (type == "OVERSAMPLE")
                 write_bit("INTERFACE_TYPE.OVERSAMPLE");
             pop();
-        } else if (ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
+        } else if (ci->type == ctx->id("IDELAYE2_IDELAYE2") ||
+                   ci->type == ctx->id("IDELAYE2_FINEDELAY_IDELAYE2_FINEDELAY")) {
             write_bit("IN_USE");
             write_bit("CINVCTRL_SEL", str_or_default(ci->params, ctx->id("CINVCTRL_SEL"), "FALSE") == "TRUE");
             write_bit("PIPE_SEL", str_or_default(ci->params, ctx->id("PIPE_SEL"), "FALSE") == "TRUE");
@@ -806,7 +915,10 @@ struct FasmBackend
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
             if (ci->type == ctx->id("PAD")) {
-                write_io_config(ci);
+                if (ctx->getBelName(ci->bel).str(ctx).find("IOB18") != std::string::npos)
+                    write_hpio_config(ci);
+                else
+                    write_io_config(ci);
                 blank();
             } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
                        ci->type == ctx->id("IDELAYE2_IDELAYE2")) {

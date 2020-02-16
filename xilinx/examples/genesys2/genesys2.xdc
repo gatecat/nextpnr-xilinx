@@ -33,3 +33,8 @@ set_property IOSTANDARD LVCMOS33 [get_ports {led[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[2]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[1]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[0]}]
+
+set_property IOSTANDARD LVDS [get_ports {clkin}]
+set_property IOSTANDARD LVDS [get_ports {clkinb}]
+set_property PACKAGE_PIN AD12 [get_ports {clkin}]
+set_property PACKAGE_PIN AD11 [get_ports {clkinb}]
