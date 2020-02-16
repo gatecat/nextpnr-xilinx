@@ -656,6 +656,8 @@ struct FasmBackend
         if (is_output) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
                 write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+            else if (iostandard == "LVCMOS18")
+                write_bit("LVCMOS18.DRIVE.I16");
             if (iostandard == "SSTL135")
                 write_bit("SSTL135.DRIVE.I_FIXED");
             if (slew == "SLOW")
@@ -674,6 +676,8 @@ struct FasmBackend
                 if (pad->attrs.count(ctx->id("IN_TERM")))
                     write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
             }
+            if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18")
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
             if (!is_output)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
         }
