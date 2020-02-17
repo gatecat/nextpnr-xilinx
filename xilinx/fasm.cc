@@ -151,6 +151,11 @@ struct FasmBackend
                         pp_config[{ctx->id(s + "IOB18" + s2), ctx->id("IOB_T_IN1"), ctx->id("IOB_T_OUT0")}] = {};
                         pp_config[{ctx->id(s + "IOB18" + s2), ctx->id("IOB_T_OUT0"), ctx->id("IOB_T0")}] = {};
                     }
+
+                    pp_config[{ctx->id(s + "IOI" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OFB"),
+                               ctx->id(s + "IOI_OLOGIC" + i + "_OQ")}] = {};
+                    pp_config[{ctx->id(s + "IOI" + s2), ctx->id(s + "IOI_O" + i),
+                               ctx->id(s + "IOI_ODELAY" + i + "_DATAOUT")}] = {};
                 }
 
         for (std::string s1 : {"TOP", "BOT"}) {
@@ -774,7 +779,7 @@ struct FasmBackend
                         base_type = iostandard.substr(0, iostandard.find('_'));
 
                     std::string prefix = stringf("%s_%s_DCI", base_type.c_str(), base_type.c_str());
-                    write_bit(prefix + ".I_FIXED");
+                    write_bit(prefix + ".DRIVE.I_FIXED");
                     write_bit(prefix + ".SLEW." + slew);
                     if (iostandard.find("DCI") != std::string::npos) {
                         if (is_input)
@@ -948,11 +953,13 @@ struct FasmBackend
                 blank();
             }
         }
+        bool dci_used = false;
         for (auto &hclk : ioconfig_by_hclk) {
             push(get_tile_name(hclk.first));
             write_bit("STEPDOWN", hclk.second.stepdown);
             write_bit("VREF.V_675_MV", hclk.second.vref);
-            write_bit("VREF.DCI", hclk.second.dci);
+            write_bit("DCI", hclk.second.dci);
+            dci_used |= hclk.second.dci;
             pop();
             blank();
         }
@@ -991,6 +998,17 @@ struct FasmBackend
             write_bit("VREF_DRIVER");
             pop(2);
             blank();
+        }
+        if (dci_used) {
+            IdString cfg_center = ctx->id("CFG_CENTER_MID");
+            for (int i = 0; i < ctx->chip_info->num_tiles; i++) {
+                if (ctx->chip_info->tile_types[ctx->chip_info->tile_insts[i].type].type != cfg_center.index)
+                    continue;
+                push(get_tile_name(i));
+                write_bit("DCI_USED");
+                pop();
+                blank();
+            }
         }
     }
 

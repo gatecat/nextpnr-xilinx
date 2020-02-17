@@ -451,7 +451,7 @@ struct Router2
         auto &ad = nd.arcs[i];
 
         int backwards_iter = 0;
-        int backwards_limit = 5000000;
+        int backwards_limit = ctx->xc7 ? 100000 : 5000000;
 
         bool const_val = false;
         if (net->name == ctx->id("$PACKER_VCC_NET"))
@@ -585,6 +585,8 @@ struct Router2
                 reset_wires(t);
                 return;
             }
+            if (ctx->xc7)
+                backwards_limit = std::min(5000000, backwards_limit * 2);
         }
         log_error("Unrouteable %s sink %s.%s (%s)\n", ctx->nameOf(net), ctx->nameOf(net->users.at(i).cell),
                   ctx->nameOf(net->users.at(i).port), ctx->nameOfWire(dst_wire));

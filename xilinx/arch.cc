@@ -360,7 +360,7 @@ void Arch::setup_pip_blacklist()
                     src_name.find("IMUX") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
             }
-        } else if (type.find("IOI3") != std::string::npos) {
+        } else if (type.find("IOI") != std::string::npos) {
             for (int j = 0; j < td.num_pips; j++) {
                 auto &pd = td.pip_data[j];
                 std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
@@ -931,7 +931,8 @@ void Arch::findSourceSinkLocations()
                     int intent = wireIntent(cursor);
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
                         intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
-                        intent != ID_NODE_OUTPUT && intent != ID_NODE_INT_INTERFACE) {
+                        intent != ID_NODE_OUTPUT && intent != ID_NODE_INT_INTERFACE && intent != ID_OUTPUT &&
+                        intent != ID_OUTBOUND) {
                         int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
                         source_locs[source] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
