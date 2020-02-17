@@ -515,6 +515,14 @@ void XC7Packer::pack_iologic()
     iologic_rules[ctx->id("ISERDESE2")].new_type = ctx->id("ISERDESE2_ISERDESE2");
     iologic_rules[ctx->id("ODELAYE2")].new_type = ctx->id("ODELAYE2_ODELAYE2");
 
+    iologic_rules[ctx->id("IDDR")].new_type = ctx->id("ILOGICE2_IFF");
+    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("R")] = ctx->id("SR");
+    iologic_rules[ctx->id("IDDR")].port_multixform[ctx->id("C")] = {ctx->id("CK"), ctx->id("CKB")};
+
+    iologic_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE2_OUTFF");
+    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("R")] = ctx->id("SR");
+    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("C")] = ctx->id("CK");
+
     // Handles pseudo-diff output buffers without finding multiple sinks
     auto find_p_outbuf = [&](NetInfo *net) {
         CellInfo *outbuf = nullptr;
@@ -624,6 +632,40 @@ void XC7Packer::pack_iologic()
 
             std::string iol_site = get_ilogic_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[ctx->id("BEL")] = iol_site + "/ISERDESE2";
+        } else if (ci->type == ctx->id("ODDR")) {
+            NetInfo *q = get_net_or_empty(ci, ctx->id("Q"));
+            if (q == nullptr || q->users.empty())
+                log_error("%s '%s' has disconnected Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            else if (q != nullptr && q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE2") &&
+                     q->users.at(0).port == ctx->id("ODATAIN"))
+                q = get_net_or_empty(q->users.at(0).cell, ctx->id("DATAOUT"));
+            NPNR_ASSERT(q != nullptr);
+            BelId io_bel;
+            CellInfo *ob = find_p_outbuf(q);
+            if (ob != nullptr)
+                io_bel = ctx->getBelByName(ctx->id(ob->attrs.at(ctx->id("BEL")).as_string()));
+            else
+                log_error("%s '%s' has illegal fanout on Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = ol_site + "/OUTFF";
+            disconnect_port(ctx, ci, ctx->id("S"));
+        } else if (ci->type == ctx->id("IDDR")) {
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            BelId io_bel;
+            if (drv->type.str(ctx).find("IDELAYE2") != std::string::npos && d->driver.port == ctx->id("DATAOUT"))
+                io_bel = iodelay_to_io.at(drv->name);
+            else if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+            else
+                log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                          ctx->nameOf(ci), drv->type.c_str(ctx));
+
+            std::string iol_site = get_ilogic_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = iol_site + "/IFF";
+            disconnect_port(ctx, ci, ctx->id("S"));
         }
     }
 

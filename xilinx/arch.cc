@@ -742,10 +742,13 @@ void Arch::routeClock()
             std::queue<WireId> visit;
             std::unordered_map<WireId, PipId> backtrace;
             WireId dest = WireId();
+            WireId sink = getCtx()->getNetinfoSinkWire(ni, usr);
+            if (sink == WireId())
+                log_error("no wire for port %s.%s\n", usr.cell->name.c_str(this), usr.port.c_str(this));
             if (getCtx()->debug)
                 log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this),
-                         nameOfWire(getCtx()->getNetinfoSinkWire(ni, usr)));
-            visit.push(getCtx()->getNetinfoSinkWire(ni, usr));
+                         nameOfWire(sink));
+            visit.push(sink);
             while (!visit.empty()) {
                 WireId curr = visit.front();
                 visit.pop();

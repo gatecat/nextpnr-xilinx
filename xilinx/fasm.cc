@@ -156,6 +156,8 @@ struct FasmBackend
                                ctx->id(s + "IOI_OLOGIC" + i + "_OQ")}] = {};
                     pp_config[{ctx->id(s + "IOI" + s2), ctx->id(s + "IOI_O" + i),
                                ctx->id(s + "IOI_ODELAY" + i + "_DATAOUT")}] = {};
+                    pp_config[{ctx->id(s + "IOI" + s2), ctx->id(s + "IOI_O" + i),
+                               ctx->id(s + "IOI_OLOGIC" + i + "_OQ")}] = {};
                 }
 
         for (std::string s1 : {"TOP", "BOT"}) {
@@ -804,9 +806,9 @@ struct FasmBackend
                         write_bit("SSTL135_DCI_SSTL15_DCI.IN");
                 }
                 if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18")
-                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
+                    write_bit(ioLoc.y == 1 ? "LVCMOS12_LVCMOS15_LVCMOS18.IN" : "LVCMOS12_LVCMOS15.IN");
                 if (!is_output)
-                    write_bit(ioLoc.y == 1 ? "LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI"
+                    write_bit(ioLoc.y == 1 ? "LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI.IN_ONLY"
                                            : "LVCMOS12_LVCMOS15_SSTL135_SSTL135_DCI_SSTL15_SSTL15_DCI.IN_ONLY");
             }
             write_bit("PULLTYPE." + pulltype);
@@ -929,6 +931,33 @@ struct FasmBackend
             write_int_vector("ODELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("ODELAY_VALUE"), 0), 5, false);
             write_int_vector("ZODELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("ODELAY_VALUE"), 0), 5, true);
             write_bit("ZINV_ODATAIN", !bool_or_default(ci->params, ctx->id("IS_ODATAIN_INVERTED"), false));
+        } else if (ci->type == ctx->id("ILOGICE2_IFF")) {
+            write_bit("IDDR_OR_ISERDES.IN_USE");
+            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "SAME_EDGE_PIPELINED");
+            if (edge != "SAME_EDGE_PIPELINED")
+                write_bit("IFF.DDR_CLK_EDGE." + edge);
+            write_bit("IFF.SRTYPE." + str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC"));
+            write_bit("IFF.SRUSED", get_net_or_empty(ci, ctx->id("SR")) != nullptr);
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            write_bit("IFFDELMUXE3.P0",
+                      d != nullptr && (d->driver.cell->type.str(ctx).find("IDELAY") != std::string::npos));
+            for (int i = 1; i <= 4; i++) {
+                write_bit("IFF.ZINIT_Q" + std::to_string(i),
+                          !bool_or_default(ci->params, ctx->id("INIT_Q" + std::to_string(i)), false));
+                write_bit("IFF.ZSRVAL_Q" + std::to_string(i),
+                          !bool_or_default(ci->params, ctx->id("SRVAL_Q" + std::to_string(i)), false));
+            }
+            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_C_INVERTED"), false));
+            write_bit("ISERDES.INTERFACE_TYPE.Z_MEMORY");
+            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false));
+        } else if (ci->type == ctx->id("OLOGICE2_OUTFF")) {
+            write_bit("OQUSED");
+            write_bit("OSERDES.DATA_RATE_OQ.DDR");
+            write_bit("OSERDES.DATA_RATE_TQ.BUF");
+            write_bit("OSERDES.SRTYPE." + str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC"));
+            write_bit("ODDR.DDR_CLK_EDGE." + str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE"));
+            write_bit("ZINIT_OQ");
+            write_bit("ZINV_CLK", !bool_or_default(ci->params, ctx->id("IS_C_INVERTED"), false));
         } else {
             NPNR_ASSERT_FALSE("unsupported IOLOGIC");
         }
@@ -948,7 +977,8 @@ struct FasmBackend
             } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
                        ci->type == ctx->id("IDELAYE2_IDELAYE2") ||
                        ci->type == ctx->id("IDELAYE2_FINEDELAY_IDELAYE2_FINEDELAY") ||
-                       ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
+                       ci->type == ctx->id("ODELAYE2_ODELAYE2") || ci->type == ctx->id("ILOGICE2_IFF") ||
+                       ci->type == ctx->id("OLOGICE2_OUTFF")) {
                 write_iol_config(ci);
                 blank();
             }

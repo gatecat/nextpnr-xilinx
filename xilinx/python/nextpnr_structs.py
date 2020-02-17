@@ -387,7 +387,7 @@ class NextpnrTileType:
 			(bel_name == "BDI1MUX" and bel_pin == "DI") or \
 			(bel_name == "CDI1MUX" and bel_pin == "DI") or \
 			(bel_name.startswith("TFBUSED")) or \
-			(bel_name == "OMUX"):
+			(bel_name == "OMUX" and bel_pin == "D1"):
 			return None
 		# FIXME get from SDF
 		timing_class = self.timing.get_pip_class(
