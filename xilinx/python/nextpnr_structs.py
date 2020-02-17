@@ -67,6 +67,7 @@ class NextpnrSiteInst:
 		self.site_xy = site_xy
 		self.rel_xy = rel_xy
 		self.inter_xy = inter_xy
+		self.flags = 0
 
 class NextpnrTileInst:
 	def __init__(self, index, name, tile_type):

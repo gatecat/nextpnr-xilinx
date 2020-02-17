@@ -641,6 +641,8 @@ struct FasmBackend
     {
         bool stepdown = false;
         bool vref = false;
+        bool dci = false;
+        bool ext_vref = false;
     };
 
     std::unordered_map<int, BankIoConfig> ioconfig_by_hclk;
@@ -774,9 +776,12 @@ struct FasmBackend
                     std::string prefix = stringf("%s_%s_DCI", base_type.c_str(), base_type.c_str());
                     write_bit(prefix + ".I_FIXED");
                     write_bit(prefix + ".SLEW." + slew);
-
-                    if (is_input && (iostandard.find("DCI") != std::string::npos))
-                        write_bit("SSTL135_DCI_SSTL15_DCI.INOUT");
+                    if (iostandard.find("DCI") != std::string::npos) {
+                        if (is_input)
+                            write_bit("SSTL135_DCI_SSTL15_DCI.INOUT");
+                        ioconfig_by_hclk[hclk].dci = true;
+                        ioconfig_by_hclk[hclk].ext_vref = true;
+                    }
                 } else {
                     if (slew == "SLOW")
                         write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
@@ -786,9 +791,11 @@ struct FasmBackend
             }
             if (is_input) {
                 if (boost::starts_with(iostandard, "SSTL")) {
-                    if (iostandard.find("DCI") == std::string::npos)
+                    if (iostandard.find("DCI") == std::string::npos) {
+                        ioconfig_by_hclk[hclk].dci = true;
+                        ioconfig_by_hclk[hclk].ext_vref = true;
                         write_bit("SSTL135_SSTL15.IN");
-                    else
+                    } else
                         write_bit("SSTL135_DCI_SSTL15_DCI.IN");
                 }
                 if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18")
@@ -899,11 +906,24 @@ struct FasmBackend
             write_bit("HIGH_PERFORMANCE_MODE",
                       str_or_default(ci->params, ctx->id("HIGH_PERFORMANCE_MODE"), "FALSE") == "TRUE");
             write_bit("DELAY_SRC_" + str_or_default(ci->params, ctx->id("DELAY_SRC"), "IDATAIN"));
-            write_bit("IDELAY_TYPE_" + str_or_default(ci->params, ctx->id("IDELAY_TYPE"), "FIXED"));
+            std::string type = str_or_default(ci->params, ctx->id("IDELAY_TYPE"), "FIXED");
+            if (type != "FIXED")
+                write_bit("IDELAY_TYPE_" + type);
             write_int_vector("IDELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, false);
             write_int_vector("ZIDELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, true);
             write_bit("IS_DATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_DATAIN_INVERTED"), false));
             write_bit("IS_IDATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_IDATAIN_INVERTED"), false));
+        } else if (ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
+            write_bit("IN_USE");
+            write_bit("CINVCTRL_SEL", str_or_default(ci->params, ctx->id("CINVCTRL_SEL"), "FALSE") == "TRUE");
+            write_bit("HIGH_PERFORMANCE_MODE",
+                      str_or_default(ci->params, ctx->id("HIGH_PERFORMANCE_MODE"), "FALSE") == "TRUE");
+            std::string type = str_or_default(ci->params, ctx->id("ODELAY_TYPE"), "FIXED");
+            if (type != "FIXED")
+                write_bit("ODELAY_TYPE_" + type);
+            write_int_vector("ODELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("ODELAY_VALUE"), 0), 5, false);
+            write_int_vector("ZODELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("ODELAY_VALUE"), 0), 5, true);
+            write_bit("ZINV_ODATAIN", !bool_or_default(ci->params, ctx->id("IS_ODATAIN_INVERTED"), false));
         } else {
             NPNR_ASSERT_FALSE("unsupported IOLOGIC");
         }
@@ -921,7 +941,9 @@ struct FasmBackend
                     write_io_config(ci);
                 blank();
             } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
-                       ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
+                       ci->type == ctx->id("IDELAYE2_IDELAYE2") ||
+                       ci->type == ctx->id("IDELAYE2_FINEDELAY_IDELAYE2_FINEDELAY") ||
+                       ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
                 write_iol_config(ci);
                 blank();
             }
@@ -930,7 +952,45 @@ struct FasmBackend
             push(get_tile_name(hclk.first));
             write_bit("STEPDOWN", hclk.second.stepdown);
             write_bit("VREF.V_675_MV", hclk.second.vref);
+            write_bit("VREF.DCI", hclk.second.dci);
             pop();
+            blank();
+        }
+        for (auto bel : ctx->getBels()) {
+            // Write out VRP/VRN
+            if (ctx->getBelType(bel) != ctx->id("PAD"))
+                continue;
+            int hclk = ctx->getHclkForIob(bel);
+
+            std::string tile = get_tile_name(bel.tile);
+            bool is_sing = tile.find("_SING_") != std::string::npos;
+            if (!is_sing)
+                continue;
+            if (!ioconfig_by_hclk[hclk].dci)
+                continue;
+            bool is_top = bel.tile < hclk;
+            push(tile);
+            write_bit(is_top ? "IOB_Y1.VRN_USED" : "IOB_Y0.VRP_USED");
+            pop();
+            blank();
+        }
+        for (auto bel : ctx->getBels()) {
+            // Write out external VREF driver
+            if (ctx->getBelType(bel) != ctx->id("PAD"))
+                continue;
+            int hclk = ctx->getHclkForIob(bel);
+            if (!ioconfig_by_hclk[hclk].ext_vref)
+                continue;
+            if (ctx->getBelSiteFlags(bel) != SITE_IO_VREF)
+                continue;
+            std::string tile = get_tile_name(bel.tile);
+            NPNR_ASSERT(ctx->getBoundBelCell(bel) == nullptr);
+            push(tile);
+            Loc ioLoc = ctx->getSiteLocInTile(bel);
+            push("IOB_Y" + std::to_string((1 - ioLoc.y)));
+            write_bit("VREF_DRIVER");
+            pop(2);
+            blank();
         }
     }
 

@@ -55,6 +55,9 @@ def main():
 			for s in t.sites():
 				nsi = NextpnrSiteInst(name=s.name, package_pin="." if s.package_pin is None else s.package_pin,
 					site_xy=s.grid_xy, rel_xy=s.rel_xy(), inter_xy=t.interconn_xy)
+				if s.pin_function is not None:
+					if "VREF" in s.pin_function:
+						nsi.flags |= 1
 				nti.sites.append(nsi)
 			nti.tilewire_to_node = [-1] * tile_types[nti.tile_type].tile_wire_count
 			tile_insts.append(nti)
@@ -254,6 +257,7 @@ def main():
 				bba.u32(si.rel_xy[1]) # in-tile relative Y grid coord
 				bba.u32(si.inter_xy[0]) # associated interconn tile X
 				bba.u32(si.inter_xy[1]) # associated interconn tile Y
+				bba.u32(si.flags) # flags used for special IO functions
 		# List of tile instances and associated metadata
 		bba.label("tile_insts")
 		for ti in tile_insts:

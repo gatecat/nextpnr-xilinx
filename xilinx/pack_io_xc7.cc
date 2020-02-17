@@ -389,6 +389,8 @@ std::string XC7Packer::get_ologic_site(const std::string &io_bel)
         WireId cursor = visit.front();
         visit.pop();
         for (auto bp : ctx->getWireBelPins(cursor)) {
+            if (ctx->getBelType(bp.bel) == id_PSEUDO_GND || ctx->getBelType(bp.bel) == id_PSEUDO_VCC)
+                continue;
             std::string site = ctx->getBelSite(bp.bel);
             if (boost::starts_with(site, "OLOGIC"))
                 return site;
@@ -411,6 +413,8 @@ std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
         WireId cursor = visit.front();
         visit.pop();
         for (auto bp : ctx->getWireBelPins(cursor)) {
+            if (ctx->getBelType(bp.bel) == id_PSEUDO_GND || ctx->getBelType(bp.bel) == id_PSEUDO_VCC)
+                continue;
             std::string site = ctx->getBelSite(bp.bel);
             if (boost::starts_with(site, "ILOGIC"))
                 return site;
@@ -433,6 +437,8 @@ std::string XC7Packer::get_idelay_site(const std::string &io_bel)
         WireId cursor = visit.front();
         visit.pop();
         for (auto bp : ctx->getWireBelPins(cursor)) {
+            if (ctx->getBelType(bp.bel) == id_PSEUDO_GND || ctx->getBelType(bp.bel) == id_PSEUDO_VCC)
+                continue;
             std::string site = ctx->getBelSite(bp.bel);
             if (boost::starts_with(site, "IDELAY"))
                 return site;
@@ -441,6 +447,30 @@ std::string XC7Packer::get_idelay_site(const std::string &io_bel)
             visit.push(ctx->getPipDstWire(pip));
     }
     NPNR_ASSERT_FALSE("failed to find IDELAY");
+}
+
+std::string XC7Packer::get_odelay_site(const std::string &io_bel)
+{
+    bool is_hp = io_bel.find("IOB18") != std::string::npos;
+    BelId ibc_bel = ctx->getBelByName(
+            ctx->id(io_bel.substr(0, io_bel.find('/')) + (is_hp ? "/IOB18/OUTBUF_DCIEN" : "/IOB33/OUTBUF")));
+    std::queue<WireId> visit;
+    visit.push(ctx->getBelPinWire(ibc_bel, ctx->id("IN")));
+
+    while (!visit.empty()) {
+        WireId cursor = visit.front();
+        visit.pop();
+        for (auto bp : ctx->getWireBelPins(cursor)) {
+            if (ctx->getBelType(bp.bel) == id_PSEUDO_GND || ctx->getBelType(bp.bel) == id_PSEUDO_VCC)
+                continue;
+            std::string site = ctx->getBelSite(bp.bel);
+            if (boost::starts_with(site, "ODELAY"))
+                return site;
+        }
+        for (auto pip : ctx->getPipsUphill(cursor))
+            visit.push(ctx->getPipSrcWire(pip));
+    }
+    NPNR_ASSERT_FALSE("failed to find ODELAY");
 }
 
 std::string XC7Packer::get_ioctrl_site(const std::string &io_bel)
@@ -490,7 +520,8 @@ void XC7Packer::pack_iologic()
         CellInfo *outbuf = nullptr;
         for (auto &usr : net->users) {
             IdString type = usr.cell->type;
-            if (type == ctx->id("IOB33_OUTBUF") || type == ctx->id("IOB33M_OUTBUF")) {
+            if (type == ctx->id("IOB33_OUTBUF") || type == ctx->id("IOB33M_OUTBUF") ||
+                type == ctx->id("IOB18_OUTBUF_DCIEN") || type == ctx->id("IOB18M_OUTBUF_DCIEN")) {
                 if (outbuf != nullptr)
                     return (CellInfo *)nullptr; // drives multiple outputs
                 outbuf = usr.cell;
@@ -507,25 +538,51 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
-            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
+            if (drv->type.str(ctx).find("INBUF_") != std::string::npos)
                 io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has IDATAIN input connected to illegal cell type %s\n", ci->type.c_str(ctx),
                           ctx->nameOf(ci), drv->type.c_str(ctx));
-            std::string iol_site = get_idelay_site(ctx->getBelName(io_bel).str(ctx));
-            ci->attrs[ctx->id("BEL")] = iol_site + "/IDELAYE2";
+            std::string io_belname = ctx->getBelName(io_bel).str(ctx);
+            std::string iol_site = get_idelay_site(io_belname);
+            if (io_belname.find("IOB18") != std::string::npos)
+                ci->attrs[ctx->id("BEL")] = iol_site + "/IDELAYE2_FINEDELAY";
+            else
+                ci->attrs[ctx->id("BEL")] = iol_site + "/IDELAYE2";
+            ci->attrs[ctx->id("X_IO_BEL")] = ctx->getBelName(io_bel).str(ctx);
+            iodelay_to_io[ci->name] = io_bel;
+        } else if (ci->type == ctx->id("ODELAYE2")) {
+            NetInfo *q = get_net_or_empty(ci, ctx->id("DATAOUT"));
+            if (q == nullptr || q->users.empty())
+                log_error("%s '%s' has disconnected DATAOUT output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *outbuf = find_p_outbuf(q);
+            BelId io_bel;
+            if (outbuf != nullptr)
+                io_bel = ctx->getBelByName(ctx->id(str_or_default(outbuf->attrs, ctx->id("BEL"), "")));
+            if (io_bel == BelId())
+                log_error("%s '%s' has no top level output buffer connected to DATAOUT output\n", ci->type.c_str(ctx),
+                          ctx->nameOf(ci));
+            std::string iol_site = get_odelay_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = iol_site + "/ODELAYE2";
             ci->attrs[ctx->id("X_IO_BEL")] = ctx->getBelName(io_bel).str(ctx);
             iodelay_to_io[ci->name] = io_bel;
         }
-        // FIXME: ODELAY
     }
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
         if (ci->type == ctx->id("OSERDESE2")) {
             NetInfo *q = get_net_or_empty(ci, ctx->id("OQ"));
-            if (q == nullptr || q->users.empty())
-                log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            NetInfo *qfb = get_net_or_empty(ci, ctx->id("OFB"));
+            if ((q == nullptr || q->users.empty()) && (qfb == nullptr || qfb->users.empty()))
+                log_error("%s '%s' has disconnected OQ and OFB outputs\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            else if (qfb != nullptr && qfb->users.size() == 1 && qfb->users.at(0).cell->type == ctx->id("ODELAYE2") &&
+                     qfb->users.at(0).port == ctx->id("ODATAIN"))
+                q = get_net_or_empty(qfb->users.at(0).cell, ctx->id("DATAOUT"));
+            else if (q != nullptr && q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE2") &&
+                     q->users.at(0).port == ctx->id("ODATAIN"))
+                q = get_net_or_empty(q->users.at(0).cell, ctx->id("DATAOUT"));
+            NPNR_ASSERT(q != nullptr);
             BelId io_bel;
             CellInfo *ob = find_p_outbuf(q);
             if (ob != nullptr)
@@ -573,6 +630,15 @@ void XC7Packer::pack_iologic()
     flush_cells();
     generic_xform(iologic_rules, false);
     flush_cells();
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
+            // Rewrite for HPIO
+            if (str_or_default(ci->attrs, ctx->id("X_IO_BEL"), "").find("IOB18") == std::string::npos)
+                continue;
+            ci->type = ctx->id("IDELAYE2_FINEDELAY_IDELAYE2_FINEDELAY");
+        }
+    }
 }
 
 void XC7Packer::pack_idelayctrl()
@@ -591,7 +657,8 @@ void XC7Packer::pack_idelayctrl()
     std::set<std::string> ioctrl_sites;
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
-        if (ci->type == ctx->id("IDELAYE2_IDELAYE2") || ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
+        if (ci->type == ctx->id("IDELAYE2_IDELAYE2") || ci->type == ctx->id("ODELAYE2_ODELAYE2") ||
+            ci->type == ctx->id("IDELAYE2_FINEDELAY_IDELAYE2_FINEDELAY")) {
             if (!ci->attrs.count(ctx->id("BEL")))
                 continue;
             ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(ctx->id("X_IO_BEL")).as_string()));

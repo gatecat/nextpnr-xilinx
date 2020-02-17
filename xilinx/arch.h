@@ -209,12 +209,18 @@ NPNR_PACKED_STRUCT(struct TileTypeInfoPOD {
     int32_t timing_index;
 });
 
+enum SiteInstFlags : int32_t
+{
+    SITE_IO_VREF = 1,
+};
+
 NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
     RelPtr<char> name;
     RelPtr<char> pin;
     int32_t site_x, site_y;
     int32_t rel_x, rel_y;
     int32_t inter_x, inter_y;
+    int32_t flags;
 });
 
 NPNR_PACKED_STRUCT(struct TileInstInfoPOD {
@@ -1603,6 +1609,15 @@ struct Arch : BaseCtx
         auto &tile = chip_info->tile_insts[bel.tile];
         auto &site = tile.site_insts[s];
         return site.name.get();
+    }
+
+    SiteInstFlags getBelSiteFlags(BelId bel) const
+    {
+        int s = locInfo(bel).bel_data[bel.index].site;
+        NPNR_ASSERT(s != -1);
+        auto &tile = chip_info->tile_insts[bel.tile];
+        auto &site = tile.site_insts[s];
+        return SiteInstFlags(site.flags);
     }
 
     int getHclkForIob(BelId pad);

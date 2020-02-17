@@ -210,6 +210,7 @@ class Site:
 		self.data = data
 		self.primary = primary if primary is not None else self
 		self.package_pin = None
+		self.pin_function = None
 		self._rel_xy = None # filled later
 		self._variants = None #filled later
 	def get_bel_data(self, index):
@@ -469,6 +470,8 @@ def import_device(name, prjxray_root, metadata_root):
 				si = Site(t, site, idx, parse_xy(site), get_site_type_data(sitetype))
 				t.site_insts.append(si)
 				d.sites_by_name[site] = si
+				if "pin_functions" in tiledata and site in tiledata["pin_functions"]:
+					si.pin_function = tiledata["pin_functions"][site]
 		d.tiles_by_name[tile] = t
 		d.tiles_by_xy[x, y] = t
 		d.tiles.append(t)
