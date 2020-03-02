@@ -118,6 +118,109 @@ public class bbaexport {
         public ArrayList<NextpnrBelWire> belports;
     }
 
+    static class NextpnrPropDelay {
+        public NextpnrPropDelay(String from_port, String to_port, int min_delay, int max_delay) {
+            this.from_port = makeConstId(from_port);
+            this.to_port = makeConstId(to_port);
+            this.min_delay = min_delay;
+            this.max_delay = max_delay;
+        }
+        public int from_port;
+        public int to_port;
+        public int min_delay;
+        public int max_delay;
+    }
+
+    enum NextpnrTmgChkType {
+        TIMING_CHECK_SETUP,
+        TIMING_CHECK_HOLD,
+        TIMING_CHECK_WIDTHd,
+    }
+
+    static class NextpnrTimingCheck {
+        public NextpnrTimingCheck(NextpnrTmgChkType chktype, String sig_port, String clock_port, int min_value, int max_value) {
+            this.chktype = chktype;
+            this.sig_port = makeConstId(sig_port);
+            this.clock_port = makeConstId(clock_port);
+            this.min_value = min_value;
+            this.max_value = max_value;
+        }
+        public NextpnrTmgChkType chktype;
+        public int sig_port;
+        public int clock_port;
+        public int min_value;
+        public int max_value;
+    }
+
+    static class NextpnrCellTiming {
+        public NextpnrCellTiming(String variant_name) {
+            this.variant_name = makeConstId(variant_name);
+            this.delays = new ArrayList<>();
+            this.checks = new ArrayList<>();
+        }
+        public int variant_name;
+        public ArrayList<NextpnrPropDelay> delays;
+        public ArrayList<NextpnrTimingCheck> checks;
+        public void sort() {
+            Collections.sort(delays, new Comparator<NextpnrPropDelay>() {
+                @Override
+                public int compare(NextpnrPropDelay o1, NextpnrPropDelay o2) {
+                    int tc = Integer.compare(o1.to_port, o2.to_port);
+                    if (tc != 0)
+                        return tc;
+                    return Integer.compare(o1.from_port, o2.from_port);
+                }
+            });
+            Collections.sort(checks, new Comparator<NextpnrTimingCheck>() {
+                @Override
+                public int compare(NextpnrTimingCheck o1, NextpnrTimingCheck o2) {
+                    int tc = Integer.compare(o1.sig_port, o2.sig_port);
+                    if (tc != 0)
+                        return tc;
+                    return Integer.compare(o1.clock_port, o2.clock_port);
+                }
+            });
+        }
+    }
+
+    static class NextpnrInstanceTiming {
+        public NextpnrInstanceTiming(String inst_name) {
+            this.inst_name = makeConstId(inst_name);
+            this.variants = new ArrayList<>();
+        }
+
+        public void sort() {
+            Collections.sort(variants, new Comparator<NextpnrCellTiming>() {
+                @Override
+                public int compare(NextpnrCellTiming o1, NextpnrCellTiming o2) {
+                    return Integer.compare(o1.variant_name, o2.variant_name);
+                }
+            });
+        }
+
+        public int inst_name;
+        public ArrayList<NextpnrCellTiming> variants;
+    }
+
+    static class NextpnrTileCellTiming {
+        public NextpnrTileCellTiming(String tile_type) {
+            this.tile_type = makeConstId(tile_type);
+            this.instances = new ArrayList<>();
+        }
+
+        public void sort() {
+            Collections.sort(instances, new Comparator<NextpnrInstanceTiming>() {
+                @Override
+                public int compare(NextpnrInstanceTiming o1, NextpnrInstanceTiming o2) {
+                    return Integer.compare(o1.inst_name, o2.inst_name);
+                }
+            });
+        }
+
+        public int tile_type;
+        public ArrayList<NextpnrInstanceTiming> instances;
+    }
+
     private static ArrayList<String> constIds = new ArrayList<>();
     private static HashMap<String, Integer> knownConstIds = new HashMap<>();
 
