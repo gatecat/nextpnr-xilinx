@@ -16,7 +16,8 @@
  *  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
  */
-
+#ifndef ROUTER2_H
+#define ROUTER2_H
 #include "nextpnr.h"
 
 NEXTPNR_NAMESPACE_BEGIN
@@ -51,6 +52,9 @@ struct Router2Cfg
     bool perf_profile = false;
 };
 
-void router2(Context *ctx, const Router2Cfg &cfg);
+struct Router2ArchFunctions;
+
+void router2(Context *ctx, const Router2Cfg &cfg, Router2ArchFunctions *arch_func = nullptr);
 
 NEXTPNR_NAMESPACE_END
+#endif
