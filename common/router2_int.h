@@ -37,6 +37,7 @@ enum ArcRouteResult
 
 struct NetSegment
 {
+    NetSegment() : orig_net(nullptr), orig_user(0), src_wire(WireId()), dst_wire(WireId()) {}
     NetSegment(const Context *ctx, NetInfo *net, size_t user) : orig_net(net), orig_user(user)
     {
         src_wire = ctx->getNetinfoSourceWire(net);
@@ -68,10 +69,11 @@ struct Router2State
 
     Context *ctx;
     Router2Cfg cfg;
+    Router2ArchFunctions *f;
 
     struct PerSegmentData
     {
-        NetSegment segment;
+        NetSegment s;
         ArcBounds bb;
         bool routed = false;
     };
@@ -80,7 +82,6 @@ struct Router2State
     // as the primary relation between arcs and wires/pips
     struct PerNetData
     {
-        WireId src_wire;
         std::vector<PerSegmentData> segments;
         ArcBounds bb;
         // Coordinates of the center of the net, used for the weight-to-average
@@ -166,17 +167,17 @@ struct Router2State
 
     float present_wire_cost(const PerWireData &w, int net_uid);
     bool hit_test_pip(ArcBounds &bb, Loc l);
-    float score_wire_for_arc(NetInfo *net, size_t user, WireId wire, PipId pip);
-    float get_togo_cost(NetInfo *net, size_t user, int wire, WireId sink);
+    float score_wire_for_net(NetInfo *net, WireId wire, PipId pip);
+    float get_togo_cost(NetInfo *net, int wire, WireId sink);
     bool is_wire_undriveable(WireId wire);
 
     inline PerWireData &wire_data(WireId w) { return flat_wires[wire_to_idx.at(w)]; }
 
-    void bind_pip_internal(NetInfo *net, size_t user, int wire, PipId pip);
-    void unbind_pip_internal(NetInfo *net, size_t user, WireId wire);
-    void ripup_arc(NetInfo *net, size_t user);
-    bool check_arc_routing(NetInfo *net, size_t usr);
-    bool bind_and_check(NetInfo *net, int usr_idx);
+    void bind_pip_internal(NetInfo *net, int wire, PipId pip);
+    void unbind_pip_internal(NetInfo *net, WireId wire);
+    void ripup_seg(NetInfo *net, size_t s);
+    bool check_seg_routing(NetInfo *net, size_t s);
+    bool bind_and_check(NetInfo *net, int seg_idx);
     bool bind_and_check_all();
 
     void reserve_wires_for_arc(NetInfo *net, size_t i);
@@ -186,7 +187,7 @@ struct Router2State
     void set_visited(Router2Thread &t, int wire, PipId pip, WireScore score);
     inline bool was_visited(int wire) { return flat_wires.at(wire).visit.visited; }
 
-    ArcRouteResult route_arc(Router2Thread &t, NetInfo *net, size_t i, bool is_mt, bool is_bb = true);
+    ArcRouteResult route_seg(Router2Thread &t, NetInfo *net, size_t i, bool is_mt, bool is_bb = true);
     bool route_net(Router2Thread &t, NetInfo *net, bool is_mt);
 
     void partition_nets();
@@ -198,7 +199,11 @@ struct Router2State
 
     void do_route();
 
-    Router2State(Context *ctx, const Router2Cfg &cfg) : ctx(ctx), cfg(cfg) {}
+    Router2State(Context *ctx, const Router2Cfg &cfg, Router2ArchFunctions *arch_func = nullptr)
+            : ctx(ctx), cfg(cfg), f(arch_func ? arch_func : new Router2ArchFunctions)
+    {
+        f->r = this;
+    }
 
     void operator()();
 };

@@ -45,6 +45,22 @@
 NEXTPNR_NAMESPACE_BEGIN
 
 namespace Router2 {
+
+ArcRouteResult Router2ArchFunctions::route_segment(Router2Thread *th, const NetInfo *net, size_t seg_idx, bool is_mt,
+                                                   bool no_bb)
+{
+    return ARC_USE_DEFAULT;
+}
+
+std::vector<NetSegment> Router2ArchFunctions::segment_net(NetInfo *net)
+{
+    std::vector<NetSegment> segments;
+    for (size_t i = 0; i < net->users.size(); i++) {
+        segments.emplace_back(r->ctx, net, i);
+    }
+    return segments;
+}
+
 float Router2State::present_wire_cost(const Router2State::PerWireData &w, int net_uid)
 {
     int other_sources = int(w.bound_nets.size());
@@ -65,7 +81,8 @@ void Router2State::setup_nets()
         NetInfo *ni = net.second;
         ni->udata = i;
         nets_by_udata.at(i) = ni;
-        nets.at(i).arcs.resize(ni->users.size());
+        auto segments = f->segment_net(ni);
+        nets.at(i).segments.resize(segments.size());
 
         // Start net bounding box at overall min/max
         nets.at(i).bb.x0 = std::numeric_limits<int>::max();
@@ -81,28 +98,22 @@ void Router2State::setup_nets()
             nets.at(i).cy += drv_loc.y;
         }
 
-        for (size_t j = 0; j < ni->users.size(); j++) {
-            auto &usr = ni->users.at(j);
-            WireId src_wire = ctx->getNetinfoSourceWire(ni), dst_wire = ctx->getNetinfoSinkWire(ni, usr);
-            nets.at(i).src_wire = src_wire;
+        for (size_t j = 0; j < segments.size(); j++) {
+            auto &seg = segments.at(j);
             if (ni->driver.cell == nullptr)
-                src_wire = dst_wire;
-            if (ni->driver.cell == nullptr && dst_wire == WireId())
+                seg.src_wire = seg.dst_wire;
+            if (ni->driver.cell == nullptr && seg.dst_wire == WireId())
                 continue;
-            if (src_wire == WireId())
-                log_error("No wire found for port %s on source cell %s.\n", ctx->nameOf(ni->driver.port),
-                          ctx->nameOf(ni->driver.cell));
-            if (dst_wire == WireId())
-                log_error("No wire found for port %s on destination cell %s.\n", ctx->nameOf(usr.port),
-                          ctx->nameOf(usr.cell));
-            nets.at(i).arcs.at(j).sink_wire = dst_wire;
+            nets.at(i).segments.at(j).s = seg;
             // Set bounding box for this arc
-            nets.at(i).arcs.at(j).bb = ctx->getRouteBoundingBox(src_wire, dst_wire);
+            nets.at(i).segments.at(j).bb = ctx->getRouteBoundingBox(seg.src_wire, seg.dst_wire);
             // Expand net bounding box to include this arc
-            nets.at(i).bb.x0 = std::min(nets.at(i).bb.x0, nets.at(i).arcs.at(j).bb.x0);
-            nets.at(i).bb.x1 = std::max(nets.at(i).bb.x1, nets.at(i).arcs.at(j).bb.x1);
-            nets.at(i).bb.y0 = std::min(nets.at(i).bb.y0, nets.at(i).arcs.at(j).bb.y0);
-            nets.at(i).bb.y1 = std::max(nets.at(i).bb.y1, nets.at(i).arcs.at(j).bb.y1);
+            nets.at(i).bb.x0 = std::min(nets.at(i).bb.x0, nets.at(i).segments.at(j).bb.x0);
+            nets.at(i).bb.x1 = std::max(nets.at(i).bb.x1, nets.at(i).segments.at(j).bb.x1);
+            nets.at(i).bb.y0 = std::min(nets.at(i).bb.y0, nets.at(i).segments.at(j).bb.y0);
+            nets.at(i).bb.y1 = std::max(nets.at(i).bb.y1, nets.at(i).segments.at(j).bb.y1);
+        }
+        for (auto &usr : ni->users) {
             // Add location to centroid sum
             Loc usr_loc = ctx->getBelLocation(usr.cell->bel);
             nets.at(i).cx += usr_loc.x;
@@ -158,7 +169,7 @@ bool Router2State::hit_test_pip(ArcBounds &bb, Loc l)
             log(__VA_ARGS__);                                                                                          \
     } while (0)
 
-void Router2State::bind_pip_internal(NetInfo *net, size_t user, int wire, PipId pip)
+void Router2State::bind_pip_internal(NetInfo *net, int wire, PipId pip)
 {
     auto &b = flat_wires.at(wire).bound_nets[net->udata];
     ++b.first;
@@ -169,7 +180,7 @@ void Router2State::bind_pip_internal(NetInfo *net, size_t user, int wire, PipId 
     }
 }
 
-void Router2State::unbind_pip_internal(NetInfo *net, size_t user, WireId wire)
+void Router2State::unbind_pip_internal(NetInfo *net, WireId wire)
 {
     auto &b = wire_data(wire).bound_nets.at(net->udata);
     --b.first;
@@ -178,23 +189,23 @@ void Router2State::unbind_pip_internal(NetInfo *net, size_t user, WireId wire)
     }
 }
 
-void Router2State::ripup_arc(NetInfo *net, size_t user)
+void Router2State::ripup_seg(NetInfo *net, size_t s)
 {
-    auto &ad = nets.at(net->udata).arcs.at(user);
-    if (!ad.routed)
+    auto &sd = nets.at(net->udata).segments.at(s);
+    if (!sd.routed)
         return;
-    WireId src = nets.at(net->udata).src_wire;
-    WireId cursor = ad.sink_wire;
+    WireId src = sd.s.src_wire;
+    WireId cursor = sd.s.dst_wire;
     while (cursor != src) {
         auto &wd = wire_data(cursor);
         PipId pip = wd.bound_nets.at(net->udata).second;
-        unbind_pip_internal(net, user, cursor);
+        unbind_pip_internal(net, cursor);
         cursor = ctx->getPipSrcWire(pip);
     }
-    ad.routed = false;
+    sd.routed = false;
 }
 
-float Router2State::score_wire_for_arc(NetInfo *net, size_t user, WireId wire, PipId pip)
+float Router2State::score_wire_for_net(NetInfo *net, WireId wire, PipId pip)
 {
     auto &wd = wire_data(wire);
     auto &nd = nets.at(net->udata);
@@ -214,7 +225,7 @@ float Router2State::score_wire_for_arc(NetInfo *net, size_t user, WireId wire, P
     return base_cost * hist_cost * present_cost / (1 + source_uses) + bias_cost;
 }
 
-float Router2State::get_togo_cost(NetInfo *net, size_t user, int wire, WireId sink)
+float Router2State::get_togo_cost(NetInfo *net, int wire, WireId sink)
 {
     auto &wd = flat_wires[wire];
     int source_uses = 0;
@@ -224,11 +235,11 @@ float Router2State::get_togo_cost(NetInfo *net, size_t user, int wire, WireId si
     return (ctx->getDelayNS(ctx->estimateDelay(wd.w, sink)) / (1 + source_uses)) + cfg.ipin_cost_adder;
 }
 
-bool Router2State::check_arc_routing(NetInfo *net, size_t usr)
+bool Router2State::check_seg_routing(NetInfo *net, size_t s)
 {
-    auto &ad = nets.at(net->udata).arcs.at(usr);
-    WireId src_wire = nets.at(net->udata).src_wire;
-    WireId cursor = ad.sink_wire;
+    auto &sd = nets.at(net->udata).segments.at(s);
+    WireId src_wire = sd.s.src_wire;
+    WireId cursor = sd.s.dst_wire;
     while (wire_data(cursor).bound_nets.count(net->udata)) {
         auto &wd = wire_data(cursor);
         if (wd.bound_nets.size() != 1)
@@ -470,34 +481,20 @@ void Router2State::set_visited(Router2Thread &t, int wire, PipId pip, WireScore 
     }
 #endif
 
-ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i, bool is_mt, bool is_bb)
+ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i, bool is_mt, bool is_bb)
 {
 
     auto &nd = nets[net->udata];
-    auto &ad = nd.arcs[i];
-    auto &usr = net->users.at(i);
-    ROUTE_LOG_DBG("Routing arc %d of net '%s' (%d, %d) -> (%d, %d)\n", int(i), ctx->nameOf(net), ad.bb.x0, ad.bb.y0,
-                  ad.bb.x1, ad.bb.y1);
-    WireId src_wire = ctx->getNetinfoSourceWire(net), dst_wire = ctx->getNetinfoSinkWire(net, usr);
-    if (src_wire == WireId())
-        ARC_LOG_ERR("No wire found for port %s on source cell %s.\n", ctx->nameOf(net->driver.port),
-                    ctx->nameOf(net->driver.cell));
-    if (dst_wire == WireId())
-        ARC_LOG_ERR("No wire found for port %s on destination cell %s.\n", ctx->nameOf(usr.port),
-                    ctx->nameOf(usr.cell));
+    auto &sd = nd.segments[i];
+    auto &s = sd.s;
+    ROUTE_LOG_DBG("Routing segment %d of net '%s' (%d, %d) -> (%d, %d)\n", int(i), ctx->nameOf(net), sd.bb.x0, sd.bb.y0,
+                  sd.bb.x1, sd.bb.y1);
+    WireId src_wire = s.src_wire, dst_wire = s.dst_wire;
     int src_wire_idx = wire_to_idx.at(src_wire);
     int dst_wire_idx = wire_to_idx.at(dst_wire);
     // Check if arc was already done _in this iteration_
     if (t.processed_sinks.count(dst_wire))
         return ARC_SUCCESS;
-
-        // Special case
-#if 0
-        if (net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET")) {
-            route_xilinx_const(t, net, i, src_wire_idx, dst_wire, is_mt, is_bb);
-            return ARC_SUCCESS;
-        }
-#endif
 
     if (!t.queue.empty()) {
         std::priority_queue<QueuedWire, std::vector<QueuedWire>, QueuedWire::Greater> new_queue;
@@ -577,11 +574,11 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
     if (was_visited(src_wire_idx)) {
         ROUTE_LOG_DBG("   Routed (backwards): ");
         int cursor_fwd = src_wire_idx;
-        bind_pip_internal(net, i, src_wire_idx, PipId());
+        bind_pip_internal(net, src_wire_idx, PipId());
         while (was_visited(cursor_fwd)) {
             auto &v = flat_wires.at(cursor_fwd).visit;
             cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip));
-            bind_pip_internal(net, i, cursor_fwd, v.pip);
+            bind_pip_internal(net, cursor_fwd, v.pip);
             if (ctx->debug) {
                 auto &wd = flat_wires.at(cursor_fwd);
                 ROUTE_LOG_DBG("      wire: %s (curr %d hist %f)\n", ctx->nameOfWire(wd.w),
@@ -589,7 +586,7 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
             }
         }
         NPNR_ASSERT(cursor_fwd == dst_wire_idx);
-        ad.routed = true;
+        sd.routed = true;
         t.processed_sinks.insert(dst_wire);
         reset_wires(t);
         return ARC_SUCCESS;
@@ -600,13 +597,13 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
     WireScore base_score;
     base_score.cost = 0;
     base_score.delay = ctx->getWireDelay(src_wire).maxDelay();
-    base_score.togo_cost = get_togo_cost(net, i, src_wire_idx, dst_wire);
+    base_score.togo_cost = get_togo_cost(net, src_wire_idx, dst_wire);
 
     // Add source wire to queue
     t.queue.push(QueuedWire(src_wire_idx, PipId(), Loc(), base_score));
     set_visited(t, src_wire_idx, PipId(), base_score);
 
-    int toexplore = 25000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
+    int toexplore = 25000 * std::max(1, (sd.bb.x1 - sd.bb.x0) + (sd.bb.y1 - sd.bb.y0));
     int iter = 0;
     int explored = 1;
     bool debug_arc = /*usr.cell->type.str(ctx).find("RAMB") != std::string::npos && (usr.port ==
@@ -631,7 +628,7 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
                 if (is_bb && !hit_test_pip(ad.bb, ctx->getPipLocation(dh)) && wire_intent != ID_PSEUDO_GND && wire_intent != ID_PSEUDO_VCC)
                     continue;
 #else
-            if (is_bb && !hit_test_pip(ad.bb, ctx->getPipLocation(dh)))
+            if (is_bb && !hit_test_pip(sd.bb, ctx->getPipLocation(dh)))
                 continue;
             if (!ctx->checkPipAvail(dh) && ctx->getBoundPipNet(dh) != net)
                 continue;
@@ -653,9 +650,9 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
             if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != dh)
                 continue;
             WireScore next_score;
-            next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, dh);
+            next_score.cost = curr.score.cost + score_wire_for_net(net, next, dh);
             next_score.delay = curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
-            next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, next_idx, dst_wire);
+            next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, next_idx, dst_wire);
             const auto &v = nwd.visit;
             if (!v.visited || (v.score.total() > next_score.total())) {
                 ++explored;
@@ -677,7 +674,7 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
         int cursor_bwd = dst_wire_idx;
         while (was_visited(cursor_bwd)) {
             auto &v = flat_wires.at(cursor_bwd).visit;
-            bind_pip_internal(net, i, cursor_bwd, v.pip);
+            bind_pip_internal(net, cursor_bwd, v.pip);
             if (ctx->debug) {
                 auto &wd = flat_wires.at(cursor_bwd);
                 ROUTE_LOG_DBG("      wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
@@ -693,7 +690,7 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
             cursor_bwd = wire_to_idx.at(ctx->getPipSrcWire(v.pip));
         }
         t.processed_sinks.insert(dst_wire);
-        ad.routed = true;
+        sd.routed = true;
         reset_wires(t);
         return ARC_SUCCESS;
     } else {
@@ -703,7 +700,7 @@ ArcRouteResult Router2State::route_arc(Router2Thread &t, NetInfo *net, size_t i,
 }
 #undef ARC_ERR
 
-bool Router2Thread::route_net(Router2Thread &t, NetInfo *net, bool is_mt)
+bool Router2State::route_net(Router2Thread &t, NetInfo *net, bool is_mt)
 {
 
 #if 0
@@ -722,22 +719,23 @@ bool Router2Thread::route_net(Router2Thread &t, NetInfo *net, bool is_mt)
     bool have_failures = false;
     t.processed_sinks.clear();
     t.route_arcs.clear();
-    for (size_t i = 0; i < net->users.size(); i++) {
+    auto &nd = nets.at(net->udata);
+    for (size_t i = 0; i < nd.segments.size(); i++) {
         // Ripup failed arcs to start with
         // Check if arc is already legally routed
-        if (check_arc_routing(net, i))
+        if (check_seg_routing(net, i))
             continue;
-        auto &usr = net->users.at(i);
-        WireId dst_wire = ctx->getNetinfoSinkWire(net, usr);
+        auto &s = nd.segments.at(i).s;
         // Case of arcs that were pre-routed strongly (e.g. clocks)
-        if (net->wires.count(dst_wire) && net->wires.at(dst_wire).strength > STRENGTH_STRONG)
+        if (net->wires.count(s.dst_wire) && net->wires.at(s.dst_wire).strength > STRENGTH_STRONG)
             return ARC_SUCCESS;
         // Ripup arc to start with
-        ripup_arc(net, i);
+        ripup_seg(net, i);
         t.route_arcs.push_back(i);
     }
     for (auto i : t.route_arcs) {
-        auto res1 = route_arc(t, net, i, is_mt, true);
+        auto &s = nd.segments.at(i).s;
+        auto res1 = route_seg(t, net, i, is_mt, true);
         if (res1 == ARC_FATAL)
             return false; // Arc failed irrecoverably
         else if (res1 == ARC_RETRY_WITHOUT_BB) {
@@ -746,14 +744,13 @@ bool Router2Thread::route_net(Router2Thread &t, NetInfo *net, bool is_mt)
                 have_failures = true;
             } else {
                 // Attempt a re-route without the bounding box constraint
-                ROUTE_LOG_DBG("Rerouting arc %d of net '%s' without bounding box, possible tricky routing...\n", int(i),
-                              ctx->nameOf(net));
-                auto res2 = route_arc(t, net, i, is_mt, false);
+                ROUTE_LOG_DBG("Rerouting segment %d of net '%s' without bounding box, possible tricky routing...\n",
+                              int(i), ctx->nameOf(net));
+                auto res2 = route_seg(t, net, i, is_mt, false);
                 // If this also fails, no choice but to give up
                 if (res2 != ARC_SUCCESS)
-                    log_error("Failed to route arc %d of net '%s', from %s to %s.\n", int(i), ctx->nameOf(net),
-                              ctx->nameOfWire(ctx->getNetinfoSourceWire(net)),
-                              ctx->nameOfWire(ctx->getNetinfoSinkWire(net, net->users.at(i))));
+                    log_error("Failed to route segment %d of net '%s', from %s to %s.\n", int(i), ctx->nameOf(net),
+                              ctx->nameOfWire(s.src_wire), ctx->nameOfWire(s.dst_wire));
             }
         }
     }
@@ -785,7 +782,7 @@ void Router2State::update_congestion()
     }
 }
 
-bool Router2State::bind_and_check(NetInfo *net, int usr_idx)
+bool Router2State::bind_and_check(NetInfo *net, int seg_idx)
 {
 #ifdef ARCH_ECP5
     if (net->is_global)
@@ -793,13 +790,10 @@ bool Router2State::bind_and_check(NetInfo *net, int usr_idx)
 #endif
     bool success = true;
     auto &nd = nets.at(net->udata);
-    auto &ad = nd.arcs.at(usr_idx);
-    auto &usr = net->users.at(usr_idx);
-    WireId src = ctx->getNetinfoSourceWire(net);
-    // Skip routes with no source
-    if (src == WireId())
-        return true;
-    WireId dst = ctx->getNetinfoSinkWire(net, usr);
+    auto &sd = nd.segments.at(seg_idx);
+
+    WireId src = sd.s.src_wire, dst = sd.s.dst_wire;
+
     // Skip routes where the destination is already bound
     if (dst == WireId() || ctx->getBoundWireNet(dst) == net)
         return true;
@@ -814,7 +808,7 @@ bool Router2State::bind_and_check(NetInfo *net, int usr_idx)
     }
 
     // Skip routes where there is no routing (special cases)
-    if (!ad.routed)
+    if (!sd.routed)
         return true;
 
     WireId cursor = dst;
@@ -834,7 +828,7 @@ bool Router2State::bind_and_check(NetInfo *net, int usr_idx)
         if (!wd.bound_nets.count(net->udata)) {
             log("Failure details:\n");
             log("    Cursor: %s\n", ctx->nameOfWire(cursor));
-            log_error("Internal error; incomplete route tree for arc %d of net %s.\n", usr_idx, ctx->nameOf(net));
+            log_error("Internal error; incomplete route tree for segment %d of net %s.\n", seg_idx, ctx->nameOf(net));
         }
         auto &p = wd.bound_nets.at(net->udata).second;
         if (!ctx->checkPipAvail(p)) {
@@ -852,7 +846,7 @@ bool Router2State::bind_and_check(NetInfo *net, int usr_idx)
         for (auto tb : to_bind)
             ctx->bindPip(tb, net, STRENGTH_WEAK);
     } else {
-        ripup_arc(net, usr_idx);
+        ripup_seg(net, seg_idx);
         failed_nets.insert(net->udata);
     }
     return success;
@@ -875,8 +869,9 @@ bool Router2State::bind_and_check_all()
         }
         for (auto w : net_wires)
             ctx->unbindWire(w);
+        auto &nd = nets.at(net->udata);
         // Bind the arcs using the routes we have discovered
-        for (size_t i = 0; i < net->users.size(); i++) {
+        for (size_t i = 0; i < nd.segments.size(); i++) {
             if (!bind_and_check(net, i)) {
                 ++arch_fail;
                 success = false;
@@ -990,7 +985,7 @@ void Router2State::do_route()
     }
     const int Nq = 4, Nv = 2, Nh = 2;
     const int N = Nq + Nv + Nh;
-    std::vector<ThreadContext> tcs(N + 1);
+    std::vector<Router2Thread> tcs(N + 1);
     for (auto n : route_queue) {
         auto &nd = nets.at(n);
         auto ni = nets_by_udata.at(n);
@@ -1065,7 +1060,7 @@ void Router2State::operator()()
     partition_nets();
     curr_cong_weight = cfg.init_curr_cong_weight;
     hist_cong_weight = cfg.hist_cong_weight;
-    ThreadContext st;
+    Router2Thread st;
     int iter = 1;
 
     for (size_t i = 0; i < nets_by_udata.size(); i++)
@@ -1142,9 +1137,9 @@ void Router2State::operator()()
 }
 } // namespace Router2
 
-void router2(Context *ctx, const Router2Cfg &cfg, Router2ArchFunctions *arch_func)
+void router2(Context *ctx, const Router2Cfg &cfg, Router2::Router2ArchFunctions *arch_func)
 {
-    Router2::Router2State rt(ctx, cfg);
+    Router2::Router2State rt(ctx, cfg, arch_func);
     rt.ctx = ctx;
     rt();
 }

@@ -51,10 +51,11 @@ struct Router2Cfg
     // Print additional performance profiling information
     bool perf_profile = false;
 };
-
+namespace Router2 {
 struct Router2ArchFunctions;
+}
 
-void router2(Context *ctx, const Router2Cfg &cfg, Router2ArchFunctions *arch_func = nullptr);
+void router2(Context *ctx, const Router2Cfg &cfg, Router2::Router2ArchFunctions *arch_func = nullptr);
 
 NEXTPNR_NAMESPACE_END
 #endif
