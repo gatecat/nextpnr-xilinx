@@ -30,6 +30,7 @@
 #include "placer_heap.h"
 #include "router1.h"
 #include "router2.h"
+#include "router2_xilinx.h"
 #include "timing.h"
 #include "util.h"
 

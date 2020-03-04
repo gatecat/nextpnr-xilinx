@@ -46,7 +46,7 @@ NEXTPNR_NAMESPACE_BEGIN
 
 namespace Router2 {
 
-ArcRouteResult Router2ArchFunctions::route_segment(Router2Thread *th, const NetInfo *net, size_t seg_idx, bool is_mt,
+ArcRouteResult Router2ArchFunctions::route_segment(Router2Thread *th, NetInfo *net, size_t seg_idx, bool is_mt,
                                                    bool no_bb)
 {
     return ARC_USE_DEFAULT;
@@ -59,6 +59,11 @@ std::vector<NetSegment> Router2ArchFunctions::segment_net(NetInfo *net)
         segments.emplace_back(r->ctx, net, i);
     }
     return segments;
+}
+
+bool Router2ArchFunctions::skip_net(NetInfo *net)
+{
+    return false;
 }
 
 float Router2State::present_wire_cost(const Router2State::PerWireData &w, int net_uid)

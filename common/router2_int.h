@@ -57,11 +57,13 @@ struct Router2ArchFunctions
     Router2State *r;
     // Arch-specific routing of a segment (perhaps for constant or IO nets)
     // Return ARC_USE_DEFAULT to route normally
-    ArcRouteResult route_segment(Router2Thread *th, const NetInfo *net, size_t seg_idx, bool is_mt, bool no_bb);
+    virtual ArcRouteResult route_segment(Router2Thread *th, NetInfo *net, size_t seg_idx, bool is_mt, bool no_bb);
     // Arch-specific segmenting of a net (perhaps to use global or cross-SLR resources)
-    std::vector<NetSegment> segment_net(NetInfo *net);
+    virtual std::vector<NetSegment> segment_net(NetInfo *net);
     // Return true if a net should be totally skipped by the router
-    bool skip_net(NetInfo *net);
+    virtual bool skip_net(NetInfo *net);
+
+    virtual ~Router2ArchFunctions() = default;
 };
 
 struct Router2State
