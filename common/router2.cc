@@ -46,8 +46,8 @@ NEXTPNR_NAMESPACE_BEGIN
 
 namespace Router2 {
 
-ArcRouteResult Router2ArchFunctions::route_segment(Router2Thread *th, NetInfo *net, size_t seg_idx, bool is_mt,
-                                                   bool no_bb)
+ArcRouteResult Router2ArchFunctions::route_segment(Router2Thread &th, NetInfo *net, size_t seg_idx, bool is_mt,
+                                                   bool is_bb)
 {
     return ARC_USE_DEFAULT;
 }
@@ -61,10 +61,7 @@ std::vector<NetSegment> Router2ArchFunctions::segment_net(NetInfo *net)
     return segments;
 }
 
-bool Router2ArchFunctions::skip_net(NetInfo *net)
-{
-    return false;
-}
+bool Router2ArchFunctions::skip_net(NetInfo *net) { return false; }
 
 float Router2State::present_wire_cost(const Router2State::PerWireData &w, int net_uid)
 {
@@ -494,12 +491,18 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
     auto &s = sd.s;
     ROUTE_LOG_DBG("Routing segment %d of net '%s' (%d, %d) -> (%d, %d)\n", int(i), ctx->nameOf(net), sd.bb.x0, sd.bb.y0,
                   sd.bb.x1, sd.bb.y1);
+
     WireId src_wire = s.src_wire, dst_wire = s.dst_wire;
     int src_wire_idx = wire_to_idx.at(src_wire);
     int dst_wire_idx = wire_to_idx.at(dst_wire);
     // Check if arc was already done _in this iteration_
     if (t.processed_sinks.count(dst_wire))
         return ARC_SUCCESS;
+
+    ArcRouteResult arch_res = f->route_segment(t, net, i, is_mt, is_bb);
+    if (arch_res != ARC_USE_DEFAULT) {
+        return arch_res;
+    }
 
     if (!t.queue.empty()) {
         std::priority_queue<QueuedWire, std::vector<QueuedWire>, QueuedWire::Greater> new_queue;
@@ -509,6 +512,8 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
         std::queue<int> new_queue;
         t.backwards_queue.swap(new_queue);
     }
+    reset_wires(t);
+
     // First try strongly iteration-limited routing backwards BFS
     // this will deal with certain nets faster than forward A*
     // and comes at a minimal performance cost for the others

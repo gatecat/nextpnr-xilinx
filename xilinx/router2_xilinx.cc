@@ -23,25 +23,35 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 namespace Router2 {
-ArcRouteResult Router2Xilinx::route_segment(Router2Thread *th, NetInfo *net, size_t seg_idx, bool is_mt, bool no_bb)
+ArcRouteResult Router2Xilinx::route_segment(Router2Thread &th, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb)
 {
     if ((net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET"))) {
         if (is_mt)
             return ARC_RETRY_WITHOUT_BB;
-        route_xilinx_const(*th, net, seg_idx, is_mt, !no_bb);
+        route_xilinx_const(th, net, seg_idx, is_mt, is_bb);
         return ARC_SUCCESS;
     }
     return ARC_USE_DEFAULT;
 }
 
-std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net) {
-    return Router2ArchFunctions::segment_net(net);
-}
+std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net) { return Router2ArchFunctions::segment_net(net); }
 
 void Router2Xilinx::route_xilinx_const(Router2Thread &t, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb)
 {
     auto &nd = r->nets[net->udata];
     auto &sd = nd.segments[seg_idx];
+
+    if (!t.queue.empty()) {
+        std::priority_queue<Router2State::QueuedWire, std::vector<Router2State::QueuedWire>,
+                            Router2State::QueuedWire::Greater>
+                new_queue;
+        t.queue.swap(new_queue);
+    }
+    if (!t.backwards_queue.empty()) {
+        std::queue<int> new_queue;
+        t.backwards_queue.swap(new_queue);
+    }
+    r->reset_wires(t);
 
     int backwards_iter = 0;
     int backwards_limit = ctx->xc7 ? 100000 : 5000000;

@@ -30,7 +30,7 @@ struct Router2Xilinx : public Router2ArchFunctions
     Context *ctx;
     Router2Xilinx(Context *ctx) : ctx(ctx){};
 
-    ArcRouteResult route_segment(Router2Thread *th, NetInfo *net, size_t seg_idx, bool is_mt, bool no_bb) override;
+    ArcRouteResult route_segment(Router2Thread &th, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb) override;
     std::vector<NetSegment> segment_net(NetInfo *net) override;
 
     void route_xilinx_const(Router2Thread &t, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb = true);

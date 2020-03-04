@@ -979,7 +979,7 @@ bool Arch::route()
         cfg.bb_margin_x = 4;
         cfg.bb_margin_y = 4;
         cfg.backwards_max_iter = 200;
-        router2(getCtx(), cfg);
+        router2(getCtx(), cfg, new Router2::Router2Xilinx(getCtx()));
         result = true;
     } else {
         log_error("Xilinx architecture does not support router '%s'\n", router.c_str());
