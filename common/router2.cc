@@ -104,9 +104,9 @@ void Router2State::setup_nets()
             auto &seg = segments.at(j);
             if (ni->driver.cell == nullptr)
                 seg.src_wire = seg.dst_wire;
+            nets.at(i).segments.at(j).s = seg;
             if (ni->driver.cell == nullptr && seg.dst_wire == WireId())
                 continue;
-            nets.at(i).segments.at(j).s = seg;
             // Set bounding box for this arc
             nets.at(i).segments.at(j).bb = ctx->getRouteBoundingBox(seg.src_wire, seg.dst_wire);
             // Expand net bounding box to include this arc
@@ -175,10 +175,10 @@ void Router2State::bind_pip_internal(NetInfo *net, int wire, PipId pip)
 {
     auto &b = flat_wires.at(wire).bound_nets[net->udata];
     ++b.first;
-    if (b.first == 1) {
+    if (b.first == 1 || (b.second == PipId() && pip != PipId())) {
         b.second = pip;
     } else {
-        NPNR_ASSERT(b.second == pip);
+        NPNR_ASSERT(pip == PipId() || b.second == pip);
     }
 }
 
@@ -491,8 +491,9 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
     auto &s = sd.s;
     ROUTE_LOG_DBG("Routing segment %d of net '%s' (%d, %d) -> (%d, %d)\n", int(i), ctx->nameOf(net), sd.bb.x0, sd.bb.y0,
                   sd.bb.x1, sd.bb.y1);
-
     WireId src_wire = s.src_wire, dst_wire = s.dst_wire;
+    ROUTE_LOG_DBG("    source: %s\n", ctx->nameOfWire(src_wire));
+    ROUTE_LOG_DBG("      dest: %s\n", ctx->nameOfWire(dst_wire));
     int src_wire_idx = wire_to_idx.at(src_wire);
     int dst_wire_idx = wire_to_idx.at(dst_wire);
     // Check if arc was already done _in this iteration_
@@ -657,7 +658,8 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
                 continue;
             if (nwd.reserved_net != -1 && nwd.reserved_net != net->udata)
                 continue;
-            if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != dh)
+            if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != PipId() &&
+                nwd.bound_nets.at(net->udata).second != dh)
                 continue;
             WireScore next_score;
             next_score.cost = curr.score.cost + score_wire_for_net(net, next, dh);
@@ -1124,7 +1126,8 @@ void Router2State::operator()()
         log_info("    iter=%d wires=%d overused=%d overuse=%d archfail=%s\n", iter, total_wire_use, overused_wires,
                  total_overuse, overused_wires > 0 ? "NA" : std::to_string(arch_fail).c_str());
         ++iter;
-        curr_cong_weight *= cfg.curr_cong_mult;
+        if (curr_cong_weight < 1e9)
+            curr_cong_weight *= cfg.curr_cong_mult;
     } while (!failed_nets.empty());
     if (cfg.perf_profile) {
         std::vector<std::pair<int, IdString>> nets_by_runtime;

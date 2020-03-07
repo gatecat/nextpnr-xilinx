@@ -498,8 +498,8 @@ public class bbaexport {
             boolean isLogic = (tt == TileTypeEnum.CLEM || tt == TileTypeEnum.CLEM_R || tt == TileTypeEnum.CLEL_L || tt == TileTypeEnum.CLEL_R);
             boolean isxc7Logic = (tt == TileTypeEnum.CLBLL_L || tt == TileTypeEnum.CLBLL_R || tt == TileTypeEnum.CLBLM_L || tt == TileTypeEnum.CLBLM_R);
             for (PIP p : t.getPIPs()) {
-                if (p.isRouteThru() && p.getStartWireName().endsWith("_CE_INT"))
-                    continue; // these route through pips seem to cause antenna issues
+                //if (p.isRouteThru() && p.getStartWireName().endsWith("_CE_INT"))
+                //    continue; // these route through pips seem to cause antenna issues
                 if (p.isRouteThru() && isxc7Logic)
                     continue; // fixme
                 if (xc7_flag && p.isRouteThru() && p.getEndWireName().contains("TFB"))

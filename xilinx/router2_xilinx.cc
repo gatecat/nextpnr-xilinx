@@ -20,9 +20,185 @@
 #include "router2_xilinx.h"
 #include "log.h"
 #include "nextpnr.h"
+#include "util.h"
 
 NEXTPNR_NAMESPACE_BEGIN
+
 namespace Router2 {
+/*
+ * This is a simple pass to split locally high-fanout nets
+ * that force the use of dedicated "leaf" clock resources
+ * (using the CE->leaf route-through) to reduce routing
+ * congestion
+ */
+struct BufceLeafInserter
+{
+    Context *ctx;
+    // int tile --> rclk tile and side
+    std::unordered_map<int, std::pair<int, bool>> int_to_rclk;
+    std::vector<std::pair<std::string, std::string>> tiletypes;
+    void setup_int2rclk()
+    {
+        tiletypes = ctx->getTilesAndTypes();
+        for (int y = 0; y < ctx->chip_info->height; y++) {
+            for (int x = 0; x < ctx->chip_info->width; x++) {
+                int t = y * ctx->chip_info->width + x;
+                std::string tiletype = tiletypes.at(t).second;
+                if (tiletype != "RCLK_INT_L" && tiletype != "RCLK_INT_R")
+                    continue;
+                for (int y2 = y - 30; y2 <= y + 30; y2++)
+                    int_to_rclk[y2 * ctx->chip_info->width + x] = std::make_pair(t, y2 >= y);
+            }
+        }
+    }
+    int fanout_thresh = 20;
+
+    struct IntBoolHash
+    {
+        std::size_t operator()(const std::pair<int, bool> &p) const noexcept
+        {
+            std::size_t seed = 0;
+            boost::hash_combine(seed, std::hash<bool>()(p.first));
+            boost::hash_combine(seed, std::hash<bool>()(p.second));
+            return seed;
+        }
+    };
+    std::unordered_map<std::pair<int, bool>, std::unordered_map<IdString, std::vector<size_t>>, IntBoolHash>
+            rclk_to_sink;
+
+    std::unordered_map<IdString, std::unordered_set<size_t>> promoted_sinks;
+    std::unordered_map<IdString, std::vector<NetSegment>> rclk_segments;
+
+    int total_promoted = 0;
+
+    std::pair<int, bool> sink_to_rclk(NetInfo *net, const PortRef &sink)
+    {
+        WireId dst_wire = ctx->getNetinfoSinkWire(net, sink);
+        if (dst_wire == WireId())
+            return {-1, false};
+        int sink_tile = -1;
+
+        if (tiletypes.at(sink.cell->bel.tile).second.find("XIPHY") != std::string::npos) {
+            return {-1, false};
+        }
+
+        if (ctx->sink_locs.count(dst_wire)) {
+            auto loc = ctx->sink_locs.at(dst_wire);
+            sink_tile = loc.y * ctx->chip_info->width + loc.x;
+        } else {
+            auto bel_data = ctx->locInfo(sink.cell->bel).bel_data[sink.cell->bel.index];
+            if (bel_data.site == -1)
+                return {-1, false};
+            auto site_data = ctx->chip_info->tile_insts[sink.cell->bel.tile].site_insts[bel_data.site];
+            if (site_data.inter_x == -1)
+                return {-1, false};
+            sink_tile = site_data.inter_y * ctx->chip_info->width + site_data.inter_x;
+        }
+        if (sink_tile == -1 || !int_to_rclk.count(sink_tile))
+            return {-1, false};
+        return int_to_rclk.at(sink_tile);
+    }
+
+    void determine_rclk_fanout()
+    {
+        for (auto net : sorted(ctx->nets)) {
+            NetInfo *ni = net.second;
+            if (int(ni->users.size()) < fanout_thresh)
+                continue;
+            if (!ni->wires.empty())
+                continue;
+            if (ni->name == ctx->id("$PACKER_GND_NET") || ni->name == ctx->id("$PACKER_VCC_NET"))
+                continue;
+            for (size_t i = 0; i < ni->users.size(); i++) {
+                const auto &user = ni->users.at(i);
+                auto rclk = sink_to_rclk(ni, user);
+                if (rclk.first == -1)
+                    continue;
+                rclk_to_sink[rclk][ni->name].push_back(i);
+            }
+        }
+    }
+
+    WireId get_rclk_wire(int tile, bool top_half, int i)
+    {
+        NPNR_ASSERT(i < 16);
+        static const std::vector<int> top_rclk = {
+            0, 1, 4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29
+        };
+        static const std::vector<int> bot_rclk = {
+            2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 30, 31
+        };
+
+
+        int leaf_clk = top_half ? top_rclk.at(i) : bot_rclk.at(i);
+        IdString wire_name = ctx->id(
+                stringf("%s/CLK_LEAF_SITES_%d_CLK_LEAF", ctx->chip_info->tile_insts[tile].name.get(), leaf_clk));
+        return ctx->getWireByName(wire_name);
+    }
+
+    void promote_leaf_clocks()
+    {
+        for (auto &r : rclk_to_sink) {
+            std::set<int> available_rclk;
+            for (int i = 0; i < 16; i++)
+                if (ctx->checkWireAvail(get_rclk_wire(r.first.first, r.first.second, i)))
+                    available_rclk.insert(i);
+            int to_promote_rclk = std::min<int>(10, available_rclk.size());
+            int promoted = 0;
+            while (promoted < to_promote_rclk) {
+                auto max = std::max_element(
+                        r.second.begin(), r.second.end(),
+                        [](const decltype(r.second)::value_type &a, const decltype(r.second)::value_type &b) {
+                            return a.second.size() < b.second.size();
+                        });
+                if (max == r.second.end() || int(max->second.size()) < fanout_thresh)
+                    break;
+                NPNR_ASSERT(!available_rclk.empty());
+                int rclk_idx = *(available_rclk.begin());
+                WireId rclk_wire = get_rclk_wire(r.first.first, r.first.second, rclk_idx);
+                NetInfo *ni = ctx->nets.at(max->first).get();
+
+                WireId src_wire = ctx->getNetinfoSourceWire(ni);
+                NPNR_ASSERT(src_wire != WireId());
+                rclk_segments[ni->name].emplace_back(ni, max->second.front(), src_wire, rclk_wire);
+
+                for (auto usr_idx : max->second) {
+                    WireId dst_wire = ctx->getNetinfoSinkWire(ni, ni->users.at(usr_idx));
+                    NPNR_ASSERT(dst_wire != WireId());
+                    rclk_segments[ni->name].emplace_back(ni, usr_idx, rclk_wire, dst_wire);
+                    promoted_sinks[ni->name].insert(usr_idx);
+                }
+
+                // Ensure bounding box and estimates are accurate
+                if (!ctx->sink_locs.count(rclk_wire)) {
+                    for (auto uh : ctx->getPipsUphill(rclk_wire)) {
+                        WireId src = ctx->getPipSrcWire(uh);
+                        if (ctx->getWireName(src).str(ctx).find("CE_INT") != std::string::npos) {
+                            ctx->sink_locs[rclk_wire] = ctx->getPipLocation(uh);
+                            break;
+                        }
+                    }
+                }
+
+                r.second.erase(max->first);
+                available_rclk.erase(rclk_idx);
+                ++promoted;
+                ++total_promoted;
+            }
+        }
+    }
+
+    BufceLeafInserter(Context *ctx) : ctx(ctx) {}
+
+    void operator()()
+    {
+        setup_int2rclk();
+        determine_rclk_fanout();
+        promote_leaf_clocks();
+        log_info("Used %d leaf clock wires for high-fanout nets\n", total_promoted);
+    }
+};
+
 ArcRouteResult Router2Xilinx::route_segment(Router2Thread &th, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb)
 {
     if ((net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET"))) {
@@ -34,7 +210,26 @@ ArcRouteResult Router2Xilinx::route_segment(Router2Thread &th, NetInfo *net, siz
     return ARC_USE_DEFAULT;
 }
 
-std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net) { return Router2ArchFunctions::segment_net(net); }
+std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net)
+{
+    if (leaf_inserter == nullptr) {
+        leaf_inserter = new BufceLeafInserter(ctx);
+        (*leaf_inserter)();
+    }
+    if (leaf_inserter->promoted_sinks.count(net->name)) {
+        const auto &rclk_sinks = leaf_inserter->promoted_sinks.at(net->name);
+        const auto &rclk_segs = leaf_inserter->rclk_segments.at(net->name);
+        // Add segments from leaf clock promotion
+        std::vector<NetSegment> segments(rclk_segs.begin(), rclk_segs.end());
+        // Create segments for arcs not promoted to use leaf clock resources
+        for (size_t i = 0; i < net->users.size(); i++)
+            if (!rclk_sinks.count(i))
+                segments.emplace_back(ctx, net, i);
+        return segments;
+    } else {
+        return Router2ArchFunctions::segment_net(net);
+    }
+}
 
 void Router2Xilinx::route_xilinx_const(Router2Thread &t, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb)
 {

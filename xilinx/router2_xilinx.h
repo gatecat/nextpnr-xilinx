@@ -25,10 +25,15 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 namespace Router2 {
+
+struct BufceLeafInserter;
+
 struct Router2Xilinx : public Router2ArchFunctions
 {
     Context *ctx;
-    Router2Xilinx(Context *ctx) : ctx(ctx){};
+    BufceLeafInserter *leaf_inserter;
+
+    Router2Xilinx(Context *ctx) : ctx(ctx), leaf_inserter(nullptr){};
 
     ArcRouteResult route_segment(Router2Thread &th, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb) override;
     std::vector<NetSegment> segment_net(NetInfo *net) override;

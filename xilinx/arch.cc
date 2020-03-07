@@ -250,6 +250,8 @@ WireId Arch::getWireByName(IdString name) const
         }
     }
 
+    ret = canonicalWireId(chip_info, ret.tile, ret.index);
+
     wire_by_name_cache[name] = ret;
 
     return ret;
@@ -513,8 +515,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     if (srci.intent == ID_NODE_HQUAD || srci.intent == ID_NODE_VQUAD || srci.intent == ID_NODE_DOUBLE)
         base -= 120;
     */
-    delay_t base = 30 * std::min(std::abs(dst_x - src_x), 18) + 10 * std::max(std::abs(dst_x - src_x) - 18, 0) +
-                   60 * std::min(std::abs(dst_y - src_y), 6) + 20 * std::max(std::abs(dst_y - src_y) - 6, 0) + 300;
+    delay_t base = 30 * std::min(std::abs(dst_x - src_x), 18) + 12 * std::max(std::abs(dst_x - src_x) - 18, 0) +
+                   60 * std::min(std::abs(dst_y - src_y), 6) + 25 * std::max(std::abs(dst_y - src_y) - 6, 0) + 300;
 
     if (xc7)
         base = (base * 3) / 2;
@@ -563,7 +565,7 @@ ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
     }
 
     if (src.tile != -1 && chip_info->tile_insts[src.tile].num_sites > 0) {
-        auto &site = chip_info->tile_insts[dst.tile].site_insts[wireInfo(dst).site != -1 ? wireInfo(dst).site : 0];
+        auto &site = chip_info->tile_insts[src.tile].site_insts[wireInfo(src).site != -1 ? wireInfo(src).site : 0];
         if (site.inter_x != -1) {
             expand(site.inter_x, site.inter_y);
         }
@@ -979,6 +981,7 @@ bool Arch::route()
         cfg.bb_margin_x = 4;
         cfg.bb_margin_y = 4;
         cfg.backwards_max_iter = 200;
+        cfg.perf_profile = true;
         router2(getCtx(), cfg, new Router2::Router2Xilinx(getCtx()));
         result = true;
     } else {

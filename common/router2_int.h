@@ -43,6 +43,10 @@ struct NetSegment
         src_wire = ctx->getNetinfoSourceWire(net);
         dst_wire = ctx->getNetinfoSinkWire(net, net->users.at(user));
     }
+    NetSegment(NetInfo *net, size_t user, WireId src_wire, WireId dst_wire)
+            : orig_net(net), orig_user(user), src_wire(src_wire), dst_wire(dst_wire)
+    {
+    }
     NetInfo *orig_net;
     size_t orig_user;
     WireId src_wire, dst_wire;
