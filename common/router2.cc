@@ -289,7 +289,7 @@ void Router2State::reserve_wires_for_arc(NetInfo *net, size_t i)
             WireId w = ctx->getPipSrcWire(uh);
             if (is_wire_undriveable(w))
                 continue;
-            if (next_cursor != WireId()) {
+            if (next_cursor != WireId() && next_cursor != w) {
                 done = true;
                 break;
             }
