@@ -434,7 +434,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
         dst_x = sink_locs.at(dst).x;
         dst_y = sink_locs.at(dst).y;
         if (src_tile == dst_tile || (sink_locs.count(src) && (sink_locs.at(dst) == sink_locs.at(src)))) {
-            return 1000;
+            return 100;
         }
     } else if (dst.tile != -1 && chip_info->tile_insts[dst.tile].num_sites > 0) {
         auto &site = chip_info->tile_insts[dst.tile].site_insts[wireInfo(dst).site != -1 ? wireInfo(dst).site : 0];
@@ -521,8 +521,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     if (xc7)
         base = (base * 3) / 2;
 
-    if (sink_locs.count(dst))
-        base += 1000;
+    //if (sink_locs.count(dst))
+    //    base += 1000;
     if (src_intent == ID_NODE_PINFEED && dst_x == src_x && dst_y == src_y)
         base -= 200;
     else if ((src_intent == ID_NODE_LOCAL || src_intent == ID_NODE_PINBOUNCE) && dst_x == src_x && dst_y == src_y)
@@ -634,11 +634,11 @@ bool Arch::place()
         cfg.ioBufTypes.insert(id_PSEUDO_GND);
         cfg.ioBufTypes.insert(id_PSEUDO_VCC);
         cfg.alpha = 0.08;
-        cfg.beta = 0.4;
+        cfg.beta = xc7 ? 0.4 : 0.35;
         cfg.placeAllAtOnce = true;
         cfg.hpwl_scale_x = 1;
         cfg.hpwl_scale_y = 2;
-        cfg.spread_scale_x = 2;
+        cfg.spread_scale_x = 3;
         cfg.spread_scale_y = 1;
         cfg.netShareWeight = 0.2;
         cfg.solverTolerance = 0.6e-6;

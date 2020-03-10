@@ -122,13 +122,8 @@ struct BufceLeafInserter
     WireId get_rclk_wire(int tile, bool top_half, int i)
     {
         NPNR_ASSERT(i < 16);
-        static const std::vector<int> top_rclk = {
-            0, 1, 4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29
-        };
-        static const std::vector<int> bot_rclk = {
-            2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 30, 31
-        };
-
+        static const std::vector<int> top_rclk = {0, 1, 4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29};
+        static const std::vector<int> bot_rclk = {2, 3, 8, 9, 10, 11, 16, 17, 18, 19, 24, 25, 26, 27, 30, 31};
 
         int leaf_clk = top_half ? top_rclk.at(i) : bot_rclk.at(i);
         IdString wire_name = ctx->id(
@@ -143,7 +138,7 @@ struct BufceLeafInserter
             for (int i = 0; i < 16; i++)
                 if (ctx->checkWireAvail(get_rclk_wire(r.first.first, r.first.second, i)))
                     available_rclk.insert(i);
-            int to_promote_rclk = std::min<int>(10, available_rclk.size());
+            int to_promote_rclk = std::min<int>(8, available_rclk.size());
             int promoted = 0;
             while (promoted < to_promote_rclk) {
                 auto max = std::max_element(
