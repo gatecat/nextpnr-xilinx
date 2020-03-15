@@ -63,9 +63,16 @@ struct ChannelGraph
 struct ChannelRouterCfg
 {
     int bb_margin_x = 3, bb_margin_y = 3;
+    // Togo cost estimates
     int togo_cost_dx = 10, togo_cost_dy = 10, togo_cost_adder = 20;
     float bias_cost_factor = 0.5;
     float estimate_weight = 1.5;
+    // Starting current and historical congestion cost factor
+    float init_curr_cong_weight = 0.5, hist_cong_weight = 1.0;
+    // Current congestion cost multiplier
+    float curr_cong_mult = 2.0;
+
+    bool perf_profile = false;
 };
 
 }; // namespace ChannelRouter

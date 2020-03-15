@@ -359,6 +359,24 @@ struct ChannelRouterState
         return base_cost / (1 + source_uses);
     }
 
+    bool check_arc_routing(NetInfo *net, size_t usr)
+    {
+        auto &ad = nets.at(net->udata).arcs.at(usr);
+        ChannelNode src_node = nets.at(net->udata).src_node;
+        ChannelNode cursor = ad.sink_node;
+        while (node_data(cursor).bound_nets.count(net->udata)) {
+            auto &wd = node_data(cursor);
+            int bound = int(wd.bound_nets.size());
+            if (bound == 0 || bound > channel_types.at(cursor.type).width)
+                return false;
+            auto &uh = wd.bound_nets.at(net->udata).second;
+            if (uh == ChannelNode())
+                break;
+            cursor = uh;
+        }
+        return (cursor == src_node);
+    }
+
     struct ThreadContext
     {
         // Nets to route
@@ -509,6 +527,95 @@ struct ChannelRouterState
         }
     }
 #undef ARC_ERR
+
+    bool route_net(ThreadContext &t, NetInfo *net, bool is_mt)
+    {
+
+#ifdef ARCH_ECP5
+        if (net->is_global)
+            return true;
+#endif
+
+        ROUTE_LOG_DBG("Routing net '%s'...\n", ctx->nameOf(net));
+
+        auto rstart = std::chrono::high_resolution_clock::now();
+
+        // Nothing to do if net is undriven
+        if (net->driver.cell == nullptr)
+            return true;
+
+        bool have_failures = false;
+        t.processed_sinks.clear();
+        t.route_arcs.clear();
+        for (size_t i = 0; i < net->users.size(); i++) {
+            // Ripup failed arcs to start with
+            // Check if arc is already legally routed
+            if (check_arc_routing(net, i))
+                continue;
+            // Ripup arc to start with
+            ripup_arc(net, i);
+            t.route_arcs.push_back(i);
+        }
+        for (auto i : t.route_arcs) {
+            auto res1 = route_arc(t, net, i, is_mt, true);
+            if (res1 == ARC_FATAL)
+                return false; // Arc failed irrecoverably
+            else if (res1 == ARC_RETRY_WITHOUT_BB) {
+                if (is_mt) {
+                    // Can't break out of bounding box in multi-threaded mode, so mark this arc as a failure
+                    have_failures = true;
+                } else {
+                    // Attempt a re-route without the bounding box constraint
+                    ROUTE_LOG_DBG("Rerouting arc %d of net '%s' without bounding box, possible tricky routing...\n",
+                                  int(i), ctx->nameOf(net));
+                    auto res2 = route_arc(t, net, i, is_mt, false);
+                    // If this also fails, no choice but to give up
+                    if (res2 != ARC_SUCCESS) {
+                        auto src = g->get_source_node(net);
+                        auto sink = g->get_sink_node(net, net->users.at(i));
+                        log_error("Failed to route arc %d of net '%s', X%d/Y%d/%s to X%d/Y%d/%s.\n", int(i),
+                                  ctx->nameOf(net), src.x, src.y, channel_types.at(src.type).type_name.c_str(), sink.x,
+                                  sink.y, channel_types.at(sink.type).type_name.c_str());
+                    }
+                }
+            }
+        }
+        if (cfg.perf_profile) {
+            auto rend = std::chrono::high_resolution_clock::now();
+            nets.at(net->udata).total_route_us +=
+                    (std::chrono::duration_cast<std::chrono::microseconds>(rend - rstart).count());
+        }
+        return !have_failures;
+    }
+#undef ROUTE_LOG_DBG
+
+    int total_wire_use = 0;
+    int overused_wires = 0;
+    int total_overuse = 0;
+    std::vector<int> route_queue;
+    std::set<int> failed_nets;
+
+    void update_congestion()
+    {
+        total_overuse = 0;
+        overused_wires = 0;
+        total_wire_use = 0;
+        failed_nets.clear();
+        for (auto &node_loc : nodes) {
+            for (size_t i = 0; i < node_loc.size(); i++) {
+                auto &node = node_loc.at(i);
+                total_wire_use += int(node.bound_nets.size());
+                int overuse = int(node.bound_nets.size()) - channel_types.at(i).width;
+                if (overuse > 0) {
+                    node.hist_cong_cost += overuse * hist_cong_weight;
+                    total_overuse += overuse;
+                    overused_wires += 1;
+                    for (auto &bound : node.bound_nets)
+                        failed_nets.insert(bound.first);
+                }
+            }
+        }
+    }
 };
 }; // namespace ChannelRouter
 
