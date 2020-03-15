@@ -45,11 +45,11 @@ struct Channel
 };
 struct ChannelNode
 {
-    ChannelNode(){};
+    ChannelNode() : x(-1), y(-1), type(-1){};
     ChannelNode(int x, int y, int type) : x(x), y(y), type(type){};
     int x, y, type;
 };
-class ChannelGraph
+struct ChannelGraph
 {
     virtual int get_width() const = 0;
     virtual int get_height() const = 0;
@@ -58,6 +58,13 @@ class ChannelGraph
     virtual ChannelNode get_source_node(const NetInfo *net) const = 0;
     virtual ChannelNode get_sink_node(const NetInfo *net, const PortRef &usr) const = 0;
     virtual ~ChannelGraph() = 0;
+};
+
+struct ChannelRouterCfg
+{
+    int bb_margin_x = 3, bb_margin_y = 3;
+    int togo_cost_dx = 10, togo_cost_dy = 10, togo_cost_adder = 20;
+    float bias_cost_factor = 0.5;
 };
 
 }; // namespace ChannelRouter
