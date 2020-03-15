@@ -616,6 +616,184 @@ struct ChannelRouterState
             }
         }
     }
+
+    int mid_x = 0, mid_y = 0;
+
+    void partition_nets()
+    {
+        // Create a histogram of positions in X and Y positions
+        std::map<int, int> cxs, cys;
+        for (auto &n : nets) {
+            if (n.cx != -1)
+                ++cxs[n.cx];
+            if (n.cy != -1)
+                ++cys[n.cy];
+        }
+        // 4-way split for now
+        int accum_x = 0, accum_y = 0;
+        int halfway = int(nets.size()) / 2;
+        for (auto &p : cxs) {
+            if (accum_x < halfway && (accum_x + p.second) >= halfway)
+                mid_x = p.first;
+            accum_x += p.second;
+        }
+        for (auto &p : cys) {
+            if (accum_y < halfway && (accum_y + p.second) >= halfway)
+                mid_y = p.first;
+            accum_y += p.second;
+        }
+        if (ctx->verbose) {
+            log_info("    x splitpoint: %d\n", mid_x);
+            log_info("    y splitpoint: %d\n", mid_y);
+        }
+        std::vector<int> bins(5, 0);
+        for (auto &n : nets) {
+            if (n.bb.x0 < mid_x && n.bb.x1 < mid_x && n.bb.y0 < mid_y && n.bb.y1 < mid_y)
+                ++bins[0]; // TL
+            else if (n.bb.x0 >= mid_x && n.bb.x1 >= mid_x && n.bb.y0 < mid_y && n.bb.y1 < mid_y)
+                ++bins[1]; // TR
+            else if (n.bb.x0 < mid_x && n.bb.x1 < mid_x && n.bb.y0 >= mid_y && n.bb.y1 >= mid_y)
+                ++bins[2]; // BL
+            else if (n.bb.x0 >= mid_x && n.bb.x1 >= mid_x && n.bb.y0 >= mid_y && n.bb.y1 >= mid_y)
+                ++bins[3]; // BR
+            else
+                ++bins[4]; // cross-boundary
+        }
+        if (ctx->verbose)
+            for (int i = 0; i < 5; i++)
+                log_info("        bin %d N=%d\n", i, bins[i]);
+    }
+
+    void do_route()
+    {
+        // Don't multithread if fewer than 200 nets (heuristic)
+        if (route_queue.size() < 200) {
+            ThreadContext st;
+            for (size_t j = 0; j < route_queue.size(); j++) {
+                route_net(st, nets_by_udata[route_queue[j]], false);
+            }
+            return;
+        }
+        const int Nq = 4, Nv = 2, Nh = 2;
+        const int N = Nq + Nv + Nh;
+        std::vector<ThreadContext> tcs(N + 1);
+        for (auto n : route_queue) {
+            auto &nd = nets.at(n);
+            auto ni = nets_by_udata.at(n);
+            int bin = N;
+            int le_x = mid_x - cfg.bb_margin_x;
+            int rs_x = mid_x + cfg.bb_margin_x;
+            int le_y = mid_y - cfg.bb_margin_y;
+            int rs_y = mid_y + cfg.bb_margin_y;
+            // Quadrants
+            if (nd.bb.x0 < le_x && nd.bb.x1 < le_x && nd.bb.y0 < le_y && nd.bb.y1 < le_y)
+                bin = 0;
+            else if (nd.bb.x0 >= rs_x && nd.bb.x1 >= rs_x && nd.bb.y0 < le_y && nd.bb.y1 < le_y)
+                bin = 1;
+            else if (nd.bb.x0 < le_x && nd.bb.x1 < le_x && nd.bb.y0 >= rs_y && nd.bb.y1 >= rs_y)
+                bin = 2;
+            else if (nd.bb.x0 >= rs_x && nd.bb.x1 >= rs_x && nd.bb.y0 >= rs_y && nd.bb.y1 >= rs_y)
+                bin = 3;
+            // Vertical split
+            else if (nd.bb.y0 < le_y && nd.bb.y1 < le_y)
+                bin = Nq + 0;
+            else if (nd.bb.y0 >= rs_y && nd.bb.y1 >= rs_y)
+                bin = Nq + 1;
+            // Horizontal split
+            else if (nd.bb.x0 < le_x && nd.bb.x1 < le_x)
+                bin = Nq + Nv + 0;
+            else if (nd.bb.x0 >= rs_x && nd.bb.x1 >= rs_x)
+                bin = Nq + Nv + 1;
+            tcs.at(bin).route_nets.push_back(ni);
+        }
+        if (ctx->verbose)
+            log_info("%d/%d nets not multi-threadable\n", int(tcs.at(N).route_nets.size()), int(route_queue.size()));
+        // Multithreaded part of routing - quadrants
+        std::vector<std::thread> threads;
+        for (int i = 0; i < Nq; i++) {
+            threads.emplace_back([this, &tcs, i]() { router_thread(tcs.at(i)); });
+        }
+        for (auto &t : threads)
+            t.join();
+        threads.clear();
+        // Vertical splits
+        for (int i = Nq; i < Nq + Nv; i++) {
+            threads.emplace_back([this, &tcs, i]() { router_thread(tcs.at(i)); });
+        }
+        for (auto &t : threads)
+            t.join();
+        threads.clear();
+        // Horizontal splits
+        for (int i = Nq + Nv; i < Nq + Nv + Nh; i++) {
+            threads.emplace_back([this, &tcs, i]() { router_thread(tcs.at(i)); });
+        }
+        for (auto &t : threads)
+            t.join();
+        threads.clear();
+        // Singlethreaded part of routing - nets that cross partitions
+        // or don't fit within bounding box
+        for (auto st_net : tcs.at(N).route_nets)
+            route_net(tcs.at(N), st_net, false);
+        // Failed nets
+        for (int i = 0; i < N; i++)
+            for (auto fail : tcs.at(i).failed_nets)
+                route_net(tcs.at(N), fail, false);
+    }
+
+    void router_thread(ThreadContext &t)
+    {
+        for (auto n : t.route_nets) {
+            bool result = route_net(t, n, true);
+            if (!result)
+                t.failed_nets.push_back(n);
+        }
+    }
+
+    void operator()()
+    {
+        log_info("Running channel-based global routing...\n");
+        log_info("Setting up abstract channel graph...\n");
+        auto rstart = std::chrono::high_resolution_clock::now();
+        setup_nets();
+        setup_nodes();
+        partition_nets();
+        curr_cong_weight = cfg.init_curr_cong_weight;
+        hist_cong_weight = cfg.hist_cong_weight;
+        ThreadContext st;
+        int iter = 1;
+
+        for (size_t i = 0; i < nets_by_udata.size(); i++)
+            route_queue.push_back(i);
+
+        log_info("Running channel router loop...\n");
+        do {
+            ctx->sorted_shuffle(route_queue);
+            do_route();
+            route_queue.clear();
+            update_congestion();
+            for (auto cn : failed_nets)
+                route_queue.push_back(cn);
+            log_info("    iter=%d nodes=%d overused=%d overuse=%d\n", iter, total_wire_use, overused_wires,
+                     total_overuse);
+            ++iter;
+            curr_cong_weight *= cfg.curr_cong_mult;
+        } while (!failed_nets.empty());
+        if (cfg.perf_profile) {
+            std::vector<std::pair<int, IdString>> nets_by_runtime;
+            for (auto &n : nets_by_udata) {
+                nets_by_runtime.emplace_back(nets.at(n->udata).total_route_us, n->name);
+            }
+            std::sort(nets_by_runtime.begin(), nets_by_runtime.end(), std::greater<std::pair<int, IdString>>());
+            log_info("1000 slowest nets by runtime:\n");
+            for (int i = 0; i < std::min(int(nets_by_runtime.size()), 1000); i++) {
+                log("        %80s %6d %.1fms\n", nets_by_runtime.at(i).second.c_str(ctx),
+                    int(ctx->nets.at(nets_by_runtime.at(i).second)->users.size()),
+                    nets_by_runtime.at(i).first / 1000.0);
+            }
+        }
+        auto rend = std::chrono::high_resolution_clock::now();
+        log_info("Global route time %.02fs\n", std::chrono::duration<float>(rend - rstart).count());
+    }
 };
 }; // namespace ChannelRouter
 
