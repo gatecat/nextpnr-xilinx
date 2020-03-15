@@ -36,7 +36,7 @@ struct ChannelPIP
 };
 struct Channel
 {
-    IdString type_name;
+    std::string type_name;
     ChannelDirection dir;
     int length;
     int width;
@@ -65,6 +65,7 @@ struct ChannelRouterCfg
     int bb_margin_x = 3, bb_margin_y = 3;
     int togo_cost_dx = 10, togo_cost_dy = 10, togo_cost_adder = 20;
     float bias_cost_factor = 0.5;
+    float estimate_weight = 1.5;
 };
 
 }; // namespace ChannelRouter

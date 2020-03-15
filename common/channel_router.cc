@@ -43,6 +43,18 @@ inline bool operator!=(const ChannelNode &a, const ChannelNode &b)
     return a.x != b.x || a.y != b.y || a.type != b.type;
 }
 
+struct ChannelNodeHash
+{
+    size_t operator()(const ChannelNode &n) const noexcept
+    {
+        std::size_t seed = 0;
+        boost::hash_combine(seed, std::hash<int>()(n.x));
+        boost::hash_combine(seed, std::hash<int>()(n.y));
+        boost::hash_combine(seed, std::hash<int>()(n.type));
+        return seed;
+    }
+};
+
 struct ChannelRouterState
 {
 
@@ -50,7 +62,6 @@ struct ChannelRouterState
     {
         float cost;
         float togo_cost;
-        delay_t delay;
         float total() const { return cost + togo_cost; }
     };
 
@@ -71,7 +82,7 @@ struct ChannelRouterState
         struct
         {
             bool dirty = false, visited = false;
-            ChannelNode bwd;
+            ChannelNode prev;
             NodeScore score;
         } visit;
     };
@@ -347,6 +358,157 @@ struct ChannelRouterState
                 cfg.togo_cost_dx * abs(curr.x - sink.x) + cfg.togo_cost_dy * abs(curr.y - sink.y) + cfg.togo_cost_adder;
         return base_cost / (1 + source_uses);
     }
+
+    struct ThreadContext
+    {
+        // Nets to route
+        std::vector<NetInfo *> route_nets;
+        // Nets that failed routing
+        std::vector<NetInfo *> failed_nets;
+
+        std::vector<int> route_arcs;
+
+        std::priority_queue<QueuedNode, std::vector<QueuedNode>, QueuedNode::Greater> queue;
+        // Special case where one net has multiple logical arcs to the same physical sink
+        std::unordered_set<ChannelNode, ChannelNodeHash> processed_sinks;
+
+        std::vector<ChannelNode> dirty_nodes;
+    };
+
+    void reset_nodes(ThreadContext &t)
+    {
+        for (auto n : t.dirty_nodes) {
+            auto &node_d = node_data(n);
+            node_d.visit.visited = false;
+            node_d.visit.dirty = false;
+            node_d.visit.prev = ChannelNode();
+            node_d.visit.score = NodeScore();
+        }
+        t.dirty_nodes.clear();
+    }
+
+    void set_visited(ThreadContext &t, ChannelNode curr, ChannelNode prev, NodeScore score)
+    {
+        auto &v = node_data(curr).visit;
+        if (!v.dirty)
+            t.dirty_nodes.push_back(curr);
+        v.dirty = true;
+        v.visited = true;
+        v.prev = prev;
+        v.score = score;
+    }
+    bool was_visited(ChannelNode node) { return node_data(node).visit.visited; }
+
+    enum ArcRouteResult
+    {
+        ARC_SUCCESS,
+        ARC_RETRY_WITHOUT_BB,
+        ARC_FATAL,
+    };
+
+// Define to make sure we don't print in a multithreaded context
+#define ARC_LOG_ERR(...)                                                                                               \
+    do {                                                                                                               \
+        if (is_mt)                                                                                                     \
+            return ARC_FATAL;                                                                                          \
+        else                                                                                                           \
+            log_error(__VA_ARGS__);                                                                                    \
+    } while (0)
+#define ROUTE_LOG_DBG(...)                                                                                             \
+    do {                                                                                                               \
+        if (!is_mt && ctx->debug)                                                                                      \
+            log(__VA_ARGS__);                                                                                          \
+    } while (0)
+
+    ArcRouteResult route_arc(ThreadContext &t, NetInfo *net, size_t i, bool is_mt, bool is_bb = true)
+    {
+        auto &nd = nets[net->udata];
+        auto &ad = nd.arcs[i];
+        ROUTE_LOG_DBG("Routing arc %d of net '%s' (%d, %d) -> (%d, %d)\n", int(i), ctx->nameOf(net), ad.bb.x0, ad.bb.y0,
+                      ad.bb.x1, ad.bb.y1);
+        auto src_node = nd.src_node;
+        auto dst_node = ad.sink_node;
+        // Check if arc was already done _in this iteration_
+        if (t.processed_sinks.count(dst_node))
+            return ARC_SUCCESS;
+
+        if (!t.queue.empty()) {
+            std::priority_queue<QueuedNode, std::vector<QueuedNode>, QueuedNode::Greater> new_queue;
+            t.queue.swap(new_queue);
+        }
+        // Forwards A* routing
+        reset_nodes(t);
+        NodeScore base_score;
+        base_score.cost = channel_types.at(src_node.type).cost;
+        base_score.togo_cost = get_togo_cost(net, i, src_node, dst_node);
+
+        // Add source wire to queue
+        t.queue.push(QueuedNode(src_node, ChannelNode(), base_score));
+        set_visited(t, src_node, ChannelNode(), base_score);
+
+        int toexplore = 10000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
+        int iter = 0;
+        int explored = 1;
+        while (!t.queue.empty() && (!is_bb || iter < toexplore)) {
+            auto curr = t.queue.top();
+            auto &d = node_data(curr.node);
+            t.queue.pop();
+            ++iter;
+            // Explore all nodes downhill of cursor
+            for (auto dh : d.downhill) {
+                // Skip nodes outside of box in bounding-box mode
+                if (is_bb && !hit_test_node(ad.bb, dh))
+                    continue;
+                // Evaluate score of next wire
+                if (was_visited(dh))
+                    continue;
+                auto &nwd = node_data(dh);
+                if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != curr.node)
+                    continue;
+                NodeScore next_score;
+                next_score.cost = curr.score.cost + score_node_for_arc(net, i, dh);
+                next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, dh, dst_node);
+                const auto &v = nwd.visit;
+                if (!v.visited || (v.score.total() > next_score.total())) {
+                    ++explored;
+                    // Add wire to queue if it meets criteria
+                    t.queue.push(QueuedNode(dh, curr.node, next_score, ctx->rng()));
+                    set_visited(t, dh, curr.node, next_score);
+                    if (dh == dst_node) {
+                        toexplore = std::min(toexplore, iter + 5);
+                    }
+                }
+            }
+        }
+        if (was_visited(dst_node)) {
+            ROUTE_LOG_DBG("   Routed (explored %d nodes): ", explored);
+            auto cursor_bwd = dst_node;
+            while (was_visited(cursor_bwd)) {
+                auto &v = node_data(cursor_bwd).visit;
+                bind_node_internal(net, cursor_bwd, v.prev);
+                if (ctx->debug) {
+                    auto &wd = node_data(cursor_bwd);
+                    auto &ct = channel_types.at(cursor_bwd.type);
+                    ROUTE_LOG_DBG("      node: X%d/Y%d/%s (curr %d/%d hist %f share %d)\n", cursor_bwd.x, cursor_bwd.y,
+                                  ct.type_name.c_str(), int(wd.bound_nets.size()), ct.width, wd.hist_cong_cost,
+                                  wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
+                }
+                if (v.prev == ChannelNode()) {
+                    NPNR_ASSERT(cursor_bwd == src_node);
+                    break;
+                }
+                cursor_bwd = v.prev;
+            }
+            t.processed_sinks.insert(dst_node);
+            ad.routed = true;
+            reset_nodes(t);
+            return ARC_SUCCESS;
+        } else {
+            reset_nodes(t);
+            return ARC_RETRY_WITHOUT_BB;
+        }
+    }
+#undef ARC_ERR
 };
 }; // namespace ChannelRouter
 
