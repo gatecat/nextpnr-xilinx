@@ -132,38 +132,28 @@ struct ChannelRouterState
                     auto &c = channel_types.at(t);
                     for (const auto &dh : c.downhill) {
                         int start_x = x, start_y = y;
-                        NPNR_ASSERT(dh.src_along <= c.length);
                         switch (c.dir) {
-                        case DIR_EAST:
-                            start_x -= dh.src_along;
-                            break;
-                        case DIR_WEST:
+                        case DIR_HORIZ:
                             start_x += dh.src_along;
                             break;
-                        case DIR_NORTH:
-                            start_y -= dh.src_along;
-                            break;
-                        case DIR_SOUTH:
+                        case DIR_VERT:
                             start_y += dh.src_along;
                             break;
                         }
+                        if (start_x < 0 || start_x >= width || start_y < 0 || start_y >= height)
+                            continue;
                         int end_x = x, end_y = y;
                         auto &d = channel_types.at(dh.dst_type);
-                        NPNR_ASSERT(dh.dst_along <= d.length);
                         switch (d.dir) {
-                        case DIR_EAST:
-                            end_x -= dh.dst_along;
-                            break;
-                        case DIR_WEST:
+                        case DIR_HORIZ:
                             end_x += dh.dst_along;
                             break;
-                        case DIR_NORTH:
-                            end_y -= dh.dst_along;
-                            break;
-                        case DIR_SOUTH:
+                        case DIR_VERT:
                             end_y += dh.dst_along;
                             break;
                         }
+                        if (end_x < 0 || end_x >= width || end_y < 0 || end_y >= height)
+                            continue;
                         auto &src = nodes.at(start_y * width + start_x).at(t);
                         auto &dst = nodes.at(end_y * width + end_x).at(dh.dst_type);
                         src.downhill.emplace_back(end_x, end_y, dh.dst_type);

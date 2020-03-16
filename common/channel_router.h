@@ -24,13 +24,15 @@ NEXTPNR_NAMESPACE_BEGIN
 namespace ChannelRouter {
 enum ChannelDirection
 {
-    DIR_EAST,
-    DIR_WEST,
-    DIR_NORTH,
-    DIR_SOUTH,
+    DIR_HORIZ,
+    DIR_VERT,
 };
 struct ChannelPIP
 {
+    ChannelPIP(int src_along, int dst_along, int dst_type)
+            : src_along(src_along), dst_along(dst_along), dst_type(dst_type)
+    {
+    }
     int src_along, dst_along;
     int dst_type;
 };
@@ -38,7 +40,6 @@ struct Channel
 {
     std::string type_name;
     ChannelDirection dir;
-    int length;
     int width;
     float cost;
     std::vector<ChannelPIP> downhill;
