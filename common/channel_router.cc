@@ -58,6 +58,8 @@ struct ChannelNodeHash
 struct ChannelRouterState
 {
 
+    ChannelRouterState(Context *ctx, ChannelGraph *g, const ChannelRouterCfg &cfg) : ctx(ctx), g(g), cfg(cfg) {}
+
     struct NodeScore
     {
         float cost;
@@ -107,8 +109,9 @@ struct ChannelRouterState
     };
 
     Context *ctx;
-    ChannelRouterCfg cfg;
     ChannelGraph *g;
+    ChannelRouterCfg cfg;
+
     int width, height;
 
     // xy -> index
@@ -180,7 +183,6 @@ struct ChannelRouterState
             NetInfo *ni = net.second;
             ni->udata = i;
             nets_by_udata.at(i) = ni;
-            nets.at(i).arcs.resize(ni->users.size());
 
             // Start net bounding box at overall min/max
             nets.at(i).bb.x0 = std::numeric_limits<int>::max();
@@ -196,6 +198,12 @@ struct ChannelRouterState
             }
 
             ChannelNode src_node = g->get_source_node(ni);
+
+            if (src_node == ChannelNode()) {
+                nets.at(i).hpwl = 0;
+                continue;
+            }
+
             nets.at(i).src_node = src_node;
             nets.at(i).cx += src_node.x;
             nets.at(i).cy += src_node.y;
@@ -203,17 +211,22 @@ struct ChannelRouterState
             nets.at(i).bb.x1 = src_node.x;
             nets.at(i).bb.y0 = src_node.y;
             nets.at(i).bb.y1 = src_node.y;
-
+            int arc_count = 0;
             for (size_t j = 0; j < ni->users.size(); j++) {
                 auto &usr = ni->users.at(j);
 
                 ChannelNode sink_node = g->get_sink_node(ni, usr);
-                nets.at(i).arcs.at(j).sink_node = sink_node;
+                if (sink_node == ChannelNode())
+                    continue;
+
+                nets.at(i).arcs.emplace_back();
+
+                nets.at(i).arcs.back().sink_node = sink_node;
                 // Set bounding box for this arc
-                nets.at(i).arcs.at(j).bb.x0 = std::min(src_node.x, sink_node.x);
-                nets.at(i).arcs.at(j).bb.x1 = std::max(src_node.x, sink_node.x);
-                nets.at(i).arcs.at(j).bb.y0 = std::min(src_node.y, sink_node.y);
-                nets.at(i).arcs.at(j).bb.y1 = std::max(src_node.y, sink_node.y);
+                nets.at(i).arcs.back().bb.x0 = std::min(src_node.x, sink_node.x);
+                nets.at(i).arcs.back().bb.x1 = std::max(src_node.x, sink_node.x);
+                nets.at(i).arcs.back().bb.y0 = std::min(src_node.y, sink_node.y);
+                nets.at(i).arcs.back().bb.y1 = std::max(src_node.y, sink_node.y);
                 // Expand net bounding box to include this arc
                 nets.at(i).bb.x0 = std::min(nets.at(i).bb.x0, sink_node.x);
                 nets.at(i).bb.x1 = std::max(nets.at(i).bb.x1, sink_node.x);
@@ -225,8 +238,8 @@ struct ChannelRouterState
             }
             nets.at(i).hpwl = std::max(
                     std::abs(nets.at(i).bb.y1 - nets.at(i).bb.y0) + std::abs(nets.at(i).bb.x1 - nets.at(i).bb.x0), 1);
-            nets.at(i).cx /= int(ni->users.size() + 1);
-            nets.at(i).cy /= int(ni->users.size() + 1);
+            nets.at(i).cx /= int(arc_count + 1);
+            nets.at(i).cy /= int(arc_count + 1);
             if (ctx->debug)
                 log_info("%s: bb=(%d, %d)->(%d, %d) c=(%d, %d) hpwl=%d\n", ctx->nameOf(ni), nets.at(i).bb.x0,
                          nets.at(i).bb.y0, nets.at(i).bb.x1, nets.at(i).bb.y1, nets.at(i).cx, nets.at(i).cy,
@@ -753,7 +766,8 @@ struct ChannelRouterState
         int iter = 1;
 
         for (size_t i = 0; i < nets_by_udata.size(); i++)
-            route_queue.push_back(i);
+            if (nets[i].src_node != ChannelNode() && !g->is_global_net(nets_by_udata[i]))
+                route_queue.push_back(i);
 
         log_info("Running channel router loop...\n");
         do {
@@ -785,6 +799,13 @@ struct ChannelRouterState
         log_info("Global route time %.02fs\n", std::chrono::duration<float>(rend - rstart).count());
     }
 };
+
+void run_channelrouter(Context *ctx, ChannelGraph *g, const ChannelRouterCfg &cfg)
+{
+    ChannelRouterState worker(ctx, g, cfg);
+    worker();
+}
+
 }; // namespace ChannelRouter
 
 NEXTPNR_NAMESPACE_END

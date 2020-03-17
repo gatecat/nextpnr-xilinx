@@ -23,6 +23,7 @@
 #include <boost/range/adaptor/reversed.hpp>
 #include <cmath>
 #include <cstring>
+#include "channels.h"
 #include "gfx.h"
 #include "globals.h"
 #include "log.h"
@@ -627,6 +628,8 @@ bool Arch::route()
     route_ecp5_globals(getCtx());
     assignArchInfo();
     assign_budget(getCtx(), true);
+
+    ecp5_channel_router_test(getCtx());
 
     bool result;
     if (router == "router1") {

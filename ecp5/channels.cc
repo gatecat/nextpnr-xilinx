@@ -20,6 +20,8 @@
 #include "channel_router.h"
 #include "nextpnr.h"
 
+#include <queue>
+
 NEXTPNR_NAMESPACE_BEGIN
 
 namespace ChannelRouter {
@@ -217,8 +219,100 @@ std::vector<Channel> setup_channel_types()
     channels[CH_V06N].downhill.emplace_back(3, -1, CH_H02W);
     channels[CH_V06N].downhill.emplace_back(0, -3, CH_H06W);
     channels[CH_V06N].downhill.emplace_back(3, -3, CH_H06W);
+
+    channels[CH_V06S].type_name = "V06S";
+    channels[CH_V06S].dir = DIR_VERT;
+    channels[CH_V06S].width = 4;
+    channels[CH_V06S].downhill.emplace_back(-3, -1, CH_V01N);
+    channels[CH_V06S].downhill.emplace_back(-3, 0, CH_V01S);
+    channels[CH_V06S].downhill.emplace_back(0, 1, CH_H02E);
+    channels[CH_V06S].downhill.emplace_back(-3, 1, CH_H02E);
+    channels[CH_V06S].downhill.emplace_back(-0, 3, CH_H06E);
+    channels[CH_V06S].downhill.emplace_back(-3, 3, CH_H06E);
+    channels[CH_V06S].downhill.emplace_back(-3, -1, CH_V02N);
+    channels[CH_V06S].downhill.emplace_back(-3, 3, CH_V06S);
+    channels[CH_V06S].downhill.emplace_back(-3, 1, CH_V02S);
+    channels[CH_V06S].downhill.emplace_back(0, -1, CH_H02W);
+    channels[CH_V06S].downhill.emplace_back(-3, -1, CH_H02W);
+    channels[CH_V06S].downhill.emplace_back(0, -3, CH_H06W);
+    channels[CH_V06S].downhill.emplace_back(-3, -3, CH_H06W);
+
     return channels;
 }
+
+struct Ecp5ChannelGraph : ChannelGraph
+{
+    Context *ctx;
+    Ecp5ChannelGraph(Context *ctx) : ctx(ctx){};
+
+    int get_width() const override { return ctx->chip_info->width; }
+    int get_height() const override { return ctx->chip_info->height; }
+    std::vector<Channel> get_channels() const override { return setup_channel_types(); }
+    bool is_global_net(const NetInfo *net) const override { return net->is_global; }
+    ChannelNode get_source_node(const NetInfo *net) const override
+    {
+        // Search forward from actual source wire to general interconnect location
+        std::queue<WireId> visit;
+        visit.push(ctx->getNetinfoSourceWire(net));
+        int iter = 0;
+        while (!visit.empty() && iter < 200) {
+            WireId cursor = visit.front();
+            visit.pop();
+            for (PipId dh : ctx->getPipsDownhill(cursor)) {
+                WireId dst = ctx->getPipDstWire(dh);
+                if (is_general_routing(dst)) {
+                    Loc l = ctx->getPipLocation(dh);
+                    return ChannelNode(l.x, l.y, CH_OPIN);
+                }
+                visit.push(dst);
+            }
+            ++iter;
+        }
+        return ChannelNode();
+    }
+    ChannelNode get_sink_node(const NetInfo *net, const PortRef &usr) const
+    {
+        // Skip all dedicated routing
+        if (usr.port == id_FCI || usr.port == id_FXA || usr.port == id_FXA || usr.port == id_DI0 || usr.port == id_DI1)
+            return ChannelNode();
+        // Search backwards from actual sink wire to general interconnect location
+        std::queue<WireId> visit;
+        visit.push(ctx->getNetinfoSinkWire(net, usr));
+        int iter = 0;
+        while (!visit.empty() && iter < 200) {
+            WireId cursor = visit.front();
+            visit.pop();
+            for (PipId uh : ctx->getPipsUphill(cursor)) {
+                WireId src = ctx->getPipSrcWire(uh);
+                if (is_general_routing(src)) {
+                    Loc l = ctx->getPipLocation(uh);
+                    return ChannelNode(l.x, l.y, CH_IPIN);
+                }
+                visit.push(src);
+            }
+            ++iter;
+        }
+        return ChannelNode();
+    }
+    ~Ecp5ChannelGraph() {}
+
+  private:
+    bool is_general_routing(WireId wire) const
+    {
+        std::string basename = ctx->getWireBasename(wire).str(ctx);
+        if (basename.length() < 3)
+            return false;
+        std::string prefix = basename.substr(0, 3);
+        return prefix == "H0" || prefix == "V0";
+    }
+};
+
 } // namespace ChannelRouter
+
+void ecp5_channel_router_test(Context *ctx)
+{
+    ChannelRouter::Ecp5ChannelGraph g(ctx);
+    ChannelRouter::run_channelrouter(ctx, &g, ChannelRouter::ChannelRouterCfg());
+}
 
 NEXTPNR_NAMESPACE_END

@@ -58,7 +58,7 @@ struct ChannelGraph
     virtual bool is_global_net(const NetInfo *net) const = 0;
     virtual ChannelNode get_source_node(const NetInfo *net) const = 0;
     virtual ChannelNode get_sink_node(const NetInfo *net, const PortRef &usr) const = 0;
-    virtual ~ChannelGraph() = 0;
+    virtual ~ChannelGraph(){};
 };
 
 struct ChannelRouterCfg
@@ -75,6 +75,8 @@ struct ChannelRouterCfg
 
     bool perf_profile = false;
 };
+
+void run_channelrouter(Context *ctx, ChannelGraph *g, const ChannelRouterCfg &cfg);
 
 }; // namespace ChannelRouter
 
