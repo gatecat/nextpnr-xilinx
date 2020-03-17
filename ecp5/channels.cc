@@ -40,10 +40,11 @@ enum ChannelTypes
     CH_H06E,
     CH_V06N,
     CH_V06S,
+    CHANNEL_COUNT
 };
 std::vector<Channel> setup_channel_types()
 {
-    std::vector<Channel> channels(18);
+    std::vector<Channel> channels(CHANNEL_COUNT);
 
     channels[CH_IPIN].type_name = "IPIN";
     channels[CH_IPIN].dir = DIR_HORIZ;
@@ -89,28 +90,28 @@ std::vector<Channel> setup_channel_types()
     channels[CH_H01E].downhill.emplace_back(1, 0, CH_IPIN);
     add_general(channels[CH_H01E].downhill, 0);
 
-    channels[CH_H01W].type_name = "CH_H01W";
+    channels[CH_H01W].type_name = "H01W";
     channels[CH_H01W].dir = DIR_HORIZ;
     channels[CH_H01W].width = 2;
     channels[CH_H01W].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_H01W].downhill.emplace_back(-1, 0, CH_IPIN);
     add_general(channels[CH_H01W].downhill, 0);
 
-    channels[CH_V01N].type_name = "CH_V01N";
+    channels[CH_V01N].type_name = "V01N";
     channels[CH_V01N].dir = DIR_VERT;
     channels[CH_V01N].width = 2;
     channels[CH_V01N].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_V01N].downhill.emplace_back(-1, 0, CH_IPIN);
     add_general(channels[CH_V01N].downhill, 0);
 
-    channels[CH_V01S].type_name = "CH_V01S";
+    channels[CH_V01S].type_name = "V01S";
     channels[CH_V01S].dir = DIR_VERT;
     channels[CH_V01S].width = 2;
     channels[CH_V01S].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_V01S].downhill.emplace_back(1, 0, CH_IPIN);
     add_general(channels[CH_V01S].downhill, 0);
 
-    channels[CH_H02E].type_name = "CH_H02E";
+    channels[CH_H02E].type_name = "H02E";
     channels[CH_H02E].dir = DIR_HORIZ;
     channels[CH_H02E].width = 8;
     channels[CH_H02E].downhill.emplace_back(0, 0, CH_IPIN);
@@ -124,7 +125,7 @@ std::vector<Channel> setup_channel_types()
     channels[CH_H02E].downhill.emplace_back(0, 1, CH_V02S);
     channels[CH_H02E].downhill.emplace_back(-1, 1, CH_V02S);
 
-    channels[CH_H02W].type_name = "CH_H02W";
+    channels[CH_H02W].type_name = "H02W";
     channels[CH_H02W].dir = DIR_HORIZ;
     channels[CH_H02W].width = 8;
     channels[CH_H02W].downhill.emplace_back(0, 0, CH_IPIN);
@@ -138,7 +139,7 @@ std::vector<Channel> setup_channel_types()
     channels[CH_H02W].downhill.emplace_back(1, -1, CH_H02W);
     channels[CH_H02W].downhill.emplace_back(1, -3, CH_H06W);
 
-    channels[CH_V02N].type_name = "CH_V02N";
+    channels[CH_V02N].type_name = "V02N";
     channels[CH_V02N].dir = DIR_VERT;
     channels[CH_V02N].width = 8;
     channels[CH_V02N].downhill.emplace_back(0, 0, CH_IPIN);
@@ -152,7 +153,7 @@ std::vector<Channel> setup_channel_types()
     channels[CH_V02N].downhill.emplace_back(1, -1, CH_V02N);
     channels[CH_V02N].downhill.emplace_back(1, -3, CH_V06N);
 
-    channels[CH_V02S].type_name = "CH_V02N";
+    channels[CH_V02S].type_name = "V02N";
     channels[CH_V02S].dir = DIR_VERT;
     channels[CH_V02S].width = 8;
     channels[CH_V02S].downhill.emplace_back(0, 0, CH_IPIN);
@@ -165,6 +166,57 @@ std::vector<Channel> setup_channel_types()
     channels[CH_V02S].downhill.emplace_back(-1, -1, CH_H02W);
     channels[CH_V02S].downhill.emplace_back(-1, 1, CH_V02S);
     channels[CH_V02S].downhill.emplace_back(-1, 3, CH_V06S);
+
+    channels[CH_H06E].type_name = "H06E";
+    channels[CH_H06E].dir = DIR_HORIZ;
+    channels[CH_H06E].width = 4;
+    channels[CH_H06E].downhill.emplace_back(-3, 1, CH_H01E);
+    channels[CH_H06E].downhill.emplace_back(-3, 0, CH_H01W);
+    channels[CH_H06E].downhill.emplace_back(-3, 1, CH_H02E);
+    channels[CH_H06E].downhill.emplace_back(-3, 3, CH_H06E);
+    channels[CH_H06E].downhill.emplace_back(0, -1, CH_V02N);
+    channels[CH_H06E].downhill.emplace_back(-3, -1, CH_V02N);
+    channels[CH_H06E].downhill.emplace_back(0, -3, CH_V06N);
+    channels[CH_H06E].downhill.emplace_back(-3, -3, CH_V06N);
+    channels[CH_H06E].downhill.emplace_back(0, 1, CH_V02S);
+    channels[CH_H06E].downhill.emplace_back(-3, 1, CH_V02S);
+    channels[CH_H06E].downhill.emplace_back(0, 3, CH_V06S);
+    channels[CH_H06E].downhill.emplace_back(-3, 3, CH_V06S);
+    channels[CH_H06E].downhill.emplace_back(-3, -1, CH_H02W);
+
+    channels[CH_H06W].type_name = "H06W";
+    channels[CH_H06W].dir = DIR_HORIZ;
+    channels[CH_H06W].width = 4;
+    channels[CH_H06W].downhill.emplace_back(3, 1, CH_H01E);
+    channels[CH_H06W].downhill.emplace_back(3, 0, CH_H01W);
+    channels[CH_H06W].downhill.emplace_back(3, -1, CH_H02W);
+    channels[CH_H06W].downhill.emplace_back(3, -3, CH_H06W);
+    channels[CH_H06W].downhill.emplace_back(0, -1, CH_V02N);
+    channels[CH_H06W].downhill.emplace_back(3, -1, CH_V02N);
+    channels[CH_H06W].downhill.emplace_back(0, -3, CH_V06N);
+    channels[CH_H06W].downhill.emplace_back(3, -3, CH_V06N);
+    channels[CH_H06W].downhill.emplace_back(0, 1, CH_V02S);
+    channels[CH_H06W].downhill.emplace_back(3, 1, CH_V02S);
+    channels[CH_H06W].downhill.emplace_back(0, 3, CH_V06S);
+    channels[CH_H06W].downhill.emplace_back(3, 3, CH_V06S);
+    channels[CH_H06W].downhill.emplace_back(3, 1, CH_H02E);
+
+    channels[CH_V06N].type_name = "V06N";
+    channels[CH_V06N].dir = DIR_VERT;
+    channels[CH_V06N].width = 4;
+    channels[CH_V06N].downhill.emplace_back(3, -1, CH_V01N);
+    channels[CH_V06N].downhill.emplace_back(3, 0, CH_V01S);
+    channels[CH_V06N].downhill.emplace_back(0, 1, CH_H02E);
+    channels[CH_V06N].downhill.emplace_back(3, 1, CH_H02E);
+    channels[CH_V06N].downhill.emplace_back(0, 3, CH_H06E);
+    channels[CH_V06N].downhill.emplace_back(3, 3, CH_H06E);
+    channels[CH_V06N].downhill.emplace_back(3, -1, CH_V02N);
+    channels[CH_V06N].downhill.emplace_back(3, -3, CH_V06N);
+    channels[CH_V06N].downhill.emplace_back(3, 1, CH_V02S);
+    channels[CH_V06N].downhill.emplace_back(0, -1, CH_H02W);
+    channels[CH_V06N].downhill.emplace_back(3, -1, CH_H02W);
+    channels[CH_V06N].downhill.emplace_back(0, -3, CH_H06W);
+    channels[CH_V06N].downhill.emplace_back(3, -3, CH_H06W);
     return channels;
 }
 } // namespace ChannelRouter
