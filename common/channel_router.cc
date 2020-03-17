@@ -194,6 +194,7 @@ struct ChannelRouterState
 
             if (ni->driver.cell == nullptr) {
                 nets.at(i).hpwl = 0;
+                ++i;
                 continue;
             }
 
@@ -201,6 +202,7 @@ struct ChannelRouterState
 
             if (src_node == ChannelNode()) {
                 nets.at(i).hpwl = 0;
+                ++i;
                 continue;
             }
 
@@ -235,6 +237,7 @@ struct ChannelRouterState
                 // Add location to centroid sum
                 nets.at(i).cx += sink_node.x;
                 nets.at(i).cy += sink_node.y;
+                ++arc_count;
             }
             nets.at(i).hpwl = std::max(
                     std::abs(nets.at(i).bb.y1 - nets.at(i).bb.y0) + std::abs(nets.at(i).bb.x1 - nets.at(i).bb.x0), 1);
@@ -550,7 +553,7 @@ struct ChannelRouterState
         bool have_failures = false;
         t.processed_sinks.clear();
         t.route_arcs.clear();
-        for (size_t i = 0; i < net->users.size(); i++) {
+        for (size_t i = 0; i < nets[net->udata].arcs.size(); i++) {
             // Ripup failed arcs to start with
             // Check if arc is already legally routed
             if (check_arc_routing(net, i))
@@ -574,8 +577,8 @@ struct ChannelRouterState
                     auto res2 = route_arc(t, net, i, is_mt, false);
                     // If this also fails, no choice but to give up
                     if (res2 != ARC_SUCCESS) {
-                        auto src = g->get_source_node(net);
-                        auto sink = g->get_sink_node(net, net->users.at(i));
+                        auto src = nets.at(net->udata).src_node;
+                        auto sink = nets.at(net->udata).arcs.at(i).sink_node;
                         log_error("Failed to route arc %d of net '%s', X%d/Y%d/%s to X%d/Y%d/%s.\n", int(i),
                                   ctx->nameOf(net), src.x, src.y, channel_types.at(src.type).type_name.c_str(), sink.x,
                                   sink.y, channel_types.at(sink.type).type_name.c_str());

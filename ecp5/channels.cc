@@ -302,7 +302,7 @@ struct Ecp5ChannelGraph : ChannelGraph
         std::string basename = ctx->getWireBasename(wire).str(ctx);
         if (basename.length() < 3)
             return false;
-        std::string prefix = basename.substr(0, 3);
+        std::string prefix = basename.substr(0, 2);
         return prefix == "H0" || prefix == "V0";
     }
 };
@@ -313,6 +313,7 @@ void ecp5_channel_router_test(Context *ctx)
 {
     ChannelRouter::Ecp5ChannelGraph g(ctx);
     ChannelRouter::run_channelrouter(ctx, &g, ChannelRouter::ChannelRouterCfg());
+    NPNR_ASSERT_FALSE("DONE");
 }
 
 NEXTPNR_NAMESPACE_END
