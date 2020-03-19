@@ -85,9 +85,10 @@ std::vector<Channel> setup_channel_types()
         downhill.emplace_back(o, -3, CH_H06W);
     };
 
-    channels[CH_H01E].type_name = "CH_H01E";
+    channels[CH_H01E].type_name = "H01E";
     channels[CH_H01E].dir = DIR_HORIZ;
     channels[CH_H01E].width = 2;
+    channels[CH_H01E].cost = 12;
     channels[CH_H01E].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_H01E].downhill.emplace_back(1, 0, CH_IPIN);
     add_general(channels[CH_H01E].downhill, 0);
@@ -95,6 +96,7 @@ std::vector<Channel> setup_channel_types()
     channels[CH_H01W].type_name = "H01W";
     channels[CH_H01W].dir = DIR_HORIZ;
     channels[CH_H01W].width = 2;
+    channels[CH_H01W].cost = 12;
     channels[CH_H01W].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_H01W].downhill.emplace_back(-1, 0, CH_IPIN);
     add_general(channels[CH_H01W].downhill, 0);
@@ -102,6 +104,7 @@ std::vector<Channel> setup_channel_types()
     channels[CH_V01N].type_name = "V01N";
     channels[CH_V01N].dir = DIR_VERT;
     channels[CH_V01N].width = 2;
+    channels[CH_V01N].cost = 12;
     channels[CH_V01N].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_V01N].downhill.emplace_back(-1, 0, CH_IPIN);
     add_general(channels[CH_V01N].downhill, 0);
@@ -109,13 +112,17 @@ std::vector<Channel> setup_channel_types()
     channels[CH_V01S].type_name = "V01S";
     channels[CH_V01S].dir = DIR_VERT;
     channels[CH_V01S].width = 2;
+    channels[CH_V01S].cost = 12;
     channels[CH_V01S].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_V01S].downhill.emplace_back(1, 0, CH_IPIN);
     add_general(channels[CH_V01S].downhill, 0);
 
+    const int x2_decrement = 2;
+
     channels[CH_H02E].type_name = "H02E";
     channels[CH_H02E].dir = DIR_HORIZ;
-    channels[CH_H02E].width = 8;
+    channels[CH_H02E].width = 8 - x2_decrement;
+    channels[CH_H02E].cost = 15;
     channels[CH_H02E].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_H02E].downhill.emplace_back(-1, 0, CH_IPIN);
     channels[CH_H02E].downhill.emplace_back(0, 0, CH_BOUNCE);
@@ -129,7 +136,8 @@ std::vector<Channel> setup_channel_types()
 
     channels[CH_H02W].type_name = "H02W";
     channels[CH_H02W].dir = DIR_HORIZ;
-    channels[CH_H02W].width = 8;
+    channels[CH_H02W].width = 8 - x2_decrement;
+    channels[CH_H02W].cost = 15;
     channels[CH_H02W].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_H02W].downhill.emplace_back(1, 0, CH_IPIN);
     channels[CH_H02W].downhill.emplace_back(0, 0, CH_BOUNCE);
@@ -143,7 +151,8 @@ std::vector<Channel> setup_channel_types()
 
     channels[CH_V02N].type_name = "V02N";
     channels[CH_V02N].dir = DIR_VERT;
-    channels[CH_V02N].width = 8;
+    channels[CH_V02N].width = 8 - x2_decrement;
+    channels[CH_V02N].cost = 15;
     channels[CH_V02N].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_V02N].downhill.emplace_back(1, 0, CH_IPIN);
     channels[CH_V02N].downhill.emplace_back(0, 0, CH_BOUNCE);
@@ -157,7 +166,8 @@ std::vector<Channel> setup_channel_types()
 
     channels[CH_V02S].type_name = "V02N";
     channels[CH_V02S].dir = DIR_VERT;
-    channels[CH_V02S].width = 8;
+    channels[CH_V02S].width = 8 - x2_decrement;
+    channels[CH_V02S].cost = 15;
     channels[CH_V02S].downhill.emplace_back(0, 0, CH_IPIN);
     channels[CH_V02S].downhill.emplace_back(-1, 0, CH_IPIN);
     channels[CH_V02S].downhill.emplace_back(0, 0, CH_BOUNCE);
@@ -169,9 +179,12 @@ std::vector<Channel> setup_channel_types()
     channels[CH_V02S].downhill.emplace_back(-1, 1, CH_V02S);
     channels[CH_V02S].downhill.emplace_back(-1, 3, CH_V06S);
 
+    const int x6_decrement = 1;
+
     channels[CH_H06E].type_name = "H06E";
     channels[CH_H06E].dir = DIR_HORIZ;
-    channels[CH_H06E].width = 4;
+    channels[CH_H06E].width = 4 - x6_decrement;
+    channels[CH_H06E].cost = 20;
     channels[CH_H06E].downhill.emplace_back(-3, 1, CH_H01E);
     channels[CH_H06E].downhill.emplace_back(-3, 0, CH_H01W);
     channels[CH_H06E].downhill.emplace_back(-3, 1, CH_H02E);
@@ -188,7 +201,8 @@ std::vector<Channel> setup_channel_types()
 
     channels[CH_H06W].type_name = "H06W";
     channels[CH_H06W].dir = DIR_HORIZ;
-    channels[CH_H06W].width = 4;
+    channels[CH_H06W].width = 4 - x6_decrement;
+    channels[CH_H06W].cost = 20;
     channels[CH_H06W].downhill.emplace_back(3, 1, CH_H01E);
     channels[CH_H06W].downhill.emplace_back(3, 0, CH_H01W);
     channels[CH_H06W].downhill.emplace_back(3, -1, CH_H02W);
@@ -205,7 +219,8 @@ std::vector<Channel> setup_channel_types()
 
     channels[CH_V06N].type_name = "V06N";
     channels[CH_V06N].dir = DIR_VERT;
-    channels[CH_V06N].width = 4;
+    channels[CH_V06N].width = 4 - x6_decrement;
+    channels[CH_V06N].cost = 20;
     channels[CH_V06N].downhill.emplace_back(3, -1, CH_V01N);
     channels[CH_V06N].downhill.emplace_back(3, 0, CH_V01S);
     channels[CH_V06N].downhill.emplace_back(0, 1, CH_H02E);
@@ -222,7 +237,8 @@ std::vector<Channel> setup_channel_types()
 
     channels[CH_V06S].type_name = "V06S";
     channels[CH_V06S].dir = DIR_VERT;
-    channels[CH_V06S].width = 4;
+    channels[CH_V06S].width = 4 - x6_decrement;
+    channels[CH_V06S].cost = 20;
     channels[CH_V06S].downhill.emplace_back(-3, -1, CH_V01N);
     channels[CH_V06S].downhill.emplace_back(-3, 0, CH_V01S);
     channels[CH_V06S].downhill.emplace_back(0, 1, CH_H02E);
