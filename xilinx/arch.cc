@@ -369,6 +369,17 @@ void Arch::setup_pip_blacklist()
                 if (dest_name.find("CLKB") != std::string::npos && src_name.find("IMUX22") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
             }
+        } else if (boost::starts_with(type, "CMT_TOP_R")) {
+            for (int j = 0; j < td.num_pips; j++) {
+                auto &pd = td.pip_data[j];
+                std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
+                std::string src_name = IdString(td.wire_data[pd.src_index].name).str(this);
+
+                if (dest_name.find("PLLOUT_CLK_FREQ_BB_REBUFOUT") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
+                if (dest_name.find("MMCM_CLK_FREQ_BB") != std::string::npos)
+                    blacklist_pips[td.type].insert(j);
+            }
         }
     }
 }
