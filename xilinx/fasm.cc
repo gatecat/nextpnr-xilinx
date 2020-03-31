@@ -695,6 +695,8 @@ struct FasmBackend
         }
         if (is_input && diff) {
             write_bit(iostandard + ".IN_DIFF");
+            if (pad->attrs.count(ctx->id("IN_TERM")))
+                write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
         }
         if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" ||
             iostandard == "SSTL135") {
@@ -770,6 +772,7 @@ struct FasmBackend
                           !bool_or_default(ci->params, ctx->id("SRVAL_Q" + std::to_string(i)), false));
             }
             write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            write_bit("IFF.ZINV_OCLK", !bool_or_default(ci->params, ctx->id("IS_OCLK_INVERTED"), false));
 
             std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
             write_bit("IFFDELMUXE3.P0", (iobdelay == "IFD"));
