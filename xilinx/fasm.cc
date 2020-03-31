@@ -128,6 +128,9 @@ struct FasmBackend
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
                                ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
                                                                          "ILOGIC_Y" + i + ".ZINV_D"};
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
+                               ctx->id(s + "IOI_ILOGIC" + i + "_DDLY")}] = {"ILOGIC_Y" + i + ".IDELMUXE3.P0",
+                                                                            "ILOGIC_Y" + i + ".ZINV_D"};
                     pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_TQ"),
                                ctx->id("IOI_OLOGIC" + i + "_T1")}] = {"OLOGIC_Y" + i + ".ZINV_T1"};
                     if (i == "0") {
@@ -135,6 +138,7 @@ struct FasmBackend
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_OUT0"), ctx->id("IOB_O0")}] = {};
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_IN1"), ctx->id("IOB_T_OUT0")}] = {};
                         pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_OUT0"), ctx->id("IOB_T0")}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_DIFFI_IN0"), ctx->id("IOB_PADOUT1")}] = {};
                     }
                 }
 
@@ -231,7 +235,7 @@ struct FasmBackend
                 // FIXME: PPIPs missing for DSPs
                 return;
             }
-
+            std::string orig_dst_name = dst_name;
             if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
                 if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
@@ -255,16 +259,26 @@ struct FasmBackend
                     }
                 }
             }
+            if (tile_name.find("IOI3") != std::string::npos) {
+                if (dst_name.find("OCLKB") != std::string::npos && src_name.find("IOI_OCLKM_") != std::string::npos)
+                    return; // missing, not sure if really a ppip?
+            }
 
             out << tile_name << ".";
             out << dst_name << ".";
             out << src_name << std::endl;
 
             if (tile_name.find("IOI3") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
-                out << tile_name << ".";
                 dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
-                out << dst_name << ".";
-                out << src_name << std::endl;
+                orig_dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
+
+                WireId w = ctx->getWireByName(ctx->id(tile_name + "/" + orig_dst_name));
+                NPNR_ASSERT(w != WireId());
+                if (ctx->getBoundWireNet(w) == nullptr) {
+                    out << tile_name << ".";
+                    out << dst_name << ".";
+                    out << src_name << std::endl;
+                }
             }
 
             last_was_blank = false;
@@ -647,9 +661,11 @@ struct FasmBackend
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
         push("IOB_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y)));
-
-        if (boost::starts_with(iostandard, "DIFF_"))
+        bool diff = false;
+        if (boost::starts_with(iostandard, "DIFF_")) {
+            diff = true;
             iostandard.erase(0, 5);
+        }
 
         int hclk = ctx->getHclkForIob(pad->bel);
 
@@ -665,7 +681,7 @@ struct FasmBackend
             else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
         }
-        if (is_input) {
+        if (is_input && !diff) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
                 write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
             if (iostandard == "SSTL135") {
@@ -676,6 +692,11 @@ struct FasmBackend
             }
             if (!is_output)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
+        }
+        if (is_input && diff) {
+            write_bit(iostandard + ".IN_DIFF");
+            if (pad->attrs.count(ctx->id("IN_TERM")))
+                write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
         }
         if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" ||
             iostandard == "SSTL135") {
@@ -751,6 +772,7 @@ struct FasmBackend
                           !bool_or_default(ci->params, ctx->id("SRVAL_Q" + std::to_string(i)), false));
             }
             write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            write_bit("IFF.ZINV_OCLK", !bool_or_default(ci->params, ctx->id("IS_OCLK_INVERTED"), false));
 
             std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
             write_bit("IFFDELMUXE3.P0", (iobdelay == "IFD"));
@@ -772,7 +794,8 @@ struct FasmBackend
             std::string type = str_or_default(ci->params, ctx->id("INTERFACE_TYPE"), "NETWORKING");
             if (type == "MEMORY_DDR3")
                 write_bit("INTERFACE_TYPE.MEMORY_DDR3");
-            else {
+            else if (type == "MEMORY") {
+            } else {
                 write_bit("INTERFACE_TYPE.Z_MEMORY");
                 write_bit("INTERFACE_TYPE.NOT_MEMORY");
             }
