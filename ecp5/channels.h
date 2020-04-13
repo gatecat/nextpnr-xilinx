@@ -1,8 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
- *  Copyright (C) 2018  Alex Tsui
+ *  Copyright (C) 2020  David Shah <dave@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -18,44 +17,10 @@
  *
  */
 
-#ifndef LINE_EDITOR_H
-#define LINE_EDITOR_H
-
-#include <QLineEdit>
-#include <QMenu>
-#include "ParseHelper.h"
 #include "nextpnr.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
-class LineEditor : public QLineEdit
-{
-    Q_OBJECT
-
-  public:
-    explicit LineEditor(ParseHelper *helper, QWidget *parent = 0);
-
-  private Q_SLOTS:
-    void textInserted();
-    void showContextMenu(const QPoint &pt);
-    void clearHistory();
-
-  Q_SIGNALS:
-    void textLineInserted(QString);
-
-  protected:
-    void keyPressEvent(QKeyEvent *) Q_DECL_OVERRIDE;
-    bool focusNextPrevChild(bool next) Q_DECL_OVERRIDE;
-    void autocomplete();
-    void addLineToHistory(QString line);
-
-  private:
-    int index;
-    QStringList lines;
-    QMenu *contextMenu;
-    ParseHelper *parseHelper;
-};
+void ecp5_channel_router_test(Context *ctx);
 
 NEXTPNR_NAMESPACE_END
-
-#endif // LINE_EDITOR_H
