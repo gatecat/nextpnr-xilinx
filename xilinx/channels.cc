@@ -23,7 +23,7 @@
 #include <queue>
 
 NEXTPNR_NAMESPACE_BEGIN
-
+namespace ChannelRouter {
 enum UltrascaleChannelTypes
 {
     // Lut N ipins
@@ -44,38 +44,10 @@ enum UltrascaleChannelTypes
     CH_IPIN_E_G,
     CH_IPIN_E_H,
     // Lut N 'bounce'
-    CH_BOUNCE_W_A,
-    CH_BOUNCE_W_B,
-    CH_BOUNCE_W_C,
-    CH_BOUNCE_W_D,
-    CH_BOUNCE_W_E,
-    CH_BOUNCE_W_F,
-    CH_BOUNCE_W_G,
-    CH_BOUNCE_W_H,
-    CH_BOUNCE_E_A,
-    CH_BOUNCE_E_B,
-    CH_BOUNCE_E_C,
-    CH_BOUNCE_E_D,
-    CH_BOUNCE_E_E,
-    CH_BOUNCE_E_F,
-    CH_BOUNCE_E_G,
-    CH_BOUNCE_E_H,
-    CH_BYPASS_W_A,
-    CH_BYPASS_W_B,
-    CH_BYPASS_W_C,
-    CH_BYPASS_W_D,
-    CH_BYPASS_W_E,
-    CH_BYPASS_W_F,
-    CH_BYPASS_W_G,
-    CH_BYPASS_W_H,
-    CH_BYPASS_E_A,
-    CH_BYPASS_E_B,
-    CH_BYPASS_E_C,
-    CH_BYPASS_E_D,
-    CH_BYPASS_E_E,
-    CH_BYPASS_E_F,
-    CH_BYPASS_E_G,
-    CH_BYPASS_E_H,
+    CH_BOUNCE_W,
+    CH_BOUNCE_E,
+    CH_BYPASS_W,
+    CH_BYPASS_E,
     // FF N control set
     CH_CTRL_W_ABCD,
     CH_CTRL_W_EFGH,
@@ -132,6 +104,61 @@ enum UltrascaleChannelTypes
     CH_WW4_W,
     CH_WW4_E,
     CH_WW12,
+
+    CHANNEL_COUNT,
 };
+
+void setup_channels() {
+    std::vector<Channel> channels(CHANNEL_COUNT);
+    for (int i = CH_IPIN_W_A; i<= CH_IPIN_E_H; i++) {
+        channels[i].type_name = "IPIN_" + std::to_string(i);
+        channels[i].dir = DIR_HORIZ;
+        channels[i].width = 6;
+        channels[i].cost = 5;
+    }
+    for (int i = CH_BOUNCE_W; i<= CH_BOUNCE_E; i++) {
+        bool west = (i <= CH_BOUNCE_W);
+        channels[i].type_name = "BOUNCE_" + std::to_string(i);
+        channels[i].dir = DIR_VERT;
+        channels[i].width = 4;
+        channels[i].cost = 5;
+    }
+    for (int i = CH_BYPASS_W; i<= CH_BYPASS_E; i++) {
+        bool west = (i <= CH_BYPASS_W);
+        channels[i].type_name = "BYPASS_" + std::to_string(i);
+        channels[i].dir = DIR_VERT;
+        channels[i].width = 12;
+        channels[i].cost = 5;
+    }
+    for (int i = CH_INT_IMUX_W; i<= CH_INT_IMUX_E; i++) {
+        bool west = (i <= CH_INT_IMUX_W);
+        channels[i].type_name = "INT_IMUX_" + std::to_string(i);
+        channels[i].dir = DIR_VERT;
+        channels[i].width = 112/2;
+        channels[i].cost = 5;
+    }
+    for (int i = CH_INT_SDQ_W; i<= CH_INT_SDQ_E; i++) {
+        bool west = (i <= CH_INT_SDQ_W);
+        channels[i].type_name = "INT_SDQ_" + std::to_string(i);
+        channels[i].dir = DIR_VERT;
+        channels[i].width = 182/2;
+        channels[i].cost = 5;
+    }
+    for (int i = CH_INODE_W_FT0; i<= CH_INODE_E_FT1; i++) {
+        bool west = (i <= CH_INODE_W_FT1);
+        channels[i].type_name = "INODE_" + std::to_string(i);
+        channels[i].dir = DIR_VERT;
+        channels[i].width = 4;
+        channels[i].cost = 5;
+    }
+    for (int i = CH_SDQNODE_W_FT0; i<= CH_SDQNODE_E_FT1; i++) {
+        bool west = (i <= CH_SDQNODE_W_FT1);
+        channels[i].type_name = "SDQNODE_" + std::to_string(i);
+        channels[i].dir = DIR_VERT;
+        channels[i].width = (i == CH_SDQNODE_W_FT1 || i == CH_SDQNODE_E_FT1 ) ? 2 : 3;
+        channels[i].cost = 5;
+    }
+}
+}
 
 NEXTPNR_NAMESPACE_END
