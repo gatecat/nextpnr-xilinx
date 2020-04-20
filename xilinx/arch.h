@@ -193,6 +193,34 @@ NPNR_PACKED_STRUCT(struct NodeInfoPOD {
     RelPtr<TileWireRefPOD> tile_wires;
 });
 
+NPNR_PACKED_STRUCT(struct RelTileWireRefPOD {
+    int16_t dx, dy;
+    int32_t wire;
+});
+
+NPNR_PACKED_STRUCT(struct NodeShapePOD {
+    int32_t num_tile_wires;
+    int32_t intent;
+    RelPtr<RelTileWireRefPOD> tile_wires;
+});
+
+NPNR_PACKED_STRUCT(struct RelNodeRefPOD {
+    enum SpecialNodeRef : int32_t {
+        NODE_IS_ROOT = 0x4567ABC0, // is the root of a node, node_wire is a node_shape instead
+        NODE_IS_ROW = 0x4567ABC1, // is a node located at (0, y), used for the special row-constant nodes
+    };
+    union {
+        int16_t dx, dy;
+        int32_t special_type;
+    };
+    int32_t node_wire;
+});
+
+NPNR_PACKED_STRUCT(struct TileShapePOD {
+    int32_t num_wires;
+    RelPtr<RelNodeRefPOD> wire_to_node;
+});
+
 NPNR_PACKED_STRUCT(struct TileTypeInfoPOD {
     int32_t type;
 
@@ -220,6 +248,7 @@ NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
 NPNR_PACKED_STRUCT(struct TileInstInfoPOD {
     RelPtr<char> name;
     int32_t type;
+    int32_t shape;
     // Number of tile wires; excluding any site-internal wires
     // which come after general wires and are not stored here
     // as they will never be nodal
@@ -313,6 +342,8 @@ NPNR_PACKED_STRUCT(struct ChipInfoPOD {
     int32_t num_tiles, num_tiletypes, num_nodes;
     RelPtr<TileTypeInfoPOD> tile_types;
     RelPtr<TileInstInfoPOD> tile_insts;
+    RelPtr<NodeShapePOD> node_shapes;
+    RelPtr<TileShapePOD> tile_shapes;
     RelPtr<NodeInfoPOD> nodes;
 
     RelPtr<ConstIDDataPOD> extra_constids;
@@ -374,11 +405,47 @@ struct BelRange
 
 // -----------------------------------------------------------------------
 
+inline int rel_tile(const ChipInfoPOD *chip, int base_tile, int dx, int dy)
+{
+    int x = base_tile % chip->width;
+    int y = base_tile / chip->width;
+    return (x + dx) + (y + dy) * chip->width;
+}
+
+inline int rel_tile(const ChipInfoPOD *chip, int base_tile, const RelNodeRefPOD &node_ref)
+{
+    int x = base_tile % chip->width;
+    int y = base_tile / chip->width;
+    if (node_ref.special_type == RelNodeRefPOD::NODE_IS_ROW) {
+        return y * chip->width; // force x==0
+    } else {
+        return (x + node_ref.dx) + (y + node_ref.dy) * chip->width;
+    }
+}
+
+
+inline const TileShapePOD &tile_shape(const ChipInfoPOD *chip, int tile)
+{
+    return chip->tile_shapes[chip->tile_insts[tile].shape];
+}
+
+inline const TileTypeInfoPOD &tile_data(const ChipInfoPOD *chip, int tile)
+{
+    return chip->tile_types[chip->tile_insts[tile].type];
+}
+
+inline bool is_root_wire(const ChipInfoPOD *chip, int tile, int wire)
+{
+    auto &node = tile_shape(chip, tile).wire_to_node[wire];
+    return (node.special_type == RelNodeRefPOD::NODE_IS_ROOT) || ((node.dx == 0) && (node.dy == 0) && (node.node_wire == wire));
+}
+
 // Iterate over TileWires for a wire (will be more than one if nodal)
 struct TileWireIterator
 {
     const ChipInfoPOD *chip;
     WireId baseWire;
+    int node_shape = -1;
     int cursor = -1;
 
     void operator++() { cursor++; }
@@ -387,11 +454,11 @@ struct TileWireIterator
     // Returns a *denormalised* identifier always pointing to a tile wire rather than a node
     WireId operator*() const
     {
-        if (baseWire.tile == -1) {
+        if (node_shape != -1) {
             WireId tw;
-            const auto &node_wire = chip->nodes[baseWire.index].tile_wires[cursor];
-            tw.tile = node_wire.tile;
-            tw.index = node_wire.index;
+            const auto &node_wire = chip->node_shapes[node_shape].tile_wires[cursor];
+            tw.tile = rel_tile(chip, baseWire.tile, node_wire.dx, node_wire.dy);
+            tw.index = node_wire.wire;
             return tw;
         } else {
             return baseWire;
@@ -411,20 +478,19 @@ inline WireId canonicalWireId(const ChipInfoPOD *chip_info, int32_t tile, int32_
     WireId id;
 
     if (wire >= chip_info->tile_insts[tile].num_tile_wires) {
-        // Cannot be a nodal wire
+        // Cannot be a nodal wire, is a site-local wire
         id.tile = tile;
         id.index = wire;
     } else {
-        int32_t node = chip_info->tile_insts[tile].tile_wire_to_node[wire];
-        if (node == -1) {
-            // Not a nodal wire
+        auto &node = tile_shape(chip_info, tile).wire_to_node[wire];
+        if (node.special_type == RelNodeRefPOD::NODE_IS_ROOT) {
             id.tile = tile;
             id.index = wire;
         } else {
-            // Is a nodal wire, set tile to -1
-            id.tile = -1;
-            id.index = node;
+            id.tile = rel_tile(chip_info, tile, node);
+            id.index = node.node_wire;
         }
+
     }
 
     return id;
@@ -435,27 +501,22 @@ inline WireId canonicalWireId(const ChipInfoPOD *chip_info, int32_t tile, int32_
 struct WireIterator
 {
     const ChipInfoPOD *chip;
-    int cursor_index = 0;
-    int cursor_tile = -1;
+    int cursor_index = -1;
+    int cursor_tile = 0;
 
     WireIterator operator++()
     {
         // Iterate over nodes first, then tile wires that aren't nodes
         do {
             cursor_index++;
-            if (cursor_tile == -1 && cursor_index >= chip->num_nodes) {
-                cursor_tile = 0;
-                cursor_index = 0;
-            }
             while (cursor_tile != -1 && cursor_tile < chip->num_tiles &&
-                   cursor_index >= chip->tile_types[chip->tile_insts[cursor_tile].type].num_wires) {
+                   cursor_index >= tile_data(chip, cursor_tile).num_wires) {
                 cursor_index = 0;
                 cursor_tile++;
             }
 
-        } while ((cursor_tile != -1 && cursor_tile < chip->num_tiles &&
-                  cursor_index < chip->tile_insts[cursor_tile].num_tile_wires &&
-                  chip->tile_insts[cursor_tile].tile_wire_to_node[cursor_index] != -1));
+        } while (cursor_tile < chip->num_tiles && cursor_index < chip->tile_insts[cursor_tile].num_tile_wires &&
+                 !is_root_wire(chip, cursor_tile, cursor_index));
 
         return *this;
     }
@@ -956,12 +1017,7 @@ struct Arch : BaseCtx
 
     const TileWireInfoPOD &wireInfo(WireId wire) const
     {
-        if (wire.tile == -1) {
-            const TileWireRefPOD &wr = chip_info->nodes[wire.index].tile_wires[0];
-            return chip_info->tile_types[chip_info->tile_insts[wr.tile].type].wire_data[wr.index];
-        } else {
-            return locInfo(wire).wire_data[wire.index];
-        }
+        return locInfo(wire).wire_data[wire.index];
     }
 
     IdString getWireName(WireId wire) const
@@ -973,8 +1029,7 @@ struct Arch : BaseCtx
                       std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this));
         } else {
             return id(std::string(chip_info
-                                          ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
-                                                                       : wire.tile]
+                                          ->tile_insts[wire.tile]
                                           .name.get()) +
                       "/" + IdString(wireInfo(wire).name).c_str(this));
         }
@@ -1056,13 +1111,22 @@ struct Arch : BaseCtx
         TileWireRange range;
         range.b.chip = chip_info;
         range.b.baseWire = wire;
+        if  (wire.index >= chip_info->tile_insts[wire.tile].num_tile_wires)
+            range.b.node_shape = -1;
+        else {
+            auto &nr = tile_shape(chip_info, wire.tile).wire_to_node[wire.index];
+            if (nr.special_type == RelNodeRefPOD::NODE_IS_ROOT)
+                range.b.node_shape = nr.node_wire;
+            else
+                range.b.node_shape = -1;
+        }
         range.b.cursor = -1;
         ++range.b;
 
         range.e.chip = chip_info;
         range.e.baseWire = wire;
-        if (wire.tile == -1)
-            range.e.cursor = chip_info->nodes[wire.index].num_tile_wires;
+        if (range.b.node_shape != -1)
+            range.e.cursor = chip_info->node_shapes[range.b.node_shape].num_tile_wires;
         else
             range.e.cursor = 1;
         return range;
@@ -1359,10 +1423,12 @@ struct Arch : BaseCtx
 
     int32_t wireIntent(WireId wire) const
     {
-        if (wire.tile == -1)
-            return chip_info->nodes[wire.index].intent;
-        else
-            return locInfo(wire).wire_data[wire.index].intent;
+        if (wire.index >= chip_info->tile_insts[wire.tile].num_tile_wires)
+            return tile_data(chip_info, wire.tile).wire_data[wire.index].intent;
+        int shape = tile_shape(chip_info, wire.tile).node_to_shape[wire.index];
+        if (shape == -1)
+            return tile_data(chip_info, wire.tile).wire_data[wire.index].intent;
+        return chip_info->node_shapes[shape].intent;
     }
 
     DelayInfo getPipDelay(PipId pip) const
