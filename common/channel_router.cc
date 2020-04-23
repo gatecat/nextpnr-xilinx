@@ -609,8 +609,40 @@ struct ChannelRouterState
     std::vector<int> route_queue;
     std::set<int> failed_nets;
 
+    std::unordered_map<int, std::unordered_set<int>> updated_nodes;
+
     void update_congestion()
     {
+#if 1
+        total_overuse = 0;
+        overused_wires = 0;
+        total_wire_use = 0;
+        failed_nets.clear();
+        updated_nodes.clear();
+        for (auto net : route_queue) {
+            auto &nd = nets.at(net);
+            for (auto arc : nd.arcs) {
+                auto cursor = arc.sink_node;
+                while (cursor != nd.src_node) {
+                    int tile = cursor.y * width + cursor.x;
+                    auto &node = node_data(cursor);
+                    if (!updated_nodes.count(tile) || !updated_nodes.at(tile).count(cursor.type)) {
+                        total_wire_use += int(node.bound_nets.size());
+                        int overuse = int(node.bound_nets.size()) - channel_types.at(cursor.type).width;
+                        if (overuse > 0) {
+                            node.hist_cong_cost += overuse * hist_cong_weight;
+                            total_overuse += overuse;
+                            overused_wires += 1;
+                            for (auto &bound : node.bound_nets)
+                                failed_nets.insert(bound.first);
+                        }
+                        updated_nodes[tile].insert(cursor.type);
+                    }
+                    cursor = node.bound_nets.at(net).second;
+                }
+            }
+        }
+#else
         total_overuse = 0;
         overused_wires = 0;
         total_wire_use = 0;
@@ -629,6 +661,7 @@ struct ChannelRouterState
                 }
             }
         }
+#endif
     }
 
     int mid_x = 0, mid_y = 0;
@@ -637,15 +670,17 @@ struct ChannelRouterState
     {
         // Create a histogram of positions in X and Y positions
         std::map<int, int> cxs, cys;
+        int part_nets = 0;
         for (auto &n : nets) {
-            if (n.cx != -1)
-                ++cxs[n.cx];
-            if (n.cy != -1)
-                ++cys[n.cy];
+            if (n.cx == 0 && n.cy == 0)
+                continue;
+            ++cxs[n.cx];
+            ++cys[n.cy];
+            ++part_nets;
         }
         // 4-way split for now
         int accum_x = 0, accum_y = 0;
-        int halfway = int(nets.size()) / 2;
+        int halfway = part_nets / 2;
         for (auto &p : cxs) {
             if (accum_x < halfway && (accum_x + p.second) >= halfway)
                 mid_x = p.first;
@@ -784,8 +819,9 @@ struct ChannelRouterState
         do {
             ctx->sorted_shuffle(route_queue);
             do_route();
-            route_queue.clear();
             update_congestion();
+            route_queue.clear();
+
             for (auto cn : failed_nets)
                 route_queue.push_back(cn);
             log_info("    iter=%d nodes=%d overused=%d overuse=%d\n", iter, total_wire_use, overused_wires,
