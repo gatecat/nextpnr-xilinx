@@ -26,6 +26,7 @@ enum ChannelDirection
 {
     DIR_HORIZ,
     DIR_VERT,
+    DIR_ANY
 };
 struct ChannelPIP
 {
@@ -33,8 +34,17 @@ struct ChannelPIP
             : src_along(src_along), dst_along(dst_along), dst_type(dst_type)
     {
     }
+    // For DIR_HORIZ/DIR_VERT channels
     int src_along, dst_along;
+
+    // For DIR_ANY channels
+    int src_dx, src_dy, dst_dx, dst_dy;
+
     int dst_type;
+    ChannelPIP(int src_dx, int src_dy, int dst_dx, int dst_dy, int dst_type)
+            : src_dx(src_dx), src_dy(src_dy), dst_dx(dst_dx), dst_dy(dst_dy), dst_type(dst_type)
+    {
+    }
 };
 struct Channel
 {

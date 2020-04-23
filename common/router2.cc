@@ -178,11 +178,12 @@ void Router2State::bind_pip_internal(NetInfo *net, int wire, PipId pip)
     if (b.first == 1 || (b.second == PipId() && pip != PipId())) {
         b.second = pip;
     } else {
-        //NPNR_ASSERT(pip == PipId() || b.second == pip);
+        // NPNR_ASSERT(pip == PipId() || b.second == pip);
         if (pip != PipId() && b.second != pip) {
             log_error("Wire %s of net %s driven by pips %s (from %s) and %s (from %s)\n",
-                    ctx->nameOfWire(flat_wires.at(wire).w), ctx->nameOf(net), ctx->nameOfPip(b.second),
-                    ctx->nameOfWire(ctx->getPipSrcWire(b.second)), ctx->nameOfPip(pip), ctx->nameOfWire(ctx->getPipSrcWire(pip)));
+                      ctx->nameOfWire(flat_wires.at(wire).w), ctx->nameOf(net), ctx->nameOfPip(b.second),
+                      ctx->nameOfWire(ctx->getPipSrcWire(b.second)), ctx->nameOfPip(pip),
+                      ctx->nameOfWire(ctx->getPipSrcWire(pip)));
         }
     }
 }

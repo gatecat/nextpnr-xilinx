@@ -521,7 +521,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     if (xc7)
         base = (base * 3) / 2;
 
-    //if (sink_locs.count(dst))
+    // if (sink_locs.count(dst))
     //    base += 1000;
     if (src_intent == ID_NODE_PINFEED && dst_x == src_x && dst_y == src_y)
         base -= 200;

@@ -142,6 +142,10 @@ struct ChannelRouterState
                         case DIR_VERT:
                             start_y += dh.src_along;
                             break;
+                        case DIR_ANY:
+                            start_x += dh.src_dx;
+                            start_y += dh.src_dy;
+                            break;
                         }
                         if (start_x < 0 || start_x >= width || start_y < 0 || start_y >= height)
                             continue;
@@ -153,6 +157,10 @@ struct ChannelRouterState
                             break;
                         case DIR_VERT:
                             end_y += dh.dst_along;
+                            break;
+                        case DIR_ANY:
+                            end_x += dh.dst_dx;
+                            end_y += dh.dst_dy;
                             break;
                         }
                         if (end_x < 0 || end_x >= width || end_y < 0 || end_y >= height)

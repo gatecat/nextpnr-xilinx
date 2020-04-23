@@ -18,147 +18,74 @@
  */
 
 #include "channel_router.h"
+#include "int_graph.h"
 #include "nextpnr.h"
 
 #include <queue>
 
 NEXTPNR_NAMESPACE_BEGIN
 namespace ChannelRouter {
-enum UltrascaleChannelTypes
+
+struct UltrascaleChannelGraph : ChannelGraph
 {
-    // Lut N ipins
-    CH_IPIN_W_A,
-    CH_IPIN_W_B,
-    CH_IPIN_W_C,
-    CH_IPIN_W_D,
-    CH_IPIN_W_E,
-    CH_IPIN_W_F,
-    CH_IPIN_W_G,
-    CH_IPIN_W_H,
-    CH_IPIN_E_A,
-    CH_IPIN_E_B,
-    CH_IPIN_E_C,
-    CH_IPIN_E_D,
-    CH_IPIN_E_E,
-    CH_IPIN_E_F,
-    CH_IPIN_E_G,
-    CH_IPIN_E_H,
-    // Lut N 'bounce'
-    CH_BOUNCE_W,
-    CH_BOUNCE_E,
-    CH_BYPASS_W,
-    CH_BYPASS_E,
-    // FF N control set
-    CH_CTRL_W_ABCD,
-    CH_CTRL_W_EFGH,
-    CH_CTRL_E_ABCD,
-    CH_CTRL_E_EFGH,
-    // Slice output pins
-    CH_OUTPUT_E,
-    CH_OUTPUT_W,
-    // 'IMUX' signals
-    CH_INT_IMUX_W,
-    CH_INT_IMUX_E,
+    Context *ctx;
+    UltrascaleChannelGraph(Context *ctx) : ctx(ctx){};
 
-    CH_INT_SDQ_W,
-    CH_INT_SDQ_E,
+    // Mapping from real to "INT grid" coordinates
+    std::vector<int> row_r2i, col_r2i;
+    std::set<int> int_rows, int_cols;
+    int int_width, int_height;
+    // Mapping from INT wire name to INT wire index
+    std::unordered_map<IdString, int> name2idx;
 
-    CH_INODE_W_FT0,
-    CH_INODE_W_FT1,
-    CH_INODE_E_FT0,
-    CH_INODE_E_FT1,
+    void setup()
+    {
+        row_r2i.resize(ctx->chip_info->height, -1);
+        col_r2i.resize(ctx->chip_info->width, -1);
+        for (int y = 0; y < ctx->chip_info->height; y++) {
+            for (int x = 0; x < ctx->chip_info->width; x++) {
+                IdString tt = IdString(
+                        ctx->chip_info->tile_types[ctx->chip_info->tile_insts[y * ctx->chip_info->height + x].type]
+                                .type);
+                if (tt != ctx->id("INT"))
+                    continue;
+                int_rows.insert(y);
+                int_cols.insert(x);
+            }
+        }
+        int ir = 0, ic = 0;
+        for (auto r : int_rows)
+            row_r2i.at(r) = ir++;
+        for (auto c : int_cols)
+            col_r2i.at(c) = ic++;
+        int_width = ic;
+        int_height = ir;
+        for (int i = 0; i < IntGraph::num_wires; i++) {
+            name2idx[ctx->id(IntGraph::wire_names[i])] = i;
+        }
+    }
 
-    CH_SDQNODE_W_FT0,
-    CH_SDQNODE_W_FT1,
-    CH_SDQNODE_E_FT0,
-    CH_SDQNODE_E_FT1,
-
-    CH_NN1_W,
-    CH_NN1_E,
-    CH_NN2_W,
-    CH_NN2_E,
-    CH_NN4_W,
-    CH_NN4_E,
-    CH_NN12,
-
-    CH_SS1_W,
-    CH_SS1_E,
-    CH_SS2_W,
-    CH_SS2_E,
-    CH_SS4_W,
-    CH_SS4_E,
-    CH_SS12,
-
-    CH_EE1_W,
-    CH_EE1_E,
-    CH_EE2_W,
-    CH_EE2_E,
-    CH_EE4_W,
-    CH_EE4_E,
-    CH_EE12,
-
-    CH_WW1_W,
-    CH_WW1_E,
-    CH_WW2_W,
-    CH_WW2_E,
-    CH_WW4_W,
-    CH_WW4_E,
-    CH_WW12,
-
-    CHANNEL_COUNT,
+    int get_width() const override { return int_width; }
+    int get_height() const override { return int_height; }
+    std::vector<Channel> get_channels() const override
+    {
+        std::vector<Channel> channels;
+        channels.resize(IntGraph::num_wires);
+        for (int i = 0; i < IntGraph::num_wires; i++) {
+            auto &c = channels.at(i);
+            c.width = 1; // Current all-width-1 model
+            c.cost = 10;
+            c.dir = DIR_ANY; // Maybe should infer direction?
+            c.type_name = IntGraph::wire_names[i];
+        }
+        for (int i = 0; i < IntGraph::num_pips; i++) {
+            auto &p = IntGraph::int_pips[i];
+            auto &sc = channels.at(p.from.index);
+            sc.downhill.emplace_back(p.from.dx, p.from.dy, p.to.dx, p.to.dy, p.to.index);
+        }
+    }
 };
 
-void setup_channels() {
-    std::vector<Channel> channels(CHANNEL_COUNT);
-    for (int i = CH_IPIN_W_A; i<= CH_IPIN_E_H; i++) {
-        channels[i].type_name = "IPIN_" + std::to_string(i);
-        channels[i].dir = DIR_HORIZ;
-        channels[i].width = 6;
-        channels[i].cost = 5;
-    }
-    for (int i = CH_BOUNCE_W; i<= CH_BOUNCE_E; i++) {
-        bool west = (i <= CH_BOUNCE_W);
-        channels[i].type_name = "BOUNCE_" + std::to_string(i);
-        channels[i].dir = DIR_VERT;
-        channels[i].width = 4;
-        channels[i].cost = 5;
-    }
-    for (int i = CH_BYPASS_W; i<= CH_BYPASS_E; i++) {
-        bool west = (i <= CH_BYPASS_W);
-        channels[i].type_name = "BYPASS_" + std::to_string(i);
-        channels[i].dir = DIR_VERT;
-        channels[i].width = 12;
-        channels[i].cost = 5;
-    }
-    for (int i = CH_INT_IMUX_W; i<= CH_INT_IMUX_E; i++) {
-        bool west = (i <= CH_INT_IMUX_W);
-        channels[i].type_name = "INT_IMUX_" + std::to_string(i);
-        channels[i].dir = DIR_VERT;
-        channels[i].width = 112/2;
-        channels[i].cost = 5;
-    }
-    for (int i = CH_INT_SDQ_W; i<= CH_INT_SDQ_E; i++) {
-        bool west = (i <= CH_INT_SDQ_W);
-        channels[i].type_name = "INT_SDQ_" + std::to_string(i);
-        channels[i].dir = DIR_VERT;
-        channels[i].width = 182/2;
-        channels[i].cost = 5;
-    }
-    for (int i = CH_INODE_W_FT0; i<= CH_INODE_E_FT1; i++) {
-        bool west = (i <= CH_INODE_W_FT1);
-        channels[i].type_name = "INODE_" + std::to_string(i);
-        channels[i].dir = DIR_VERT;
-        channels[i].width = 4;
-        channels[i].cost = 5;
-    }
-    for (int i = CH_SDQNODE_W_FT0; i<= CH_SDQNODE_E_FT1; i++) {
-        bool west = (i <= CH_SDQNODE_W_FT1);
-        channels[i].type_name = "SDQNODE_" + std::to_string(i);
-        channels[i].dir = DIR_VERT;
-        channels[i].width = (i == CH_SDQNODE_W_FT1 || i == CH_SDQNODE_E_FT1 ) ? 2 : 3;
-        channels[i].cost = 5;
-    }
-}
-}
+} // namespace ChannelRouter
 
 NEXTPNR_NAMESPACE_END
