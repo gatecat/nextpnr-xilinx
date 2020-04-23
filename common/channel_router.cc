@@ -478,10 +478,10 @@ struct ChannelRouterState
         t.queue.push(QueuedNode(src_node, ChannelNode(), base_score));
         set_visited(t, src_node, ChannelNode(), base_score);
 
-        int toexplore = 10000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
+        int toexplore = is_bb ? 1e9 : (10000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0)));
         int iter = 0;
         int explored = 1;
-        while (!t.queue.empty() && (!is_bb || iter < toexplore)) {
+        while (!t.queue.empty() && iter < toexplore) {
             auto curr = t.queue.top();
             auto &d = node_data(curr.node);
             t.queue.pop();
