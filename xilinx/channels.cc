@@ -183,8 +183,9 @@ struct UltrascaleChannelGraph : ChannelGraph
                 // Simple routing from sink pin until a point off the general interconnect graph
                 bool reached_src = false, reached_int = false;
                 visit.push(dst_wire);
+                WireId cursor;
                 while (!visit.empty()) {
-                    WireId cursor = visit.front();
+                    cursor = visit.front();
                     visit.pop();
                     if (cursor == src_wire) {
                         // We've actually reached the source without ever touching general interconnect
@@ -223,12 +224,13 @@ struct UltrascaleChannelGraph : ChannelGraph
                 }
                 {
                     // Mark all the wires we used in the process, so we can't use them for other nets
-                    WireId cursor = dst_wire;
-                    used_wires[cursor] = ni->name;
-                    while (backtrace.count(cursor)) {
-                        cursor = ctx->getPipSrcWire(backtrace.at(cursor));
-                        used_wires[cursor] = ni->name;
+                    WireId cursor2 = cursor;
+                    used_wires[cursor2] = ni->name;
+                    while (backtrace.count(cursor2)) {
+                        cursor2 = ctx->getPipDstWire(backtrace.at(cursor2));
+                        used_wires[cursor2] = ni->name;
                     }
+                    NPNR_ASSERT(cursor2 == dst_wire);
                 }
                 at_least_one_int |= reached_int;
             }
@@ -242,8 +244,9 @@ struct UltrascaleChannelGraph : ChannelGraph
                 }
                 bool reached_int = false;
                 visit.push(src_wire);
+                WireId cursor;
                 while (!visit.empty()) {
-                    WireId cursor = visit.front();
+                    cursor = visit.front();
                     visit.pop();
                     auto int_node = wire_to_int_node(cursor, true);
                     if (int_node) {
@@ -273,12 +276,13 @@ struct UltrascaleChannelGraph : ChannelGraph
                     continue;
                 }
                 {
-                    WireId cursor = src_wire;
-                    used_wires[cursor] = ni->name;
-                    while (backtrace.count(cursor)) {
-                        cursor = ctx->getPipDstWire(backtrace.at(cursor));
-                        used_wires[cursor] = ni->name;
+                    WireId cursor2 = cursor;
+                    used_wires[cursor2] = ni->name;
+                    while (backtrace.count(cursor2)) {
+                        cursor2 = ctx->getPipSrcWire(backtrace.at(cursor2));
+                        used_wires[cursor2] = ni->name;
                     }
+                    NPNR_ASSERT(cursor2 == src_wire);
                 }
             } else {
                 ignore_nets.insert(ni->name);
