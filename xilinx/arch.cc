@@ -964,6 +964,8 @@ void Arch::findSourceSinkLocations()
 #endif
 }
 
+void usp_channel_router_test(Context *ctx);
+
 bool Arch::route()
 {
     assign_budget(getCtx(), true);
@@ -977,6 +979,7 @@ bool Arch::route()
     if (router == "router1") {
         result = router1(getCtx(), Router1Cfg(getCtx()));
     } else if (router == "router2") {
+        usp_channel_router_test(getCtx());
         auto cfg = Router2Cfg(getCtx());
         cfg.bb_margin_x = 4;
         cfg.bb_margin_y = 4;

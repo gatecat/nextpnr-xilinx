@@ -67,7 +67,7 @@ struct ChannelGraph
     virtual std::vector<Channel> get_channels() const = 0;
     virtual bool is_global_net(const NetInfo *net) const = 0;
     virtual ChannelNode get_source_node(const NetInfo *net) const = 0;
-    virtual ChannelNode get_sink_node(const NetInfo *net, const PortRef &usr) const = 0;
+    virtual ChannelNode get_sink_node(const NetInfo *net, size_t usr_i) const = 0;
     virtual ~ChannelGraph(){};
 };
 

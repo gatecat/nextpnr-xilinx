@@ -286,8 +286,9 @@ struct Ecp5ChannelGraph : ChannelGraph
         }
         return ChannelNode();
     }
-    ChannelNode get_sink_node(const NetInfo *net, const PortRef &usr) const
+    ChannelNode get_sink_node(const NetInfo *net, size_t i) const
     {
+        auto &usr = net->users.at(i);
         // Skip all dedicated routing
         if (usr.port == id_FCI || usr.port == id_FXA || usr.port == id_FXA || usr.port == id_DI0 || usr.port == id_DI1)
             return ChannelNode();

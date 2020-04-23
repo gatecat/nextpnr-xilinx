@@ -31,7 +31,11 @@ namespace ChannelRouter {
 struct UltrascaleChannelGraph : ChannelGraph
 {
     Context *ctx;
-    UltrascaleChannelGraph(Context *ctx) : ctx(ctx){};
+    UltrascaleChannelGraph(Context *ctx) : ctx(ctx)
+    {
+        setup();
+        setup_arcs();
+    };
 
     // Mapping from real to "INT grid" coordinates
     std::vector<int> row_r2i, col_r2i;
@@ -49,7 +53,7 @@ struct UltrascaleChannelGraph : ChannelGraph
         for (int y = 0; y < ctx->chip_info->height; y++) {
             for (int x = 0; x < ctx->chip_info->width; x++) {
                 IdString tt = IdString(
-                        ctx->chip_info->tile_types[ctx->chip_info->tile_insts[y * ctx->chip_info->height + x].type]
+                        ctx->chip_info->tile_types[ctx->chip_info->tile_insts[y * ctx->chip_info->width + x].type]
                                 .type);
                 if (tt != ctx->id("INT"))
                     continue;
@@ -92,6 +96,7 @@ struct UltrascaleChannelGraph : ChannelGraph
             auto &sc = channels.at(p.from.index);
             sc.downhill.emplace_back(p.from.dx, p.from.dy, p.to.dx, p.to.dy, p.to.index);
         }
+        return channels;
     }
 
     struct ArcKey
@@ -106,14 +111,17 @@ struct UltrascaleChannelGraph : ChannelGraph
                 std::size_t seed = 0;
                 boost::hash_combine(seed, std::hash<int>()(k.net->name.index));
                 boost::hash_combine(seed, std::hash<size_t>()(k.user));
+                return seed;
             }
         };
+        bool operator==(const ArcKey &other) const { return other.net == net && other.user == user; }
     };
 
-    boost::optional<std::tuple<int, int, int>> wire_to_int_node(WireId wire, bool onto_int)
+    boost::optional<ChannelNode> wire_to_int_node(WireId wire, bool onto_int)
     {
         IdString id_int = ctx->id("INT");
-        for (WireId denorm : ctx->getTileWireRange(wire)) {
+        auto twr = ctx->getTileWireRange(wire);
+        for (auto denorm : twr) {
             IdString tt = ctx->locInfo(denorm).type;
             if (tt != id_int)
                 continue;
@@ -123,15 +131,15 @@ struct UltrascaleChannelGraph : ChannelGraph
             NPNR_ASSERT(ix != -1);
             int iy = row_r2i.at(denorm.tile / ctx->chip_info->width);
             NPNR_ASSERT(iy != -1);
-            return std::make_tuple(ix, iy, denorm.index);
+            return ChannelNode(ix, iy, denorm.index);
         }
         return {};
     }
 
     std::unordered_set<IdString> ignore_nets;
     std::unordered_set<ArcKey, ArcKey::Hash> ignore_arcs;
-    std::unordered_map<ArcKey, std::tuple<int, int, int>, ArcKey::Hash> arc2node;
-    std::unordered_map<IdString, std::tuple<int, int, int>> src2node;
+    std::unordered_map<ArcKey, ChannelNode, ArcKey::Hash> arc2node;
+    std::unordered_map<IdString, ChannelNode> src2node;
 
     std::unordered_map<WireId, IdString> used_wires;
 
@@ -272,11 +280,37 @@ struct UltrascaleChannelGraph : ChannelGraph
                         used_wires[cursor] = ni->name;
                     }
                 }
+            } else {
+                ignore_nets.insert(ni->name);
             }
         }
     }
+
+    ChannelNode get_source_node(const NetInfo *net) const override
+    {
+        if (ignore_nets.count(net->name))
+            return ChannelNode();
+        return src2node.at(net->name);
+    }
+
+    ChannelNode get_sink_node(const NetInfo *net, size_t usr_i) const override
+    {
+        ArcKey k(net, usr_i);
+        if (ignore_nets.count(net->name) || ignore_arcs.count(k))
+            return ChannelNode();
+        return arc2node.at(k);
+    }
+
+    bool is_global_net(const NetInfo *net) const override { return ignore_nets.count(net->name); }
 };
 
 } // namespace ChannelRouter
+
+void usp_channel_router_test(Context *ctx)
+{
+    ChannelRouter::UltrascaleChannelGraph g(ctx);
+    ChannelRouter::run_channelrouter(ctx, &g, ChannelRouter::ChannelRouterCfg());
+    NPNR_ASSERT_FALSE("DONE");
+}
 
 NEXTPNR_NAMESPACE_END

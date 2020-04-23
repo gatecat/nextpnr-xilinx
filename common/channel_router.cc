@@ -225,7 +225,7 @@ struct ChannelRouterState
             for (size_t j = 0; j < ni->users.size(); j++) {
                 auto &usr = ni->users.at(j);
 
-                ChannelNode sink_node = g->get_sink_node(ni, usr);
+                ChannelNode sink_node = g->get_sink_node(ni, j);
                 if (sink_node == ChannelNode())
                     continue;
 
