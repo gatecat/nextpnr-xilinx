@@ -16,7 +16,7 @@
  *  OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
  */
-
+#include <boost/algorithm/string.hpp>
 #include <boost/optional.hpp>
 #include <queue>
 #include "channel_router.h"
@@ -143,6 +143,26 @@ struct UltrascaleChannelGraph : ChannelGraph
 
     std::unordered_map<WireId, IdString> used_wires;
 
+    bool accept_pip(PipId pip)
+    {
+        auto &li = ctx->locInfo(pip);
+        auto &pd = li.pip_data[pip.index];
+        IdString tt(li.type);
+        if (tt == id_CLEL_L || tt == id_CLEL_R || tt == id_CLEM || tt == id_CLEM_R) {
+            if (pd.flags == PIP_LUT_ROUTETHRU)
+                return false;
+            else if (pd.flags == PIP_LUT_PERMUTATION)
+                return ((pd.extra_data >> 4) & 0xF) == (pd.extra_data & 0xF);
+            else if (pd.flags == PIP_SITE_INTERNAL) {
+                // Force use of O6 for LUT output
+                IdString bel(pd.bel);
+                if (boost::starts_with(bel.str(ctx), "OUTMUX") && (IdString(pd.extra_data) == id_O6))
+                    return false;
+            }
+        }
+        return true;
+    }
+
     // Route to/from pins on/off the general interconnect graph
     void setup_arcs()
     {
@@ -175,6 +195,11 @@ struct UltrascaleChannelGraph : ChannelGraph
                     ignore_arcs.emplace(ni, i);
                     continue;
                 }
+                if (usr.port == id_CIN && drv.port == id_CO7) {
+                    // Skip carry chains
+                    ignore_arcs.emplace(ni, i);
+                    continue;
+                }
                 backtrace.clear();
                 {
                     std::queue<WireId> empty;
@@ -203,6 +228,8 @@ struct UltrascaleChannelGraph : ChannelGraph
                     }
                     for (PipId pip : ctx->getPipsUphill(cursor)) {
                         if (!ctx->checkPipAvail(pip))
+                            continue;
+                        if (!accept_pip(pip))
                             continue;
                         WireId src = ctx->getPipSrcWire(pip);
                         if (backtrace.count(src))
@@ -257,6 +284,8 @@ struct UltrascaleChannelGraph : ChannelGraph
                     }
                     for (PipId pip : ctx->getPipsDownhill(cursor)) {
                         if (!ctx->checkPipAvail(pip))
+                            continue;
+                        if (!accept_pip(pip))
                             continue;
                         WireId dst = ctx->getPipDstWire(pip);
                         if (backtrace.count(dst))
