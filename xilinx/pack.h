@@ -120,6 +120,7 @@ struct XilinxPacker
     void pack_luts();
     void pack_ffs();
     void pack_lutffs();
+    void pack_lutluts();
 
     bool is_constrained(const CellInfo *cell);
     void pack_muxfs();

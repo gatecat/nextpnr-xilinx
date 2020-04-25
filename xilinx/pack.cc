@@ -249,6 +249,72 @@ void XilinxPacker::pack_lutffs()
     log_info("Constrained %d LUTFF pairs.\n", pairs);
 }
 
+void XilinxPacker::pack_lutluts()
+{
+    int merged = 0;
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->constr_parent != nullptr || !ci->constr_children.empty())
+            continue;
+        if (ci->type != id_SLICE_LUTX)
+            continue;
+        if (ci->attrs.count(ctx->id("X_LUT_AS_SRL")) || ci->attrs.count(ctx->id("X_LUT_AS_DRAM")))
+            continue;
+        std::set<IdString> inputs;
+        for (IdString pin : {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6}) {
+            NetInfo *net = get_net_or_empty(ci, pin);
+            if (net == nullptr)
+                continue;
+            inputs.insert(net->name);
+        }
+        if (int(inputs.size()) > 5)
+            continue;
+        if (int(inputs.size()) < 4)
+            continue;
+        for (IdString inet : inputs) {
+            NetInfo *ni = ctx->nets.at(inet).get();
+            if (int(ni->users.size()) > 10)
+                continue; // skip hi-fanout to save time
+            for (auto &usr : ni->users) {
+                CellInfo *other = usr.cell;
+                if (other->type != id_SLICE_LUTX)
+                    continue;
+                if (other == ci)
+                    continue;
+                if (other->constr_parent != nullptr || !other->constr_children.empty())
+                    continue;
+                if (other->attrs.count(ctx->id("X_LUT_AS_SRL")) || other->attrs.count(ctx->id("X_LUT_AS_DRAM")))
+                    continue;
+                int total = 0, shared = 0;
+                for (IdString pin : {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6}) {
+                    NetInfo *net = get_net_or_empty(other, pin);
+                    if (net == nullptr)
+                        continue;
+                    ++total;
+                    if (inputs.count(net->name))
+                        ++shared;
+                }
+                if (total < 4 || shared < 4)
+                    continue;
+                if ((total + int(inputs.size()) - shared) > 5)
+                    continue;
+                // Meet criteria of two LUT4+s sharing >=4 inputs, can be merged
+                ci->constr_children.push_back(other);
+                other->constr_parent = ci;
+                other->constr_x = 0;
+                other->constr_y = 0;
+                other->constr_z = BEL_5LUT - BEL_6LUT;
+                other->constr_abs_z = false;
+                ++merged;
+                goto done;
+            }
+        }
+    done:
+        continue;
+    }
+    log_info("Merged %d fracturable LUT pairs.\n", merged);
+}
+
 bool XilinxPacker::is_constrained(const CellInfo *cell)
 {
     return cell->constr_x != cell->UNCONSTR || cell->constr_y != cell->UNCONSTR || cell->constr_z != cell->UNCONSTR;
@@ -946,6 +1012,7 @@ bool Arch::pack()
         packer.pack_ffs();
         packer.finalise_muxfs();
         packer.pack_lutffs();
+        packer.pack_lutluts();
     }
 
     assignArchInfo();
