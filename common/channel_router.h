@@ -75,7 +75,7 @@ struct ChannelRouterCfg
 {
     int bb_margin_x = 3, bb_margin_y = 3;
     // Togo cost estimates
-    int togo_cost_dx = 10, togo_cost_dy = 10, togo_cost_adder = 20;
+    int togo_cost_dx = 7, togo_cost_dy = 7, togo_cost_adder = 12;
     float bias_cost_factor = 0.5;
     float estimate_weight = 1.5;
     // Starting current and historical congestion cost factor
@@ -83,7 +83,7 @@ struct ChannelRouterCfg
     // Current congestion cost multiplier
     float curr_cong_mult = 2.0;
 
-    bool perf_profile = false;
+    bool perf_profile = true;
 };
 
 void run_channelrouter(Context *ctx, ChannelGraph *g, const ChannelRouterCfg &cfg);

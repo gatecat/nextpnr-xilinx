@@ -87,6 +87,8 @@ struct ChannelRouterState
             ChannelNode prev;
             NodeScore score;
         } visit;
+        // Range of downhill locations
+        int x0 = std::numeric_limits<int>::max(), x1 = std::numeric_limits<int>::min(), y0 = std::numeric_limits<int>::max(), y1 = std::numeric_limits<int>::min();
     };
 
     struct PerArcData
@@ -169,7 +171,23 @@ struct ChannelRouterState
                         auto &dst = nodes.at(end_y * width + end_x).at(dh.dst_type);
                         src.downhill.emplace_back(end_x, end_y, dh.dst_type);
                         dst.uphill.emplace_back(start_x, start_y, t);
+                        src.x0 = std::min(src.x0, x);
+                        src.x1 = std::max(src.x1, x);
+                        src.y0 = std::min(src.y0, y);
+                        src.y1 = std::max(src.y1, y);
                     }
+                }
+            }
+        }
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                auto &nl = nodes.at(y * width + x);
+                for (int t = 0; t < int(nl.size()); t++) {
+                    auto &n = nl.at(t);
+                    if (n.x0 == std::numeric_limits<int>::max()) n.x0 = x;
+                    if (n.x1 == std::numeric_limits<int>::min()) n.x0 = x;
+                    if (n.y0 == std::numeric_limits<int>::max()) n.y0 = y;
+                    if (n.y1 == std::numeric_limits<int>::min()) n.y1 = y;
                 }
             }
         }
@@ -368,8 +386,10 @@ struct ChannelRouterState
         int source_uses = 0;
         if (wd.bound_nets.count(net->udata))
             source_uses = wd.bound_nets.at(net->udata).first;
+        int dx = std::min(abs(sink.x - wd.x0), abs(sink.x - wd.x1));
+        int dy = std::min(abs(sink.y - wd.y0), abs(sink.y - wd.y1));
         int base_cost =
-                cfg.togo_cost_dx * abs(curr.x - sink.x) + cfg.togo_cost_dy * abs(curr.y - sink.y) + cfg.togo_cost_adder;
+                cfg.togo_cost_dx * dx + cfg.togo_cost_dy * dy + cfg.togo_cost_adder;
         return base_cost / (1 + source_uses);
     }
 
@@ -492,8 +512,6 @@ struct ChannelRouterState
                 if (is_bb && !hit_test_node(ad.bb, dh))
                     continue;
                 // Evaluate score of next wire
-                if (was_visited(dh))
-                    continue;
                 auto &nwd = node_data(dh);
                 if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != curr.node)
                     continue;
