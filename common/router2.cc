@@ -471,13 +471,13 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
     t.queue.push(QueuedWire(src_wire_idx, PipId(), Loc(), base_score));
     set_visited(t, src_wire_idx, PipId(), base_score);
 
-    int toexplore = 25000 * std::max(1, (sd.bb.x1 - sd.bb.x0) + (sd.bb.y1 - sd.bb.y0));
+    int toexplore = is_bb ? (25000 * std::max(1, (sd.bb.x1 - sd.bb.x0) + (sd.bb.y1 - sd.bb.y0))) : 1000000000;
     int iter = 0;
     int explored = 1;
     bool debug_arc = /*usr.cell->type.str(ctx).find("RAMB") != std::string::npos && (usr.port ==
                         ctx->id("ADDRATIEHIGH0") || usr.port == ctx->id("ADDRARDADDRL0"))*/
             false;
-    while (!t.queue.empty() && (!is_bb || iter < toexplore)) {
+    while (!t.queue.empty() && iter < toexplore) {
         auto curr = t.queue.top();
         auto &d = flat_wires.at(curr.wire);
         t.queue.pop();
@@ -638,6 +638,33 @@ void Router2State::update_congestion()
     overused_wires = 0;
     total_wire_use = 0;
     failed_nets.clear();
+#if 1
+    std::unordered_set<int> processed_wires;
+    for (auto net : route_queue) {
+        auto &nd = nets.at(net);
+        for (auto seg : nd.segments) {
+            auto cursor = seg.s.dst_wire;
+            while (cursor != seg.s.src_wire) {
+                int w = wire_to_idx.at(cursor);
+                auto &wd = wire_data(cursor);
+                if (!processed_wires.count(w)) {
+                    total_wire_use += int(wd.bound_nets.size());
+                    int overuse = int(wd.bound_nets.size()) - 1;
+                    if (overuse > 0) {
+                        wd.hist_cong_cost += overuse * hist_cong_weight;
+                        total_overuse += overuse;
+                        overused_wires += 1;
+                        for (auto &bound : wd.bound_nets)
+                            failed_nets.insert(bound.first);
+                    }
+                    processed_wires.insert(w);
+                }
+                cursor = ctx->getPipSrcWire(wd.bound_nets.at(net).second);
+            }
+        }
+    }
+
+#else
     for (auto &wire : flat_wires) {
         total_wire_use += int(wire.bound_nets.size());
         int overuse = int(wire.bound_nets.size()) - 1;
@@ -649,6 +676,7 @@ void Router2State::update_congestion()
                 failed_nets.insert(bound.first);
         }
     }
+#endif
 }
 
 bool Router2State::bind_and_check(NetInfo *net, int seg_idx)
@@ -966,8 +994,8 @@ void Router2State::operator()()
             }
 #endif
         do_route();
-        route_queue.clear();
         update_congestion();
+        route_queue.clear();
 #if 0
             if (iter == 1 && ctx->debug) {
                 std::ofstream cong_map("cong_map_0.csv");

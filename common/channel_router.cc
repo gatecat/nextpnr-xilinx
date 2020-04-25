@@ -88,7 +88,8 @@ struct ChannelRouterState
             NodeScore score;
         } visit;
         // Range of downhill locations
-        int x0 = std::numeric_limits<int>::max(), x1 = std::numeric_limits<int>::min(), y0 = std::numeric_limits<int>::max(), y1 = std::numeric_limits<int>::min();
+        int x0 = std::numeric_limits<int>::max(), x1 = std::numeric_limits<int>::min(),
+            y0 = std::numeric_limits<int>::max(), y1 = std::numeric_limits<int>::min();
     };
 
     struct PerArcData
@@ -184,10 +185,14 @@ struct ChannelRouterState
                 auto &nl = nodes.at(y * width + x);
                 for (int t = 0; t < int(nl.size()); t++) {
                     auto &n = nl.at(t);
-                    if (n.x0 == std::numeric_limits<int>::max()) n.x0 = x;
-                    if (n.x1 == std::numeric_limits<int>::min()) n.x0 = x;
-                    if (n.y0 == std::numeric_limits<int>::max()) n.y0 = y;
-                    if (n.y1 == std::numeric_limits<int>::min()) n.y1 = y;
+                    if (n.x0 == std::numeric_limits<int>::max())
+                        n.x0 = x;
+                    if (n.x1 == std::numeric_limits<int>::min())
+                        n.x0 = x;
+                    if (n.y0 == std::numeric_limits<int>::max())
+                        n.y0 = y;
+                    if (n.y1 == std::numeric_limits<int>::min())
+                        n.y1 = y;
                 }
             }
         }
@@ -388,8 +393,7 @@ struct ChannelRouterState
             source_uses = wd.bound_nets.at(net->udata).first;
         int dx = std::min(abs(sink.x - wd.x0), abs(sink.x - wd.x1));
         int dy = std::min(abs(sink.y - wd.y0), abs(sink.y - wd.y1));
-        int base_cost =
-                cfg.togo_cost_dx * dx + cfg.togo_cost_dy * dy + cfg.togo_cost_adder;
+        int base_cost = cfg.togo_cost_dx * dx + cfg.togo_cost_dy * dy + cfg.togo_cost_adder;
         return base_cost / (1 + source_uses);
     }
 
