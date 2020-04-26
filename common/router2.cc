@@ -425,6 +425,8 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
             int next = wire_to_idx.at(ctx->getPipSrcWire(uh));
             if (was_visited(next))
                 continue; // skip wires that have already been visited
+            if (next == dst_wire_idx)
+                continue;
             auto &wd = flat_wires[next];
             if (wd.unavailable)
                 continue;
