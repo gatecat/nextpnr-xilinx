@@ -1012,7 +1012,7 @@ bool Arch::pack()
         packer.pack_ffs();
         packer.finalise_muxfs();
         packer.pack_lutffs();
-        packer.pack_lutluts();
+        // packer.pack_lutluts();
     }
 
     assignArchInfo();

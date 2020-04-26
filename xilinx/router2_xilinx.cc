@@ -194,6 +194,155 @@ struct BufceLeafInserter
     }
 };
 
+struct IntSplitter
+{
+    Context *ctx;
+    BufceLeafInserter *leaf_splitter;
+
+    std::unordered_map<IdString, std::unordered_set<size_t>> split_sinks;
+    std::unordered_map<IdString, std::vector<NetSegment>> new_segments;
+    bool reached_int(WireId wire, bool onto_int)
+    {
+        // Assume any wire with two or more pips on/off general routing is the boundary to interconnect
+        // (I think this holds always...)
+        int int_count = 0;
+        IdString id_int = ctx->id("INT");
+        auto process = [&](PipId pip) {
+            IdString tt(ctx->locInfo(pip).type);
+            if (tt == id_int)
+                ++int_count;
+        };
+        if (onto_int) {
+            for (auto pip : ctx->getPipsDownhill(wire)) {
+                process(pip);
+                if (int_count >= 2)
+                    break;
+            }
+        } else {
+            for (auto pip : ctx->getPipsUphill(wire)) {
+                process(pip);
+                if (int_count >= 2)
+                    break;
+            }
+        }
+        return int_count >= 2;
+    }
+    bool include_sink(const NetInfo *net, const PortRef &user)
+    {
+        WireId user_wire = ctx->getNetinfoSinkWire(net, user);
+        if (net->wires.count(user_wire) || user_wire == WireId())
+            return false;
+        CellInfo *ci = user.cell;
+        if (ci->type == id_SLICE_LUTX)
+            return (user.port == id_DI1) || (user.port == id_DI2) || (user.port == id_CLK) || (user.port == id_WE);
+        else if (ci->type == id_CARRY8)
+            return false;
+        return true;
+    }
+    bool include_source(const NetInfo *net)
+    {
+        if (net->driver.cell == nullptr)
+            return false;
+        WireId src_wire = ctx->getNetinfoSourceWire(net);
+        if (net->wires.count(src_wire) || src_wire == WireId())
+            return false;
+        const CellInfo *ci = net->driver.cell;
+        if (ci->type == id_SLICE_LUTX)
+            return (net->driver.port == id_O5);
+        return true;
+    }
+
+    std::unordered_map<WireId, std::pair<IdString, PipId>> wire2net;
+
+    std::unordered_map<WireId, PipId> backtrace;
+    std::queue<WireId> visit;
+    void split_sink(NetInfo *net, WireId src_wire, size_t user_idx)
+    {
+        auto &usr = net->users.at(user_idx);
+        if (!include_sink(net, usr))
+            return;
+        backtrace.clear();
+        {
+            std::queue<WireId> empty_queue;
+            std::swap(visit, empty_queue);
+        }
+        int iter = 0;
+        const int iter_limit = 10000;
+        WireId dst_wire = ctx->getNetinfoSinkWire(net, usr);
+
+        WireId int_wire = WireId();
+        visit.push(dst_wire);
+
+        while (!visit.empty() && iter < iter_limit) {
+            WireId cursor = visit.front();
+            visit.pop();
+            ++iter;
+            if (cursor == src_wire) {
+                // Reached source without ever going through general routing. No need to create segments.
+                break;
+            }
+            if (reached_int(cursor, false)) {
+                // Reached general interconnect
+                int_wire = cursor;
+                break;
+            }
+            for (PipId uh : ctx->getPipsUphill(cursor)) {
+                if (!ctx->checkPipAvail(uh))
+                    continue; // pip unavailable according to arch
+                WireId prev = ctx->getPipSrcWire(uh);
+                if (!ctx->checkWireAvail(prev))
+                    continue; // wire unavailable according to arch
+                if (backtrace.count(prev))
+                    continue; // wire already visited
+                auto found_w2n = wire2net.find(prev);
+                if (found_w2n != wire2net.end() &&
+                    (found_w2n->second.first != net->name || found_w2n->second.second != uh))
+                    continue; // wire already used to connect another net to interconnect
+                backtrace[prev] = uh;
+                visit.push(prev);
+            }
+        }
+
+        if (int_wire != WireId()) {
+            // We reached interconnect!
+            split_sinks[net->name].insert(user_idx);
+            new_segments[net->name].emplace_back(net, user_idx, src_wire, int_wire);
+            new_segments[net->name].emplace_back(net, user_idx, int_wire, dst_wire);
+
+            WireId cursor2 = int_wire;
+            while (backtrace.count(cursor2)) {
+                PipId uh = backtrace.at(cursor2);
+                wire2net[cursor2] = std::make_pair(net->name, uh);
+                cursor2 = ctx->getPipDstWire(uh);
+            }
+            NPNR_ASSERT(cursor2 == dst_wire);
+            wire2net[cursor2] = std::make_pair(net->name, PipId());
+        }
+    }
+
+    void process_net(NetInfo *net)
+    {
+        if (net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET"))
+            return;
+        if (net->driver.cell == nullptr)
+            return;
+        // FIXME: combination of leaf promotion and INT splitting
+        if (leaf_splitter->promoted_sinks.count(net->name))
+            return;
+        WireId src_wire = ctx->getNetinfoSourceWire(net);
+        for (size_t i = 0; i < net->users.size(); i++)
+            split_sink(net, src_wire, i);
+    }
+
+    IntSplitter(Context *ctx, BufceLeafInserter *leaf_splitter) : ctx(ctx), leaf_splitter(leaf_splitter) {}
+
+    void operator()()
+    {
+        for (auto net : sorted(ctx->nets))
+            process_net(net.second);
+    }
+};
+
 ArcRouteResult Router2Xilinx::route_segment(Router2Thread &th, NetInfo *net, size_t seg_idx, bool is_mt, bool is_bb)
 {
     if ((net->name == ctx->id("$PACKER_GND_NET") || net->name == ctx->id("$PACKER_VCC_NET"))) {
@@ -211,6 +360,10 @@ std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net)
         leaf_inserter = new BufceLeafInserter(ctx);
         (*leaf_inserter)();
     }
+    if (int_splitter == nullptr) {
+        int_splitter = new IntSplitter(ctx, leaf_inserter);
+        (*int_splitter)();
+    }
     if (leaf_inserter->promoted_sinks.count(net->name)) {
         const auto &rclk_sinks = leaf_inserter->promoted_sinks.at(net->name);
         const auto &rclk_segs = leaf_inserter->rclk_segments.at(net->name);
@@ -219,6 +372,16 @@ std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net)
         // Create segments for arcs not promoted to use leaf clock resources
         for (size_t i = 0; i < net->users.size(); i++)
             if (!rclk_sinks.count(i))
+                segments.emplace_back(ctx, net, i);
+        return segments;
+    } else if (int_splitter->split_sinks.count(net->name)) {
+        const auto &int_sinks = int_splitter->split_sinks.at(net->name);
+        const auto &int_segs = int_splitter->new_segments.at(net->name);
+        // Add segments from leaf clock promotion
+        std::vector<NetSegment> segments(int_segs.begin(), int_segs.end());
+        // Create segments for arcs not promoted to use leaf clock resources
+        for (size_t i = 0; i < net->users.size(); i++)
+            if (!int_sinks.count(i))
                 segments.emplace_back(ctx, net, i);
         return segments;
     } else {

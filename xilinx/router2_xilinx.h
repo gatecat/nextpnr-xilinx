@@ -27,11 +27,13 @@ NEXTPNR_NAMESPACE_BEGIN
 namespace Router2 {
 
 struct BufceLeafInserter;
+struct IntSplitter;
 
 struct Router2Xilinx : public Router2ArchFunctions
 {
     Context *ctx;
     BufceLeafInserter *leaf_inserter;
+    IntSplitter *int_splitter;
 
     Router2Xilinx(Context *ctx) : ctx(ctx), leaf_inserter(nullptr){};
 
