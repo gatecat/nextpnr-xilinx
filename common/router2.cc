@@ -645,7 +645,7 @@ void Router2State::update_congestion()
 #if 1
     std::unordered_set<int> processed_wires;
     std::vector<std::pair<NetInfo *, size_t>> ripup_segs;
-    for (auto net : route_queue) {
+    for (size_t net = 0; net < nets.size(); net++) {
         auto &nd = nets.at(net);
         for (size_t i = 0; i < nd.segments.size(); i++) {
             auto &seg = nd.segments.at(i);
