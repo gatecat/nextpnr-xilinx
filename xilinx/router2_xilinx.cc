@@ -209,7 +209,10 @@ struct IntSplitter
         IdString id_int = ctx->id("INT");
         auto process = [&](PipId pip) {
             IdString tt(ctx->locInfo(pip).type);
-            if (tt == id_int)
+            int intent = ctx->wireIntent(onto_int ? ctx->getPipDstWire(pip) : ctx->getPipSrcWire(pip));
+            if (tt == id_int && (intent == ID_NODE_HLONG || intent == ID_NODE_VLONG || intent == ID_NODE_DEDICATED ||
+                                 intent == ID_NODE_DOUBLE || intent == ID_NODE_SINGLE || intent == ID_NODE_VQUAD ||
+                                 intent == ID_NODE_HQUAD || intent == ID_NODE_PINBOUNCE || intent == ID_NODE_LOCAL))
                 ++int_count;
         };
         if (onto_int) {
@@ -362,7 +365,7 @@ std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net)
     }
     if (int_splitter == nullptr) {
         int_splitter = new IntSplitter(ctx, leaf_inserter);
-        (*int_splitter)();
+        //(*int_splitter)();
     }
     if (leaf_inserter->promoted_sinks.count(net->name)) {
         const auto &rclk_sinks = leaf_inserter->promoted_sinks.at(net->name);

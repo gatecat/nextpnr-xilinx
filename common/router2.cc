@@ -210,6 +210,7 @@ void Router2State::ripup_seg(NetInfo *net, size_t s)
         unbind_pip_internal(net, cursor);
         cursor = ctx->getPipSrcWire(pip);
     }
+    unbind_pip_internal(net, cursor);
     sd.routed = false;
 }
 
@@ -248,7 +249,7 @@ bool Router2State::check_seg_routing(NetInfo *net, size_t s)
     auto &sd = nets.at(net->udata).segments.at(s);
     WireId src_wire = sd.s.src_wire;
     WireId cursor = sd.s.dst_wire;
-    while (wire_data(cursor).bound_nets.count(net->udata)) {
+    while (wire_data(cursor).bound_nets.count(net->udata) && cursor != src_wire) {
         auto &wd = wire_data(cursor);
         if (wd.bound_nets.size() != 1)
             return false;
@@ -378,8 +379,9 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
     // This could also be used to speed up forwards routing by a hybrid
     // bidirectional approach
     int backwards_iter = 0;
-    int backwards_limit =
-            ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter : cfg.backwards_max_iter;
+    /*int backwards_limit =
+            ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter : cfg.backwards_max_iter;*/
+    int backwards_limit = 0;
     t.backwards_queue.push(wire_to_idx.at(dst_wire));
     while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
         int cursor = t.backwards_queue.front();
@@ -642,16 +644,21 @@ void Router2State::update_congestion()
     failed_nets.clear();
 #if 1
     std::unordered_set<int> processed_wires;
+    std::vector<std::pair<NetInfo *, size_t>> ripup_segs;
     for (auto net : route_queue) {
         auto &nd = nets.at(net);
-        for (auto seg : nd.segments) {
+        for (size_t i = 0; i < nd.segments.size(); i++) {
+            auto &seg = nd.segments.at(i);
             auto cursor = seg.s.dst_wire;
+            bool failed = false;
             while (cursor != seg.s.src_wire) {
                 int w = wire_to_idx.at(cursor);
                 auto &wd = wire_data(cursor);
+                int overuse = int(wd.bound_nets.size()) - 1;
+                if (overuse > 0)
+                    failed = true;
                 if (!processed_wires.count(w)) {
                     total_wire_use += int(wd.bound_nets.size());
-                    int overuse = int(wd.bound_nets.size()) - 1;
                     if (overuse > 0) {
                         wd.hist_cong_cost += overuse * hist_cong_weight;
                         total_overuse += overuse;
@@ -663,7 +670,16 @@ void Router2State::update_congestion()
                 }
                 cursor = ctx->getPipSrcWire(wd.bound_nets.at(net).second);
             }
+            if (failed)
+                ripup_segs.emplace_back(nets_by_udata.at(net), i);
         }
+    }
+    for (auto seg : ripup_segs) {
+        if (ctx->debug)
+            log_info("Ripping up segment %d of %s (%s->%s)\n", int(seg.second), ctx->nameOf(seg.first),
+                     ctx->nameOfWire(nets.at(seg.first->udata).segments.at(seg.second).s.src_wire),
+                     ctx->nameOfWire(nets.at(seg.first->udata).segments.at(seg.second).s.dst_wire));
+        ripup_seg(seg.first, seg.second);
     }
 
 #else
