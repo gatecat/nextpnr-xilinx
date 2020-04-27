@@ -127,12 +127,22 @@ struct Router2State
         };
     };
 
+    struct BoundNet
+    {
+        // Number of times this is used as a mid or endpoint
+        int num_midpoint = 0;
+        // Number of times this is used as the start of a segment
+        int num_startpoint = 0;
+        // Pip only applicable to "num_midpoint"
+        PipId pip;
+    };
+
     struct PerWireData
     {
         // nextpnr
         WireId w;
         // net --> number of arcs; driving pip
-        boost::container::flat_map<int, std::pair<int, PipId>> bound_nets;
+        boost::container::flat_map<int, BoundNet> bound_nets;
         // Historical congestion cost
         float hist_cong_cost = 1.0;
         // Wire is unavailable as locked to another arc
@@ -180,7 +190,7 @@ struct Router2State
     inline PerWireData &wire_data(WireId w) { return flat_wires[wire_to_idx.at(w)]; }
 
     void bind_pip_internal(NetInfo *net, int wire, PipId pip);
-    void unbind_pip_internal(NetInfo *net, WireId wire);
+    void unbind_pip_internal(NetInfo *net, WireId wire, PipId pip);
     void ripup_seg(NetInfo *net, size_t s);
     bool check_seg_routing(NetInfo *net, size_t s);
     bool bind_and_check(NetInfo *net, int seg_idx);

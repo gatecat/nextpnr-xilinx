@@ -142,7 +142,8 @@ void Router2State::setup_wires()
         pwd.w = wire;
         NetInfo *bound = ctx->getBoundWireNet(wire);
         if (bound != nullptr) {
-            pwd.bound_nets[bound->udata] = std::make_pair(1, bound->wires.at(wire).pip);
+            pwd.bound_nets[bound->udata].num_midpoint = 1;
+            pwd.bound_nets[bound->udata].pip = bound->wires.at(wire).pip;
             if (bound->wires.at(wire).strength > STRENGTH_STRONG)
                 pwd.unavailable = true;
         }
@@ -174,25 +175,32 @@ bool Router2State::hit_test_pip(ArcBounds &bb, Loc l)
 void Router2State::bind_pip_internal(NetInfo *net, int wire, PipId pip)
 {
     auto &b = flat_wires.at(wire).bound_nets[net->udata];
-    ++b.first;
-    if (b.first == 1 || (b.second == PipId() && pip != PipId())) {
-        b.second = pip;
+    if (pip == PipId()) {
+        ++b.num_startpoint;
     } else {
-        // NPNR_ASSERT(pip == PipId() || b.second == pip);
-        if (pip != PipId() && b.second != pip) {
+        ++b.num_midpoint;
+        if (b.pip == PipId()) {
+            b.pip = pip;
+        } else if (b.pip != pip) {
             log_error("Wire %s of net %s driven by pips %s (from %s) and %s (from %s)\n",
-                      ctx->nameOfWire(flat_wires.at(wire).w), ctx->nameOf(net), ctx->nameOfPip(b.second),
-                      ctx->nameOfWire(ctx->getPipSrcWire(b.second)), ctx->nameOfPip(pip),
+                      ctx->nameOfWire(flat_wires.at(wire).w), ctx->nameOf(net), ctx->nameOfPip(b.pip),
+                      ctx->nameOfWire(ctx->getPipSrcWire(b.pip)), ctx->nameOfPip(pip),
                       ctx->nameOfWire(ctx->getPipSrcWire(pip)));
         }
     }
 }
 
-void Router2State::unbind_pip_internal(NetInfo *net, WireId wire)
+void Router2State::unbind_pip_internal(NetInfo *net, WireId wire, PipId pip)
 {
     auto &b = wire_data(wire).bound_nets.at(net->udata);
-    --b.first;
-    if (b.first == 0) {
+    if (pip == PipId())
+        --b.num_startpoint;
+    else
+        --b.num_midpoint;
+    if (b.num_midpoint == 0) {
+        b.pip = PipId();
+    }
+    if (b.num_midpoint == 0 && b.num_startpoint == 0) {
         wire_data(wire).bound_nets.erase(net->udata);
     }
 }
@@ -206,11 +214,11 @@ void Router2State::ripup_seg(NetInfo *net, size_t s)
     WireId cursor = sd.s.dst_wire;
     while (cursor != src) {
         auto &wd = wire_data(cursor);
-        PipId pip = wd.bound_nets.at(net->udata).second;
-        unbind_pip_internal(net, cursor);
+        PipId pip = wd.bound_nets.at(net->udata).pip;
+        unbind_pip_internal(net, cursor, pip);
         cursor = ctx->getPipSrcWire(pip);
     }
-    unbind_pip_internal(net, cursor);
+    unbind_pip_internal(net, cursor, PipId());
     sd.routed = false;
 }
 
@@ -225,7 +233,7 @@ float Router2State::score_wire_for_net(NetInfo *net, WireId wire, PipId pip)
     float bias_cost = 0;
     int source_uses = 0;
     if (wd.bound_nets.count(net->udata))
-        source_uses = wd.bound_nets.at(net->udata).first;
+        source_uses = wd.bound_nets.at(net->udata).num_midpoint;
     if (pip != PipId()) {
         Loc pl = ctx->getPipLocation(pip);
         bias_cost = cfg.bias_cost_factor * (base_cost / int(net->users.size())) *
@@ -239,7 +247,7 @@ float Router2State::get_togo_cost(NetInfo *net, int wire, WireId sink)
     auto &wd = flat_wires[wire];
     int source_uses = 0;
     if (wd.bound_nets.count(net->udata))
-        source_uses = wd.bound_nets.at(net->udata).first;
+        source_uses = wd.bound_nets.at(net->udata).num_midpoint;
     // FIXME: timing/wirelength balance?
     return (ctx->getDelayNS(ctx->estimateDelay(wd.w, sink)) / (1 + source_uses)) + cfg.ipin_cost_adder;
 }
@@ -253,7 +261,7 @@ bool Router2State::check_seg_routing(NetInfo *net, size_t s)
         auto &wd = wire_data(cursor);
         if (wd.bound_nets.size() != 1)
             return false;
-        auto &uh = wd.bound_nets.at(net->udata).second;
+        auto &uh = wd.bound_nets.at(net->udata).pip;
         if (uh == PipId())
             break;
         cursor = ctx->getPipSrcWire(uh);
@@ -379,9 +387,9 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
     // This could also be used to speed up forwards routing by a hybrid
     // bidirectional approach
     int backwards_iter = 0;
-    /*int backwards_limit =
-            ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter : cfg.backwards_max_iter;*/
-    int backwards_limit = 0;
+    int backwards_limit =
+            ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter : cfg.backwards_max_iter;
+    // int backwards_limit = 0;
     t.backwards_queue.push(wire_to_idx.at(dst_wire));
     while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
         int cursor = t.backwards_queue.front();
@@ -398,7 +406,7 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
                     bwd_merge_fail = true;
                     break;
                 }
-                PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).pip;
                 if (p == PipId())
                     break;
                 cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
@@ -407,7 +415,7 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
                 // Found a path to merge to existing routing; backwards
                 cursor2 = cursor;
                 while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
-                    PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                    PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).pip;
                     if (p == PipId())
                         break;
                     cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
@@ -415,7 +423,7 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
                 }
                 break;
             }
-            cpip = cwd.bound_nets.at(net->udata).second;
+            cpip = cwd.bound_nets.at(net->udata).pip;
         }
         bool did_something = false;
         for (auto uh : ctx->getPipsUphill(flat_wires[cursor].w)) {
@@ -519,8 +527,8 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
                 continue;
             if (nwd.reserved_net != -1 && nwd.reserved_net != net->udata)
                 continue;
-            if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != PipId() &&
-                nwd.bound_nets.at(net->udata).second != dh)
+            if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).pip != PipId() &&
+                nwd.bound_nets.at(net->udata).pip != dh)
                 continue;
             WireScore next_score;
             next_score.cost = curr.score.cost + score_wire_for_net(net, next, dh);
@@ -552,7 +560,9 @@ ArcRouteResult Router2State::route_seg(Router2Thread &t, NetInfo *net, size_t i,
                 auto &wd = flat_wires.at(cursor_bwd);
                 ROUTE_LOG_DBG("      wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
                               int(wd.bound_nets.size()) - 1, wd.hist_cong_cost,
-                              wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
+                              wd.bound_nets.count(net->udata) ? (wd.bound_nets.at(net->udata).num_midpoint +
+                                                                 wd.bound_nets.at(net->udata).num_startpoint)
+                                                              : 0);
             }
             if (v.pip == PipId()) {
                 NPNR_ASSERT(cursor_bwd == src_wire_idx);
@@ -668,7 +678,7 @@ void Router2State::update_congestion()
                     }
                     processed_wires.insert(w);
                 }
-                cursor = ctx->getPipSrcWire(wd.bound_nets.at(net).second);
+                cursor = ctx->getPipSrcWire(wd.bound_nets.at(net).pip);
             }
             if (failed)
                 ripup_segs.emplace_back(nets_by_udata.at(net), i);
@@ -679,7 +689,7 @@ void Router2State::update_congestion()
             log_info("Ripping up segment %d of %s (%s->%s)\n", int(seg.second), ctx->nameOf(seg.first),
                      ctx->nameOfWire(nets.at(seg.first->udata).segments.at(seg.second).s.src_wire),
                      ctx->nameOfWire(nets.at(seg.first->udata).segments.at(seg.second).s.dst_wire));
-        ripup_seg(seg.first, seg.second);
+        // ripup_seg(seg.first, seg.second);
     }
 
 #else
@@ -745,7 +755,7 @@ bool Router2State::bind_and_check(NetInfo *net, int seg_idx)
             log("    Cursor: %s\n", ctx->nameOfWire(cursor));
             log_error("Internal error; incomplete route tree for segment %d of net %s.\n", seg_idx, ctx->nameOf(net));
         }
-        auto &p = wd.bound_nets.at(net->udata).second;
+        auto &p = wd.bound_nets.at(net->udata).pip;
         if (!ctx->checkPipAvail(p)) {
             success = false;
             break;
@@ -807,8 +817,8 @@ void Router2State::write_heatmap(std::ostream &out, bool congestion)
         // Estimate wire location by driving pip location
         PipId drv;
         for (auto &bn : wd.bound_nets)
-            if (bn.second.second != PipId()) {
-                drv = bn.second.second;
+            if (bn.second.pip != PipId()) {
+                drv = bn.second.pip;
                 break;
             }
         if (drv == PipId())

@@ -365,7 +365,7 @@ std::vector<NetSegment> Router2Xilinx::segment_net(NetInfo *net)
     }
     if (int_splitter == nullptr) {
         int_splitter = new IntSplitter(ctx, leaf_inserter);
-        //(*int_splitter)();
+        (*int_splitter)();
     }
     if (leaf_inserter->promoted_sinks.count(net->name)) {
         const auto &rclk_sinks = leaf_inserter->promoted_sinks.at(net->name);
@@ -443,7 +443,7 @@ void Router2Xilinx::route_xilinx_const(Router2Thread &t, NetInfo *net, size_t se
                         bwd_merge_fail = true;
                         break;
                     }
-                    PipId p = r->flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                    PipId p = r->flat_wires.at(cursor2).bound_nets.at(net->udata).pip;
                     if (p == PipId())
                         break;
                     cursor2 = r->wire_to_idx.at(ctx->getPipSrcWire(p));
@@ -452,7 +452,7 @@ void Router2Xilinx::route_xilinx_const(Router2Thread &t, NetInfo *net, size_t se
                     // Found a path to merge to existing routing; backwards
                     cursor2 = cursor;
                     while (r->flat_wires.at(cursor2).bound_nets.count(net->udata)) {
-                        PipId p = r->flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                        PipId p = r->flat_wires.at(cursor2).bound_nets.at(net->udata).pip;
                         if (p == PipId())
                             break;
                         cursor2 = r->wire_to_idx.at(ctx->getPipSrcWire(p));
@@ -460,7 +460,7 @@ void Router2Xilinx::route_xilinx_const(Router2Thread &t, NetInfo *net, size_t se
                     }
                     break;
                 }
-                cpip = cwd.bound_nets.at(net->udata).second;
+                cpip = cwd.bound_nets.at(net->udata).pip;
             }
 #if 0
                 log("   explore %s\n", ctx->nameOfWire(cwd.w));
