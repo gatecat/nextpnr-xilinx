@@ -22,6 +22,8 @@
 #include "nextpnr.h"
 #include "util.h"
 
+#include <boost/algorithm/string.hpp>
+
 NEXTPNR_NAMESPACE_BEGIN
 
 namespace Router2 {
@@ -230,6 +232,16 @@ struct IntSplitter
         }
         return int_count >= 2;
     }
+    bool is_io_or_iologic(const CellInfo *cell)
+    {
+        if (cell == nullptr)
+            return false;
+        std::string type = cell->type.str(ctx);
+        if (boost::starts_with(type, "IOB") || boost::starts_with(type, "IOL") || boost::starts_with(type, "HPIO") ||
+            type.find("SERDES") != std::string::npos || type.find("DELAY") != std::string::npos)
+            return true;
+        return false;
+    }
     bool include_sink(const NetInfo *net, const PortRef &user)
     {
         WireId user_wire = ctx->getNetinfoSinkWire(net, user);
@@ -239,6 +251,8 @@ struct IntSplitter
         if (ci->type == id_SLICE_LUTX)
             return (user.port == id_DI1) || (user.port == id_DI2) || (user.port == id_CLK) || (user.port == id_WE);
         else if (ci->type == id_CARRY8)
+            return false;
+        if (is_io_or_iologic(user.cell) && is_io_or_iologic(net->driver.cell))
             return false;
         return true;
     }

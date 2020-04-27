@@ -32,8 +32,8 @@ struct IntSplitter;
 struct Router2Xilinx : public Router2ArchFunctions
 {
     Context *ctx;
-    BufceLeafInserter *leaf_inserter;
-    IntSplitter *int_splitter;
+    BufceLeafInserter *leaf_inserter = nullptr;
+    IntSplitter *int_splitter = nullptr;
 
     Router2Xilinx(Context *ctx) : ctx(ctx), leaf_inserter(nullptr){};
 
