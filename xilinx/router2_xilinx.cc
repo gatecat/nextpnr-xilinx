@@ -107,6 +107,8 @@ struct BufceLeafInserter
             NetInfo *ni = net.second;
             if (int(ni->users.size()) < fanout_thresh)
                 continue;
+            if (ni->driver.cell == nullptr)
+                continue;
             if (!ni->wires.empty())
                 continue;
             if (ni->name == ctx->id("$PACKER_GND_NET") || ni->name == ctx->id("$PACKER_VCC_NET"))
