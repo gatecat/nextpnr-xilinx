@@ -851,15 +851,18 @@ void Router2State::partition_nets()
 {
     // Create a histogram of positions in X and Y positions
     std::map<int, int> cxs, cys;
-    for (auto &n : nets) {
-        if (n.cx != -1)
-            ++cxs[n.cx];
-        if (n.cy != -1)
-            ++cys[n.cy];
+    int net_count = 0;
+    for (auto n : route_queue) {
+        auto &net = nets.at(n);
+        if (net.cx > 0 && net.cy > 0) {
+            ++cxs[net.cx];
+            ++cys[net.cy];
+            ++net_count;
+        }
     }
     // 4-way split for now
     int accum_x = 0, accum_y = 0;
-    int halfway = int(nets.size()) / 2;
+    int halfway = net_count / 2;
     for (auto &p : cxs) {
         if (accum_x < halfway && (accum_x + p.second) >= halfway)
             mid_x = p.first;
@@ -985,7 +988,6 @@ void Router2State::operator()()
     setup_nets();
     setup_wires();
     find_all_reserved_wires();
-    partition_nets();
     curr_cong_weight = cfg.init_curr_cong_weight;
     hist_cong_weight = cfg.hist_cong_weight;
     Router2Thread st;
@@ -1024,6 +1026,7 @@ void Router2State::operator()()
                     log("    routed %d/%d\n", int(j), int(route_queue.size()));
             }
 #endif
+        partition_nets();
         do_route();
         update_congestion();
         route_queue.clear();
