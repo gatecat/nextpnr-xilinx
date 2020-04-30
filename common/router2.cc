@@ -280,18 +280,20 @@ bool Router2State::is_wire_undriveable(WireId wire)
     return true;
 }
 
-// Find all the wires that must be used to route a given arc
-void Router2State::reserve_wires_for_arc(NetInfo *net, size_t i)
+// Find all the wires that must be used to route a given segment
+void Router2State::reserve_wires_for_segment(NetInfo *net, size_t i)
 {
-    WireId src = ctx->getNetinfoSourceWire(net);
-    WireId sink = ctx->getNetinfoSinkWire(net, net->users.at(i));
+    auto &nd = nets.at(net->udata);
+    auto &s = nd.segments.at(i);
+    WireId src = s.s.src_wire;
+    WireId sink = s.s.dst_wire;
     if (sink == WireId())
         return;
     std::unordered_set<WireId> rsv;
     WireId cursor = sink;
     bool done = false;
     if (ctx->debug)
-        log("resevering wires for arc %d of net %s\n", int(i), ctx->nameOf(net));
+        log("resevering wires for segment %d of net %s\n", int(i), ctx->nameOf(net));
     while (!done) {
         auto &wd = wire_data(cursor);
         if (ctx->debug)
@@ -322,8 +324,9 @@ void Router2State::find_all_reserved_wires()
         WireId src = ctx->getNetinfoSourceWire(net);
         if (src == WireId())
             continue;
-        for (size_t i = 0; i < net->users.size(); i++)
-            reserve_wires_for_arc(net, i);
+        auto &nd = nets.at(net->udata);
+        for (size_t i = 0; i < nd.segments.size(); i++)
+            reserve_wires_for_segment(net, i);
     }
 }
 

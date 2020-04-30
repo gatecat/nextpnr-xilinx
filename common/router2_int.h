@@ -196,7 +196,7 @@ struct Router2State
     bool bind_and_check(NetInfo *net, int seg_idx);
     bool bind_and_check_all();
 
-    void reserve_wires_for_arc(NetInfo *net, size_t i);
+    void reserve_wires_for_segment(NetInfo *net, size_t i);
     void find_all_reserved_wires();
 
     void reset_wires(Router2Thread &t);
