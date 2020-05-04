@@ -50,8 +50,6 @@
 #define WITH_RIPPLEFPGA
 #ifdef WITH_RIPPLEFPGA
 
-#include <Eigen/Core>
-#include <Eigen/IterativeLinearSolvers>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/find_flow_cost.hpp>
 #include <boost/graph/successive_shortest_path_nonnegative_weights.hpp>
@@ -68,160 +66,13 @@
 #include "nextpnr.h"
 #include "place_common.h"
 #include "placer1.h"
+#include "placer_ripple_int.h"
 #include "timing.h"
 #include "util.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
 namespace {
-// A simple internal representation for a sparse system of equations Ax = rhs
-// This is designed to decouple the functions that build the matrix to the engine that
-// solves it, and the representation that requires
-template <typename T> struct EquationSystem
-{
-
-    EquationSystem(size_t rows, size_t cols)
-    {
-        A.resize(cols);
-        rhs.resize(rows);
-    }
-
-    // Simple sparse format, easy to convert to CCS for solver
-    std::vector<std::vector<std::pair<int, T>>> A; // col -> (row, x[row, col]) sorted by row
-    std::vector<T> rhs;                            // RHS vector
-    void reset()
-    {
-        for (auto &col : A)
-            col.clear();
-        std::fill(rhs.begin(), rhs.end(), T());
-    }
-
-    void add_coeff(int row, int col, T val)
-    {
-        auto &Ac = A.at(col);
-        // Binary search
-        int b = 0, e = int(Ac.size()) - 1;
-        while (b <= e) {
-            int i = (b + e) / 2;
-            if (Ac.at(i).first == row) {
-                Ac.at(i).second += val;
-                return;
-            }
-            if (Ac.at(i).first > row)
-                e = i - 1;
-            else
-                b = i + 1;
-        }
-        Ac.insert(Ac.begin() + b, std::make_pair(row, val));
-    }
-
-    void add_rhs(int row, T val) { rhs[row] += val; }
-
-    void solve(std::vector<T> &x, float tolerance)
-    {
-        using namespace Eigen;
-        if (x.empty())
-            return;
-        NPNR_ASSERT(x.size() == A.size());
-
-        VectorXd vx(x.size()), vb(rhs.size());
-        SparseMatrix<T> mat(A.size(), A.size());
-
-        std::vector<int> colnnz;
-        for (auto &Ac : A)
-            colnnz.push_back(int(Ac.size()));
-        mat.reserve(colnnz);
-        for (int col = 0; col < int(A.size()); col++) {
-            auto &Ac = A.at(col);
-            for (auto &el : Ac)
-                mat.insert(el.first, col) = el.second;
-        }
-
-        for (int i = 0; i < int(x.size()); i++)
-            vx[i] = x.at(i);
-        for (int i = 0; i < int(rhs.size()); i++)
-            vb[i] = rhs.at(i);
-
-        ConjugateGradient<SparseMatrix<T>, Lower | Upper> solver;
-        solver.setTolerance(tolerance);
-        VectorXd xr = solver.compute(mat).solveWithGuess(vb, vx);
-        for (int i = 0; i < int(x.size()); i++)
-            x.at(i) = xr[i];
-        // for (int i = 0; i < int(x.size()); i++)
-        //    log_info("x[%d] = %f\n", i, x.at(i));
-    }
-};
-
-struct Bounds
-{
-    int x0, x1, y0, y1;
-};
-
-// We create our own simple netlist structures, to account for packing and other transformations as well as efficient
-// handling of macros like carry chains as a single block
-struct RippleCellPort
-{
-    std::vector<PortRef> orig_ports;
-    PortType dir;
-    NetInfo *net;
-};
-struct RippleCell
-{
-    int index;
-    std::vector<CellInfo *> base_cells;
-    IdString type;
-    bool is_macro, is_packed;
-    Bounds macro_extent;
-    std::vector<RippleCellPort> ext_ports;
-
-    int area;
-    int area_scale;
-    int chiplet;
-    double solver_x, solver_y;
-    int placed_x, placed_y;
-    BelId root_bel;
-};
-
-struct Chiplet
-{
-    std::string name;
-    int x0, y0, x1, y1;
-};
-
-struct PackedCellStructure
-{
-    IdString type_name;
-    IdString root_bel_type;
-    std::unordered_map<IdString, int> constituent_cells;
-};
-
-struct SiteLocation
-{
-    int x, y;
-    int root_bel_z;
-};
-
-struct DeviceInfo
-{
-    int width, height;
-    std::vector<Chiplet> chiplets;
-    bool pack_bles, pack_clbs;
-    PackedCellStructure ble_structure;
-    PackedCellStructure clb_structure;
-
-    std::vector<SiteLocation> bles;
-    std::vector<SiteLocation> clbs;
-};
-
-class ArchFunctions
-{
-    virtual DeviceInfo getDeviceInfo() = 0;
-    virtual double getCellArea(const CellInfo *cell) = 0;
-    virtual double getBelArea(BelId bel) = 0;
-    virtual bool checkBleCompatability(const std::vector<CellInfo *> &cells) = 0;
-    virtual bool checkClbCompatability(const std::vector<CellInfo *> &cells) = 0;
-    virtual ~ArchFunctions(){};
-};
 
 } // namespace
 
