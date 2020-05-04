@@ -47,12 +47,6 @@
  *
  *
  */
-#define WITH_RIPPLEFPGA
-#ifdef WITH_RIPPLEFPGA
-
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/find_flow_cost.hpp>
-#include <boost/graph/successive_shortest_path_nonnegative_weights.hpp>
 #include <boost/optional.hpp>
 #include <boost/thread.hpp>
 #include <chrono>
@@ -72,10 +66,98 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-namespace {
+namespace Ripple {
+void RippleFPGAPlacer::init_cells()
+{
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        if (ci->constr_parent != nullptr)
+            continue;
+        int root = cells.add();
+        auto &c = cells[root];
+        c.type = ci->type;
+        c.macro_extent.x0 = 0;
+        c.macro_extent.y0 = 0;
+        c.macro_extent.x1 = 0;
+        c.macro_extent.y1 = 0;
+        c.is_packed = false;
+        c.index = root;
+        process_chain(root, ci, 0, 0);
+    }
+}
+void RippleFPGAPlacer::process_chain(int root, CellInfo *ci, int dx, int dy)
+{
+    auto &c = cells[root];
+    c.macro_extent.x0 = std::min(c.macro_extent.x0, dx);
+    c.macro_extent.y0 = std::min(c.macro_extent.y0, dy);
+    c.macro_extent.x1 = std::min(c.macro_extent.x1, dx);
+    c.macro_extent.y1 = std::min(c.macro_extent.y1, dy);
+    int subcell_idx = c.base_cells.add();
+    auto &sc = c.base_cells[subcell_idx];
+    sc.ci = ci;
+    sc.offset_x = dx;
+    sc.offset_y = dy;
+    ci->udata = GetSize(cells_by_udata);
+    cells_by_udata.push_back(ci);
+    cell_index.emplace_back(root, subcell_idx);
 
-} // namespace
+    for (CellInfo *ch : ci->constr_children) {
+        process_chain(root, ch, (ch->constr_x == ch->UNCONSTR) ? 0 : ch->constr_x,
+                      (ch->constr_y == ch->UNCONSTR) ? 0 : ch->constr_y);
+        c.is_macro = true;
+    }
+}
+void RippleFPGAPlacer::place_constraints()
+{
+    int placed_cells = 0;
+    // Initial constraints placer
+    for (auto &cell_entry : ctx->cells) {
+        CellInfo *cell = cell_entry.second.get();
+        auto loc = cell->attrs.find(ctx->id("BEL"));
+        if (loc != cell->attrs.end()) {
+            std::string loc_name = loc->second.as_string();
+            BelId bel = ctx->getBelByName(ctx->id(loc_name));
+            if (bel == BelId()) {
+                log_error("No Bel named \'%s\' located for "
+                          "this chip (processing BEL attribute on \'%s\')\n",
+                          loc_name.c_str(), cell->name.c_str(ctx));
+            }
+
+            IdString bel_type = ctx->getBelType(bel);
+            if (bel_type != cell->type) {
+                log_error("Bel \'%s\' of type \'%s\' does not match cell "
+                          "\'%s\' of type \'%s\'\n",
+                          loc_name.c_str(), bel_type.c_str(ctx), cell->name.c_str(ctx), cell->type.c_str(ctx));
+            }
+            if (!ctx->isValidBelForCell(cell, bel)) {
+                log_error("Bel \'%s\' of type \'%s\' is not valid for cell "
+                          "\'%s\' of type \'%s\'\n",
+                          loc_name.c_str(), bel_type.c_str(ctx), cell->name.c_str(ctx), cell->type.c_str(ctx));
+            }
+
+            auto bound_cell = ctx->getBoundBelCell(bel);
+            if (bound_cell) {
+                log_error("Cell \'%s\' cannot be bound to bel \'%s\' since it is already bound to cell \'%s\'\n",
+                          cell->name.c_str(ctx), loc_name.c_str(), bound_cell->name.c_str(ctx));
+            }
+
+            ctx->bindBel(bel, cell, STRENGTH_USER);
+            Loc loc = ctx->getBelLocation(bel);
+            cells[cell_index.at(cell->udata).cell].placed_x = loc.x;
+            cells[cell_index.at(cell->udata).cell].placed_y = loc.y;
+            cells[cell_index.at(cell->udata).cell].locked = true;
+            placed_cells++;
+        }
+    }
+    log_info("Placed %d cells based on constraints.\n", placed_cells);
+}
+
+void RippleFPGAPlacer::run()
+{
+    init_cells();
+    place_constraints();
+}
+
+} // namespace Ripple
 
 NEXTPNR_NAMESPACE_END
-
-#endif

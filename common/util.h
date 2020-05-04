@@ -130,6 +130,8 @@ inline NetInfo *get_net_or_empty(CellInfo *cell, const IdString port)
         return nullptr;
 }
 
+template <typename T> int GetSize(const T &c) { return int(c.size()); }
+
 NEXTPNR_NAMESPACE_END
 
 #endif

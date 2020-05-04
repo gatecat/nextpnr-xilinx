@@ -24,6 +24,7 @@
 
 #include <vector>
 #include "nextpnr.h"
+#include "util.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
@@ -39,8 +40,9 @@ template <typename T> class indexed_store
         unsigned char storage[sizeof(T)];
         bool active;
         int next_free;
-        inline T &obj() { return static_cast<T &>(storage); }
-        inline const T &obj() const { return static_cast<const T &>(storage); }
+        inline T &obj() { return reinterpret_cast<T &>(storage); }
+        inline const T &obj() const { return reinterpret_cast<const T &>(storage); }
+        friend class indexed_store<T>;
 
       public:
         slot() : active(false), next_free(std::numeric_limits<int>::max()){};
@@ -54,12 +56,12 @@ template <typename T> class indexed_store
         T &get()
         {
             NPNR_ASSERT(active);
-            return static_cast<T &>(storage);
+            return reinterpret_cast<T &>(storage);
         }
         const T &get() const
         {
             NPNR_ASSERT(active);
-            return static_cast<const T &>(storage);
+            return reinterpret_cast<const T &>(storage);
         }
         void free(int first_free)
         {
@@ -81,7 +83,7 @@ template <typename T> class indexed_store
     // Create a new entry and return its index
     template <class... Args> int add(Args &&... args)
     {
-        if (first_free == slots.size()) {
+        if (first_free == GetSize(slots)) {
             slots.emplace_back();
             slots.back().create(std::forward<Args>(args)...);
             ++first_free;
@@ -111,6 +113,9 @@ template <typename T> class indexed_store
     T &operator[](int idx) { return slots.at(idx).get(); }
     const T &operator[](int idx) const { return slots.at(idx).get(); }
 
+    // Total size of the container
+    int size() const { return GetSize(slots); }
+
     // Iterate over items
     class iterator
     {
@@ -119,8 +124,9 @@ template <typename T> class indexed_store
         int index = 0;
 
       public:
-        inline bool operator!=(const iterator &other) const { return other.index != other; }
-        inline bool operator==(const iterator &other) const { return other.index == other; }
+        iterator(indexed_store *base, int index) : base(base), index(index){};
+        inline bool operator!=(const iterator &other) const { return other.index != index; }
+        inline bool operator==(const iterator &other) const { return other.index == index; }
         inline iterator operator++()
         {
             // skip over unused slots
@@ -139,8 +145,8 @@ template <typename T> class indexed_store
         }
         T &operator*() { return base->at(index); }
     };
-    iterator begin() { return {this, 0}; }
-    iterator end() { return {this, GetSize(slots)}; }
+    iterator begin() { return iterator{this, 0}; }
+    iterator end() { return iterator{this, GetSize(slots)}; }
 };
 
 // A simple internal representation for a sparse system of equations Ax = rhs

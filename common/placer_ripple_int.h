@@ -40,34 +40,53 @@ struct RippleCellPort
     PortType dir;
     NetInfo *net;
 };
+struct RippleSubcell
+{
+    CellInfo *ci;
+    int offset_x = 0, offset_y = 0;
+};
 struct RippleCell
 {
     int index;
-    indexed_store<CellInfo *> base_cells;
+    indexed_store<RippleSubcell> base_cells;
     IdString type;
     bool is_macro, is_packed;
     Bounds macro_extent;
     std::vector<RippleCellPort> ext_ports;
 
-    int area;
-    int area_scale;
-    int chiplet;
+    int area = 0;
+    int area_scale = 1;
+    int chiplet = -1;
     double solver_x, solver_y;
     int placed_x, placed_y;
+    bool locked = false;
+
     BelId root_bel;
 };
 
+// An index allowing us to map a nextpnr cell into a possibly-packed RippleCell
+// cell is the index of the RippleCell, subcell is the index into RippleCell::base_cells
 struct RippleCellIndex
 {
+    RippleCellIndex(int cell, int subcell) : cell(cell), subcell(){};
     int cell, subcell;
 };
 
+// For devices such as UltraScale+, where the FPGA is split into "chiplets" (i.e. SLRs) on an interposer,
+// and we want to avoid spreading strongly-connected logic across chiplets as interposer routing is expensive
+// compared to routing within the chiplets
 struct Chiplet
 {
     std::string name;
     int x0, y0, x1, y1;
 };
 
+// Defines the structure of the blocks we are packing into (BLEs or CLBs).
+// type_name is a name of the packed cell type
+// root_bel_type is the name of the first bel we are placing this packed structure at
+// celltypes_by_z maps from z-index inside the packed structure to cell type at that index
+// int_z_to_bel_z_offset maps from z-index inside the structure to an adder to SiteLocation::root_bel_z
+// to get a real z-index of the bel to place a subcell at
 struct PackedCellStructure
 {
     IdString type_name;
@@ -85,6 +104,7 @@ struct SiteLocation
 struct DeviceInfo
 {
     int width, height;
+    // This should be empty, rather than having one entry, if the device doesn't use chiplets
     std::vector<Chiplet> chiplets;
     bool pack_bles, pack_clbs;
     PackedCellStructure ble_structure;
@@ -116,8 +136,26 @@ struct RippleFPGAPlacer
     DeviceInfo d;
     // Possibly-packed cell storage
     indexed_store<RippleCell> cells;
+
+    std::vector<CellInfo *> cells_by_udata;
     // Cell udata -> ripplecell index
-    std::vector<RippleCellIndex> udata_to_cell;
+    std::vector<RippleCellIndex> cell_index;
+
+    void init_cells();
+    void process_chain(int root, CellInfo *ci, int dx, int dy);
+
+    void place_constraints();
+    void place_initial();
+    void partition();
+    void place_global(int stage);
+    void pack_ble();
+    void pack_clb();
+    void place_detail();
+
+    void lower_bound_solver(double tol, double alpha, int iters);
+    void upper_bound_spread();
+
+    void run();
 };
 
 } // namespace Ripple
