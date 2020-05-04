@@ -152,6 +152,77 @@ template <typename T> struct EquationSystem
     }
 };
 
+struct Bounds
+{
+    int x0, x1, y0, y1;
+};
+
+// We create our own simple netlist structures, to account for packing and other transformations as well as efficient
+// handling of macros like carry chains as a single block
+struct RippleCellPort
+{
+    std::vector<PortRef> orig_ports;
+    PortType dir;
+    NetInfo *net;
+};
+struct RippleCell
+{
+    int index;
+    std::vector<CellInfo *> base_cells;
+    IdString type;
+    bool is_macro, is_packed;
+    Bounds macro_extent;
+    std::vector<RippleCellPort> ext_ports;
+
+    int area;
+    int area_scale;
+    int chiplet;
+    double solver_x, solver_y;
+    int placed_x, placed_y;
+    BelId root_bel;
+};
+
+struct Chiplet
+{
+    std::string name;
+    int x0, y0, x1, y1;
+};
+
+struct PackedCellStructure
+{
+    IdString type_name;
+    IdString root_bel_type;
+    std::unordered_map<IdString, int> constituent_cells;
+};
+
+struct SiteLocation
+{
+    int x, y;
+    int root_bel_z;
+};
+
+struct DeviceInfo
+{
+    int width, height;
+    std::vector<Chiplet> chiplets;
+    bool pack_bles, pack_clbs;
+    PackedCellStructure ble_structure;
+    PackedCellStructure clb_structure;
+
+    std::vector<SiteLocation> bles;
+    std::vector<SiteLocation> clbs;
+};
+
+class ArchFunctions
+{
+    virtual DeviceInfo getDeviceInfo() = 0;
+    virtual double getCellArea(const CellInfo *cell) = 0;
+    virtual double getBelArea(BelId bel) = 0;
+    virtual bool checkBleCompatability(const std::vector<CellInfo *> &cells) = 0;
+    virtual bool checkClbCompatability(const std::vector<CellInfo *> &cells) = 0;
+    virtual ~ArchFunctions(){};
+};
+
 } // namespace
 
 NEXTPNR_NAMESPACE_END
