@@ -177,6 +177,7 @@ struct RippleFPGAPlacer
     void run();
 
     void est_congestion_map(array2d<double> &cong);
+    int get_rr_cost(Loc a, Loc b);
 
     Loc get_cell_location(const CellInfo *cell);
 };

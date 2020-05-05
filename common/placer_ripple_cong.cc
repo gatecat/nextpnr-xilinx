@@ -103,5 +103,30 @@ void RippleFPGAPlacer::est_congestion_map(array2d<double> &cong)
         }
     }
 }
+
+int RippleFPGAPlacer::get_rr_cost(Loc a, Loc b)
+{
+    // See RippleFPGA paper section 3.7
+    Loc sb_a = f->getSwitchbox(a);
+    Loc sb_b = f->getSwitchbox(b);
+
+    int num_switchbox = std::abs(sb_a.x - sb_b.x) + std::abs(sb_a.y - sb_b.y) + 1;
+    int f_switchbox = 0;
+    if (num_switchbox == 2)
+        f_switchbox = 1;
+    else if (num_switchbox >= 3)
+        f_switchbox = 2;
+
+    bool prefer_horiz = (d.height > d.width);
+    int f_shape;
+    if ((a.x == b.x) && (a.y == b.y))
+        f_shape = 0;
+    else if (prefer_horiz ? (a.x == b.x) : (a.y == b.y))
+        f_shape = 1;
+    else
+        f_shape = 2;
+    return f_switchbox + f_shape;
+}
+
 } // namespace Ripple
 NEXTPNR_NAMESPACE_END
