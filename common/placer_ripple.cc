@@ -152,6 +152,18 @@ void RippleFPGAPlacer::place_constraints()
     log_info("Placed %d cells based on constraints.\n", placed_cells);
 }
 
+Loc RippleFPGAPlacer::get_cell_location(const CellInfo *cell)
+{
+    Loc loc;
+    auto &i = cell_index.at(cell->udata);
+    auto &c = cells[i.cell];
+    auto &sc = c.base_cells[i.subcell];
+    loc.x = c.placed_x + sc.offset_x;
+    loc.y = c.placed_y + sc.offset_y;
+    loc.z = 0;
+    return loc;
+}
+
 void RippleFPGAPlacer::run()
 {
     init_cells();

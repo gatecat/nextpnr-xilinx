@@ -195,6 +195,77 @@ struct EquationSystem
     void solve(std::vector<double> &x, float tolerance);
 };
 
+template <typename T> class array2d
+{
+  public:
+    array2d() : m_width(0), m_height(0), data(nullptr){};
+    array2d(int width, int height) : m_width(width), m_height(height) { data = new T[m_width * m_height](); }
+    array2d(int width, int height, const T &init) : m_width(width), m_height(height)
+    {
+        data = new T[m_width * m_height];
+        std::fill(data, data + (m_width * m_height), init);
+    }
+    int width() const { return width; }
+    int height() const { return height; }
+    T &at(int x, int y)
+    {
+        NPNR_ASSERT(x >= 0 && x < m_width);
+        NPNR_ASSERT(y >= 0 && y < m_height);
+        return data[y * m_width + x];
+    }
+    const T &at(int x, int y) const
+    {
+        NPNR_ASSERT(x >= 0 && x < m_width);
+        NPNR_ASSERT(y >= 0 && y < m_height);
+        return data[y * m_width + x];
+    }
+    ~array2d() { delete[] data; }
+    struct entry
+    {
+        entry(int x, int y, T &value) : x(x), y(y), value(value){};
+        int x, y;
+        T &value;
+    };
+    struct iterator
+    {
+      public:
+        entry operator*() { return {x, y, base.at(x, y)}; }
+        inline iterator operator++()
+        {
+            ++x;
+            if (x >= base.width()) {
+                x = 0;
+                ++y;
+            }
+            return *this;
+        }
+        inline iterator operator++(int)
+        {
+            iterator prior(x, y, base);
+            ++x;
+            if (x >= base.width()) {
+                x = 0;
+                ++y;
+            }
+            return prior;
+        }
+        inline bool operator!=(const iterator &other) const { return other.x != x || other.y != y; }
+        inline bool operator==(const iterator &other) const { return other.x == x && other.y == y; }
+
+      private:
+        iterator(int x, int y, array2d<T> &base) : x(x), y(y), base(base){};
+        int x, y;
+        array2d<T> &base;
+        friend class array2d;
+    };
+    iterator begin() { return {0, 0, *this}; }
+    iterator end() { return {0, height, *this}; }
+
+  private:
+    int m_width, m_height;
+    T *data;
+};
+
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END

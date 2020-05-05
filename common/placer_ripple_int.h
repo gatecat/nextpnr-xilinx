@@ -29,7 +29,22 @@ namespace Ripple {
 
 struct Bounds
 {
-    int x0, x1, y0, y1;
+    int x0 = std::numeric_limits<int>::max(), x1 = std::numeric_limits<int>::min();
+    int y0 = std::numeric_limits<int>::max(), y1 = std::numeric_limits<int>::min();
+    void expand(int x, int y)
+    {
+        x0 = std::min(x0, x);
+        y0 = std::min(y0, y);
+        x1 = std::max(x1, x);
+        y1 = std::max(y1, y);
+    }
+    void expand(Loc loc) { expand(loc.x, loc.y); }
+    int hpwl() const
+    {
+        if (x0 == std::numeric_limits<int>::max())
+            return 0;
+        return (x1 - x0) + (y1 - y0);
+    }
 };
 
 // We create our own simple netlist structures, to account for packing and other transformations as well as efficient
@@ -122,6 +137,7 @@ class ArchFunctions
     virtual double getBelArea(BelId bel) = 0;
     virtual bool checkBleCompatability(const std::vector<CellInfo *> &cells) = 0;
     virtual bool checkClbCompatability(const std::vector<CellInfo *> &cells) = 0;
+    virtual Loc getSwitchbox(Loc cell_loc) = 0;
     virtual ~ArchFunctions(){};
 };
 
@@ -141,6 +157,9 @@ struct RippleFPGAPlacer
     // Cell udata -> ripplecell index
     std::vector<RippleCellIndex> cell_index;
 
+    // Nets that consume no routing resources because they have been "swallowed" during BLE packing
+    std::unordered_set<IdString> packed_nets;
+
     void init_cells();
     void process_chain(int root, CellInfo *ci, int dx, int dy);
 
@@ -156,6 +175,10 @@ struct RippleFPGAPlacer
     void upper_bound_spread();
 
     void run();
+
+    void est_congestion_map(array2d<double> &cong);
+
+    Loc get_cell_location(const CellInfo *cell);
 };
 
 } // namespace Ripple
