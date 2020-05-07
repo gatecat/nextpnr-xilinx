@@ -69,8 +69,8 @@ struct RippleCell
     Bounds macro_extent;
     std::vector<RippleCellPort> ext_ports;
 
-    int area = 0;
-    int area_scale = 1;
+    float area = 0;
+    float area_scale = 1;
     int chiplet = -1;
     double solver_x, solver_y;
     int placed_x, placed_y;
@@ -96,37 +96,18 @@ struct Chiplet
     int x0, y0, x1, y1;
 };
 
-// Defines the structure of the blocks we are packing into (BLEs or CLBs).
-// type_name is a name of the packed cell type
-// root_bel_type is the name of the first bel we are placing this packed structure at
-// celltypes_by_z maps from z-index inside the packed structure to cell type at that index
-// int_z_to_bel_z_offset maps from z-index inside the structure to an adder to SiteLocation::root_bel_z
-// to get a real z-index of the bel to place a subcell at
-struct PackedCellStructure
-{
-    IdString type_name;
-    IdString root_bel_type;
-    std::vector<IdString> celltypes_by_z;
-    std::vector<int> int_z_to_bel_z_offset;
-};
-
-struct SiteLocation
-{
-    int x, y;
-    int root_bel_z;
-};
-
 struct DeviceInfo
 {
     int width, height;
     // This should be empty, rather than having one entry, if the device doesn't use chiplets
     std::vector<Chiplet> chiplets;
-    bool pack_bles, pack_clbs;
-    PackedCellStructure ble_structure;
-    PackedCellStructure clb_structure;
 
-    std::vector<SiteLocation> bles;
-    std::vector<SiteLocation> clbs;
+    // Some cells, like logic and BRAM, might be combined into a site
+    // This is used when they are closely tied or in conflict so have to be placed together
+    std::unordered_map<IdString, IdString> celltype_to_sitetype;
+    std::unordered_map<IdString, std::vector<Loc>> site_locations;
+
+    IdString clb_type, ble_type;
 };
 
 class ArchFunctions
@@ -134,7 +115,6 @@ class ArchFunctions
   public:
     virtual DeviceInfo getDeviceInfo() = 0;
     virtual double getCellArea(const CellInfo *cell) = 0;
-    virtual double getBelArea(BelId bel) = 0;
     virtual bool checkBleCompatability(const std::vector<CellInfo *> &cells) = 0;
     virtual bool checkClbCompatability(const std::vector<CellInfo *> &cells) = 0;
     virtual Loc getSwitchbox(Loc cell_loc) = 0;
@@ -144,7 +124,8 @@ class ArchFunctions
 struct RippleFPGAPlacer
 {
   public:
-    RippleFPGAPlacer(Context *ctx, ArchFunctions *f) : ctx(ctx), f(f), d(f->getDeviceInfo()){};
+    RippleFPGAPlacer(Context *ctx, ArchFunctions *f)
+            : ctx(ctx), f(f), d(f->getDeviceInfo()), grid(d.width, d.height, GridLocation{}){};
 
   private:
     Context *ctx;
@@ -180,6 +161,31 @@ struct RippleFPGAPlacer
     int get_rr_cost(Loc a, Loc b);
 
     Loc get_cell_location(const CellInfo *cell);
+
+    struct GridLocation
+    {
+        int chiplet;
+        std::vector<int> placed_cells;
+
+        struct PerType
+        {
+            float cell_area = 0.0;
+            float avail_area = 0.0;
+            float target_density = 1.0;
+        };
+
+        std::vector<PerType> per_type;
+
+        int region_id;
+        Loc switchbox;
+    };
+
+    std::vector<IdString> site_types;
+    std::unordered_map<IdString, int> sitetype_to_idx;
+
+    array2d<GridLocation> grid;
+
+    void setup_spreader_grid();
 };
 
 } // namespace Ripple

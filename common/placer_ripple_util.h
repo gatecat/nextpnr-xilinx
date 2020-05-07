@@ -213,12 +213,14 @@ template <typename T> class array2d
         NPNR_ASSERT(y >= 0 && y < m_height);
         return data[y * m_width + x];
     }
+    T &at(const Loc &l) { return at(l.x, l.y); }
     const T &at(int x, int y) const
     {
         NPNR_ASSERT(x >= 0 && x < m_width);
         NPNR_ASSERT(y >= 0 && y < m_height);
         return data[y * m_width + x];
     }
+    const T &at(const Loc &l) const { return at(l.x, l.y); }
     ~array2d() { delete[] data; }
     struct entry
     {

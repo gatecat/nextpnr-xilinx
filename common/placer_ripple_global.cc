@@ -193,6 +193,49 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
         solve_equations(true);
     }
 }
+
+void RippleFPGAPlacer::setup_spreader_grid()
+{
+    for (auto loc : grid) {
+        for (auto &type : loc.value.per_type) {
+            type.avail_area = 0;
+            type.cell_area = 0;
+        }
+    }
+    for (auto st : site_types) {
+        int idx = sitetype_to_idx.at(st);
+        if (d.site_locations.count(st)) {
+            // Overriden location grid
+            for (auto l : d.site_locations.at(st))
+                grid.at(l).per_type.at(idx).avail_area += 1.0;
+        } else {
+            // Assume this type has a 1:1 mapping with Bels
+            for (BelId b : ctx->getBels()) {
+                if (ctx->getBelType(b) != st)
+                    continue;
+                if (!ctx->checkBelAvail(b))
+                    continue;
+                Loc l = ctx->getBelLocation(b);
+                grid.at(l).per_type.at(idx).avail_area += 1.0;
+            }
+        }
+    }
+    for (auto &cell : cells) {
+        if (cell.locked)
+            continue;
+        cell.area = 0;
+        for (auto &sc : cell.base_cells) {
+            IdString type = sc.ci->type;
+            if (d.celltype_to_sitetype.count(type))
+                type = d.celltype_to_sitetype.at(type);
+            int type_idx = sitetype_to_idx.at(type);
+            float area = f->getCellArea(sc.ci);
+            cell.area += area;
+            grid.at(cell.placed_x + sc.offset_x, cell.placed_y + sc.offset_y).per_type.at(type_idx).cell_area += area;
+        }
+    }
+}
+
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END
