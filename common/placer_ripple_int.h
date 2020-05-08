@@ -195,37 +195,46 @@ struct RippleFPGAPlacer
         double cell_area = 0.0f;
         double target_area = 0.0f;
         double target_density = 0.0f;
+        bool is_overfull = false;
         std::vector<RippleCellIndex> placed_cells;
     };
 
     struct OverfilledRegion
     {
+        OverfilledRegion(int x, int y) : cx(x), cy(y), x0(x), y0(y), x1(x), y1(y){};
         int cx, cy;         // centre location
         int x0, y0, x1, y1; // expanded bounds
-        double target_overutilisation;
-        double strict_overutilisation;
-        double expanded_cell_area;
-        double expanded_avail_area;
-        double expanded_target_area;
+        double target_overutil_area = 0.0;
+        double strict_overutil_area = 0.0;
+        double expanded_cell_area = 0.0;
+        double expanded_avail_area = 0.0;
+        double expanded_target_area = 0.0;
+
+        double target_overutil_ratio = 0.0;
+        double strict_overutil_ratio = 0.0;
     };
 
     struct SpreaderSiteType
     {
         array2d<SpreaderBin> bins;
         std::deque<OverfilledRegion> overfull;
-        double avail_area = 0.0f;
-        double target_area = 0.0f;
-        double cell_area = 0.0f;
+        double avail_area = 0.0;
+        double target_area = 0.0;
+        double cell_area = 0.0;
     };
 
     int bin_w, bin_h;
 
     std::vector<SpreaderSiteType> spread_sites;
 
+    double expand_box_ratio = 0.0, expand_box_limit = 0.0;
+
     void setup_spreader_grid();
     void setup_spreader_bins(int bin_w, int bin_h);
     void reset_spread_cell_areas(int x0, int y0, int x1, int y1);
     void update_spread_cell_area(int cell);
+    void find_overfilled_regions();
+    void expand_overfilled_region(int st, OverfilledRegion &of);
 };
 
 } // namespace Ripple

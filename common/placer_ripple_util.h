@@ -220,8 +220,8 @@ template <typename T> class array2d
         std::fill(data, data + (m_width * m_height), init);
     }
 
-    int width() const { return width; }
-    int height() const { return height; }
+    int width() const { return m_width; }
+    int height() const { return m_height; }
     T &at(int x, int y)
     {
         NPNR_ASSERT(x >= 0 && x < m_width);

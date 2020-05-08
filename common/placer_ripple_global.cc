@@ -301,6 +301,133 @@ void RippleFPGAPlacer::update_spread_cell_area(int cell)
     }
 }
 
+void RippleFPGAPlacer::find_overfilled_regions()
+{
+    for (auto &s : spread_sites) {
+        s.overfull.clear();
+        for (auto bin_kv : s.bins) {
+            auto &bin = bin_kv.value;
+            if (bin.cell_area <= bin.target_area) {
+                bin.is_overfull = false;
+                continue;
+            }
+            bin.is_overfull = true;
+            s.overfull.emplace_back(bin_kv.x, bin_kv.y);
+            auto &of = s.overfull.back();
+            of.target_overutil_area = bin.cell_area - bin.target_area;
+            of.strict_overutil_area = bin.cell_area - bin.avail_area;
+            of.expanded_cell_area = bin.cell_area;
+            of.expanded_avail_area = bin.avail_area;
+            of.expanded_target_area = bin.target_area;
+            if (bin.target_area < 1.0) {
+                of.target_overutil_ratio = of.target_overutil_area;
+                of.strict_overutil_ratio = of.strict_overutil_area;
+            } else {
+                of.target_overutil_ratio = of.target_overutil_area / bin.target_area;
+                of.strict_overutil_ratio = of.strict_overutil_area / bin.avail_area;
+            }
+        }
+    }
+}
+
+void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
+{
+    auto &bin = spread_sites.at(st).bins.at(of.cx, of.cy);
+
+    int nx = spread_sites.at(st).bins.width();
+    int ny = spread_sites.at(st).bins.height();
+
+    of.x0 = of.x1 = of.cx;
+    of.y0 = of.y1 = of.cy;
+    of.expanded_target_area = bin.target_area;
+    of.expanded_avail_area = bin.avail_area;
+    of.expanded_cell_area = bin.cell_area;
+
+    enum
+    {
+        LEFT = 0,
+        DOWN,
+        RIGHT,
+        UP
+    } direction;
+    double box_w = 1.0, box_h = 1.0;
+    double dx_ratio = 0.0, dy_ratio = 0.0, dx_cost = 0.0, dy_cost = 0.0;
+    bool dis_box_ratio = (expand_box_ratio == 0.0);
+    while (of.expanded_cell_area > of.expanded_target_area) {
+        if (!dis_box_ratio) {
+            dx_ratio = (box_w + 1.0) / box_h;
+            dy_ratio = box_w / (box_h + 1.0);
+            dx_cost = (dx_ratio < expand_box_ratio) ? (expand_box_ratio / dx_ratio) : (dx_ratio / expand_box_ratio);
+            dy_cost = (dy_ratio < expand_box_ratio) ? (expand_box_ratio / dy_ratio) : (dy_ratio / expand_box_ratio);
+        }
+        switch (direction) {
+        case LEFT:
+            if (of.x0 > 0 && (dis_box_ratio || (dx_cost <= dy_cost))) {
+                of.x0--;
+                box_w += 1.0;
+                for (int y = of.y0; y <= of.y1; y++) {
+                    auto &bin2 = spread_sites.at(st).bins.at(of.x0, y);
+                    of.expanded_avail_area += bin2.avail_area;
+                    of.expanded_target_area += bin2.target_area;
+                    of.expanded_cell_area += bin2.cell_area;
+                }
+            }
+            direction = DOWN;
+            break;
+        case DOWN:
+            if (of.y0 > 0 && (dis_box_ratio || (dy_cost <= dx_cost))) {
+                of.y0--;
+                box_h += 1.0;
+                for (int x = of.x0; x <= of.x1; x++) {
+                    auto &bin2 = spread_sites.at(st).bins.at(x, of.y0);
+                    of.expanded_avail_area += bin2.avail_area;
+                    of.expanded_target_area += bin2.target_area;
+                    of.expanded_cell_area += bin2.cell_area;
+                }
+            }
+            direction = RIGHT;
+            break;
+        case RIGHT:
+            if (of.x1 < (nx - 1) && (dis_box_ratio || (dx_cost <= dy_cost))) {
+                of.x1++;
+                box_w += 1.0;
+                for (int y = of.y0; y <= of.y1; y++) {
+                    auto &bin2 = spread_sites.at(st).bins.at(of.x1, y);
+                    of.expanded_avail_area += bin2.avail_area;
+                    of.expanded_target_area += bin2.target_area;
+                    of.expanded_cell_area += bin2.cell_area;
+                }
+            }
+            direction = UP;
+            break;
+        case UP:
+            if (of.y1 < (ny - 1) && (dis_box_ratio || (dy_cost <= dx_cost))) {
+                of.x1++;
+                box_w += 1.0;
+                for (int x = of.x0; x <= of.x1; x++) {
+                    auto &bin2 = spread_sites.at(st).bins.at(x, of.y1);
+                    of.expanded_avail_area += bin2.avail_area;
+                    of.expanded_target_area += bin2.target_area;
+                    of.expanded_cell_area += bin2.cell_area;
+                }
+            }
+            direction = LEFT;
+            break;
+        }
+        bool fully_expanded_x = (of.x0 == 0 && of.x1 == (nx - 1));
+        bool fully_expanded_y = (of.y0 == 0 && of.y1 == (ny - 1));
+        if (dis_box_ratio) {
+            if (fully_expanded_x && fully_expanded_y)
+                break;
+        } else {
+            if (fully_expanded_x || fully_expanded_y)
+                break;
+        }
+        if ((of.expanded_avail_area / (spread_sites.at(st).avail_area)) > expand_box_limit)
+            break;
+    }
+}
+
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END
