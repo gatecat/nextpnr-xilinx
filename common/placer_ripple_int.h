@@ -18,6 +18,7 @@
  */
 #ifndef PLACER_RIPPLE_INT_H
 #define PLACER_RIPPLE_INT_H
+#include <deque>
 #include <queue>
 #include "nextpnr.h"
 #include "placer_ripple_util.h"
@@ -169,9 +170,11 @@ struct RippleFPGAPlacer
 
         struct PerType
         {
-            float cell_area = 0.0;
-            float avail_area = 0.0;
-            float target_density = 1.0;
+            double cell_area = 0.0f;
+            double avail_area = 0.0f;
+            double target_density = 1.0f;
+            inline double target_area() const { return avail_area * target_density; }
+            bool overfull = false;
         };
 
         std::vector<PerType> per_type;
@@ -185,7 +188,44 @@ struct RippleFPGAPlacer
 
     array2d<GridLocation> grid;
 
+    struct SpreaderBin
+    {
+        int x0, y0, x1, y1;
+        double avail_area = 0.0f;
+        double cell_area = 0.0f;
+        double target_area = 0.0f;
+        double target_density = 0.0f;
+        std::vector<RippleCellIndex> placed_cells;
+    };
+
+    struct OverfilledRegion
+    {
+        int cx, cy;         // centre location
+        int x0, y0, x1, y1; // expanded bounds
+        double target_overutilisation;
+        double strict_overutilisation;
+        double expanded_cell_area;
+        double expanded_avail_area;
+        double expanded_target_area;
+    };
+
+    struct SpreaderSiteType
+    {
+        array2d<SpreaderBin> bins;
+        std::deque<OverfilledRegion> overfull;
+        double avail_area = 0.0f;
+        double target_area = 0.0f;
+        double cell_area = 0.0f;
+    };
+
+    int bin_w, bin_h;
+
+    std::vector<SpreaderSiteType> spread_sites;
+
     void setup_spreader_grid();
+    void setup_spreader_bins(int bin_w, int bin_h);
+    void reset_spread_cell_areas(int x0, int y0, int x1, int y1);
+    void update_spread_cell_area(int cell);
 };
 
 } // namespace Ripple

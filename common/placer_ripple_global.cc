@@ -200,6 +200,7 @@ void RippleFPGAPlacer::setup_spreader_grid()
         for (auto &type : loc.value.per_type) {
             type.avail_area = 0;
             type.cell_area = 0;
+            type.overfull = false;
         }
     }
     for (auto st : site_types) {
@@ -233,6 +234,70 @@ void RippleFPGAPlacer::setup_spreader_grid()
             cell.area += area;
             grid.at(cell.placed_x + sc.offset_x, cell.placed_y + sc.offset_y).per_type.at(type_idx).cell_area += area;
         }
+    }
+}
+
+void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
+{
+    this->bin_w = bin_w;
+    this->bin_h = bin_h;
+    int nx = (d.width + (bin_w - 1)) / bin_w;
+    int ny = (d.height + (bin_h - 1)) / bin_h;
+    for (size_t i = 0; i < spread_sites.size(); i++) {
+        auto &s = spread_sites.at(i);
+        s.avail_area = 0;
+        s.cell_area = 0;
+        s.target_area = 0;
+        s.bins.reset(nx, ny);
+        for (auto loc : grid) {
+            auto &l = loc.value.per_type.at(i);
+            s.avail_area += l.avail_area;
+            s.cell_area += l.cell_area;
+            s.target_area += l.target_area();
+            auto &bin = s.bins.at(loc.x / bin_w, loc.y / bin_h);
+            bin.avail_area += l.avail_area;
+            bin.target_density += l.target_density / double(bin_w * bin_h);
+        }
+
+        double scale = 1.0;
+        if (s.target_area <= s.cell_area) {
+            // Target area is too low, need to increase target density
+            scale = s.cell_area / s.target_area;
+        }
+
+        // Update per-bin target area
+        for (auto bin_kv : s.bins) {
+            auto &bin = bin_kv.value;
+            if (bin.target_density * scale > bin.avail_area)
+                bin.target_area = bin.avail_area;
+            else
+                bin.target_area = bin.avail_area * bin.target_area * scale;
+        }
+    }
+}
+
+void RippleFPGAPlacer::reset_spread_cell_areas(int x0, int y0, int x1, int y1)
+{
+    for (auto &s : spread_sites) {
+        for (int x = x0; x <= x1; x++) {
+            for (int y = y0; y <= y1; y++) {
+                s.bins.at(x, y).cell_area = 0.0;
+                s.bins.at(x, y).placed_cells.clear();
+            }
+        }
+    }
+}
+void RippleFPGAPlacer::update_spread_cell_area(int cell)
+{
+    auto &c = cells.at(cell);
+    for (size_t i = 0; i < c.base_cells.size(); i++) {
+        auto &sc = c.base_cells.at(i);
+        int type = sitetype_to_idx.at(d.celltype_to_sitetype.at(sc.ci->type));
+        int bx = (c.placed_x + sc.offset_x) / bin_w;
+        int by = (c.placed_y + sc.offset_y) / bin_h;
+        auto &bin = spread_sites.at(type).bins.at(bx, by);
+        bin.cell_area += f->getCellArea(sc.ci);
+        bin.placed_cells.emplace_back(cell, i);
     }
 }
 

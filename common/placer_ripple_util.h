@@ -198,13 +198,28 @@ struct EquationSystem
 template <typename T> class array2d
 {
   public:
-    array2d() : m_width(0), m_height(0), data(nullptr){};
-    array2d(int width, int height) : m_width(width), m_height(height) { data = new T[m_width * m_height](); }
-    array2d(int width, int height, const T &init) : m_width(width), m_height(height)
+    array2d() : m_width(0), m_height(0), m_size(0), data(nullptr){};
+    array2d(int width, int height) : m_width(width), m_height(height), m_size(width * height)
+    {
+        data = new T[m_width * m_height]();
+    }
+    array2d(int width, int height, const T &init) : m_width(width), m_height(height), m_size(width * height)
     {
         data = new T[m_width * m_height];
         std::fill(data, data + (m_width * m_height), init);
     }
+    void reset(int new_width, int new_height, const T &init = {})
+    {
+        if ((new_width * new_height) > m_size) {
+            delete[] data;
+            m_size = new_width * new_height;
+            data = new T[m_size];
+        }
+        m_width = new_width;
+        m_height = new_height;
+        std::fill(data, data + (m_width * m_height), init);
+    }
+
     int width() const { return width; }
     int height() const { return height; }
     T &at(int x, int y)
@@ -261,10 +276,10 @@ template <typename T> class array2d
         friend class array2d;
     };
     iterator begin() { return {0, 0, *this}; }
-    iterator end() { return {0, height, *this}; }
+    iterator end() { return {0, m_height, *this}; }
 
   private:
-    int m_width, m_height;
+    int m_width, m_height, m_size;
     T *data;
 };
 
