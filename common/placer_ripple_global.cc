@@ -243,8 +243,8 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
     this->bin_h = bin_h;
     int nx = (d.width + (bin_w - 1)) / bin_w;
     int ny = (d.height + (bin_h - 1)) / bin_h;
-    for (size_t i = 0; i < spread_sites.size(); i++) {
-        auto &s = spread_sites.at(i);
+    for (size_t i = 0; i < spread_site_data.size(); i++) {
+        auto &s = spread_site_data.at(i);
         s.avail_area = 0;
         s.cell_area = 0;
         s.target_area = 0;
@@ -278,7 +278,7 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
 
 void RippleFPGAPlacer::reset_spread_cell_areas(int x0, int y0, int x1, int y1)
 {
-    for (auto &s : spread_sites) {
+    for (auto &s : spread_site_data) {
         for (int x = x0; x <= x1; x++) {
             for (int y = y0; y <= y1; y++) {
                 s.bins.at(x, y).cell_area = 0.0;
@@ -287,7 +287,7 @@ void RippleFPGAPlacer::reset_spread_cell_areas(int x0, int y0, int x1, int y1)
         }
     }
 }
-void RippleFPGAPlacer::update_spread_cell_area(int cell)
+void RippleFPGAPlacer::update_spread_cell_area(int cell, int x0, int y0, int x1, int y1)
 {
     auto &c = cells.at(cell);
     for (size_t i = 0; i < c.base_cells.size(); i++) {
@@ -295,7 +295,9 @@ void RippleFPGAPlacer::update_spread_cell_area(int cell)
         int type = sitetype_to_idx.at(d.celltype_to_sitetype.at(sc.ci->type));
         int bx = (c.placed_x + sc.offset_x) / bin_w;
         int by = (c.placed_y + sc.offset_y) / bin_h;
-        auto &bin = spread_sites.at(type).bins.at(bx, by);
+        if (bx < x0 || bx > x1 || by < y0 || by > y1)
+            continue;
+        auto &bin = spread_site_data.at(type).bins.at(bx, by);
         bin.cell_area += f->getCellArea(sc.ci);
         bin.placed_cells.emplace_back(cell, i);
     }
@@ -303,7 +305,7 @@ void RippleFPGAPlacer::update_spread_cell_area(int cell)
 
 void RippleFPGAPlacer::find_overfilled_regions()
 {
-    for (auto &s : spread_sites) {
+    for (auto &s : spread_site_data) {
         s.overfull.clear();
         for (auto bin_kv : s.bins) {
             auto &bin = bin_kv.value;
@@ -332,10 +334,10 @@ void RippleFPGAPlacer::find_overfilled_regions()
 
 void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
 {
-    auto &bin = spread_sites.at(st).bins.at(of.cx, of.cy);
+    auto &bin = spread_site_data.at(st).bins.at(of.cx, of.cy);
 
-    int nx = spread_sites.at(st).bins.width();
-    int ny = spread_sites.at(st).bins.height();
+    int nx = spread_site_data.at(st).bins.width();
+    int ny = spread_site_data.at(st).bins.height();
 
     of.x0 = of.x1 = of.cx;
     of.y0 = of.y1 = of.cy;
@@ -366,7 +368,7 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
                 of.x0--;
                 box_w += 1.0;
                 for (int y = of.y0; y <= of.y1; y++) {
-                    auto &bin2 = spread_sites.at(st).bins.at(of.x0, y);
+                    auto &bin2 = spread_site_data.at(st).bins.at(of.x0, y);
                     of.expanded_avail_area += bin2.avail_area;
                     of.expanded_target_area += bin2.target_area;
                     of.expanded_cell_area += bin2.cell_area;
@@ -379,7 +381,7 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
                 of.y0--;
                 box_h += 1.0;
                 for (int x = of.x0; x <= of.x1; x++) {
-                    auto &bin2 = spread_sites.at(st).bins.at(x, of.y0);
+                    auto &bin2 = spread_site_data.at(st).bins.at(x, of.y0);
                     of.expanded_avail_area += bin2.avail_area;
                     of.expanded_target_area += bin2.target_area;
                     of.expanded_cell_area += bin2.cell_area;
@@ -392,7 +394,7 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
                 of.x1++;
                 box_w += 1.0;
                 for (int y = of.y0; y <= of.y1; y++) {
-                    auto &bin2 = spread_sites.at(st).bins.at(of.x1, y);
+                    auto &bin2 = spread_site_data.at(st).bins.at(of.x1, y);
                     of.expanded_avail_area += bin2.avail_area;
                     of.expanded_target_area += bin2.target_area;
                     of.expanded_cell_area += bin2.cell_area;
@@ -405,7 +407,7 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
                 of.x1++;
                 box_w += 1.0;
                 for (int x = of.x0; x <= of.x1; x++) {
-                    auto &bin2 = spread_sites.at(st).bins.at(x, of.y1);
+                    auto &bin2 = spread_site_data.at(st).bins.at(x, of.y1);
                     of.expanded_avail_area += bin2.avail_area;
                     of.expanded_target_area += bin2.target_area;
                     of.expanded_cell_area += bin2.cell_area;
@@ -423,9 +425,136 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
             if (fully_expanded_x || fully_expanded_y)
                 break;
         }
-        if ((of.expanded_avail_area / (spread_sites.at(st).avail_area)) > expand_box_limit)
+        if ((of.expanded_avail_area / (spread_site_data.at(st).avail_area)) > expand_box_limit)
             break;
     }
+}
+
+bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector<SpreaderBox> &spread_boxes)
+{
+    auto &s = spread_site_data.at(site_type);
+    bool ydir = (box.dir == SpreaderBox::VERT);
+
+    // Direction-independent start/endpoints
+    int start = ydir ? box.y0 : box.x0;
+    int end = ydir ? box.y1 : box.x1;
+
+    int L = (end - start) + 1;
+
+    std::vector<double> target_areas(L, 0);
+    double total_area = 0;
+    // Bounds of new boxes
+    int lo_start = start, lo_end = start;
+    int hi_start = end, hi_end = end;
+
+    // Determine areas for each 1-bin wide/tall 'slither'
+    for (int x = box.x0; x <= box.x1; x++) {
+        for (int y = box.x0; y <= box.x1; y++) {
+            double area = s.bins.at(x, y).target_area;
+            target_areas.at(ydir ? (y - box.y0) : (x - box.x0)) += area;
+            total_area += area;
+        }
+    }
+    // Move the box bounds to eliminate 'padding' with no useful sites at either end
+    for (int i = start; (i <= end) && (lo_end < (hi_start - 1)); i++) {
+        if (target_areas.at(i - start) > 0)
+            break;
+        ++lo_start;
+        ++lo_end;
+    }
+    for (int i = end; (i >= start) && (hi_start > (lo_end + 1)); i--) {
+        if (target_areas.at(i - start) > 0)
+            break;
+        --hi_start;
+        --hi_end;
+    }
+    if (lo_end == hi_start) {
+        // Not enough bins with non-zero useful area to do spreading
+        return false;
+    }
+    // Search for cut point with even lo/hi area
+    double lo_area = target_areas.at(lo_end - start);
+    double hi_area = target_areas.at(hi_start - start);
+    while ((hi_start - lo_end) > 1) {
+        if (lo_area <= hi_area) {
+            ++lo_end;
+            lo_area += target_areas.at(lo_end - start);
+        } else {
+            --hi_start;
+            hi_area += target_areas.at(hi_start - start);
+        }
+    }
+
+    std::vector<int> lo_cells, hi_cells;
+    cut_cells_by_area(box.spread_cells, lo_cells, hi_cells, lo_area / total_area);
+
+    auto spread_cut_cells = [&](const std::vector<int> &box_cells, int box_start, int box_end, bool lo) {
+        int cell_start = 0, cell_end = 0, cell = 0;
+        for (int i = (lo ? box_end : box_start); lo ? (i >= box_start) : (i <= box_end); lo ? i-- : i++) {
+            if (cell_start == GetSize(box_cells))
+                continue;
+            double accum_area = 0.0;
+            int bin_cells = 0;
+            cell_end = cell_start;
+            double orig_lo = ydir ? cells.at(cell_start).solver_y : cells.at(cell_start).solver_x;
+            double orig_hi = orig_lo;
+            // Determine number of cells in bin
+            while (cell_start < GetSize(box_cells) &&
+                   ((i == (lo ? box_start : box_end)) || accum_area < target_areas.at(i - start))) {
+                accum_area += cells.at(cell_end).area;
+                if (lo)
+                    orig_lo = ydir ? cells.at(cell_end).solver_y : cells.at(cell_end).solver_x;
+                else
+                    orig_hi = ydir ? cells.at(cell_end).solver_y : cells.at(cell_end).solver_x;
+                bin_cells++;
+                cell_end++;
+            }
+            // Spread cells evenly based on original solver positions
+            if (bin_cells > 0) {
+                double spread_lo = ydir ? ((i * bin_h) + (bin_h / double(bin_cells * 2.0)))
+                                        : ((i * bin_w) + (bin_w / double(bin_cells * 2.0)));
+                double spread_hi = spread_lo + (ydir ? (bin_h - (bin_h / double(bin_cells)))
+                                                     : (bin_w - (bin_w / double(bin_cells))));
+                double spread_scale = (spread_hi - spread_lo) / std::max<double>(orig_hi - orig_lo, 1.0);
+                for (int j = cell_start; j < cell_end; j++) {
+                    auto &c = cells.at(j);
+                    if (ydir) {
+                        c.solver_y = spread_lo + (c.solver_y - orig_lo) * spread_scale;
+                        c.placed_y = std::min(std::max(int(c.solver_y), 0), d.height);
+                    } else {
+                        c.solver_x = spread_lo + (c.solver_x - orig_lo) * spread_scale;
+                        c.placed_x = std::min(std::max(int(c.solver_x), 0), d.width);
+                    }
+                }
+            }
+            cell_start = cell_end;
+        }
+    };
+    spread_cut_cells(lo_cells, lo_start, lo_end, true);
+    spread_cut_cells(hi_cells, hi_start, hi_end, false);
+    return true;
+}
+
+void RippleFPGAPlacer::cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi,
+                                         double ratio)
+{
+    double total_area = 0;
+    for (int c : cells_in)
+        total_area += cells.at(c).area;
+    double half_area = total_area * ratio;
+    double accum_area = 0;
+
+    lo.reserve(GetSize(cells_in) / 2);
+    hi.reserve(GetSize(cells_in) / 2);
+
+    for (int c : cells_in) {
+        if (accum_area > half_area)
+            hi.push_back(c);
+        else
+            lo.push_back(c);
+        accum_area += cells.at(c).area;
+    }
+    std::reverse(lo.begin(), lo.end());
 }
 
 } // namespace Ripple

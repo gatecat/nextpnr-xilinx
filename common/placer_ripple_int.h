@@ -223,18 +223,40 @@ struct RippleFPGAPlacer
         double cell_area = 0.0;
     };
 
+    struct SpreaderBox
+    {
+        // Cells we will need to update when we update cell areas
+        std::set<int> update_cells;
+        // Cells that are rooted in the region
+        std::vector<int> spread_cells;
+        // Region using bin coordinates
+        int x0, y0, x1, y1;
+        enum Direction
+        {
+            HORIZ,
+            VERT
+        } dir;
+        int level;
+
+        SpreaderBox() : x0(-1), y0(-1), x1(-1), y1(-1), dir(HORIZ), level(0){};
+        SpreaderBox(int x0, int y0, int x1, int y1, Direction dir = HORIZ, int level = 0)
+                : x0(x0), y0(y0), x1(x1), y1(y1), dir(dir), level(level){};
+    };
+
     int bin_w, bin_h;
 
-    std::vector<SpreaderSiteType> spread_sites;
+    std::vector<SpreaderSiteType> spread_site_data;
 
     double expand_box_ratio = 0.0, expand_box_limit = 0.0;
 
     void setup_spreader_grid();
     void setup_spreader_bins(int bin_w, int bin_h);
     void reset_spread_cell_areas(int x0, int y0, int x1, int y1);
-    void update_spread_cell_area(int cell);
+    void update_spread_cell_area(int cell, int x0, int y0, int x1, int y1);
     void find_overfilled_regions();
     void expand_overfilled_region(int st, OverfilledRegion &of);
+    bool spread_cells(int site_type, SpreaderBox &box, std::vector<SpreaderBox> &spread_boxes);
+    void cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi, double ratio);
 };
 
 } // namespace Ripple
