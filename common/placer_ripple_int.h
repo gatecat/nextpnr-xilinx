@@ -225,8 +225,6 @@ struct RippleFPGAPlacer
 
     struct SpreaderBox
     {
-        // Cells we will need to update when we update cell areas
-        std::set<int> update_cells;
         // Cells that are rooted in the region
         std::vector<int> spread_cells;
         // Region using bin coordinates
@@ -249,13 +247,16 @@ struct RippleFPGAPlacer
 
     double expand_box_ratio = 0.0, expand_box_limit = 0.0;
 
+    int min_expand_size = 1;
+
     void setup_spreader_grid();
     void setup_spreader_bins(int bin_w, int bin_h);
-    void reset_spread_cell_areas(int x0, int y0, int x1, int y1);
-    void update_spread_cell_area(int cell, int x0, int y0, int x1, int y1);
+    void reset_spread_cell_areas(int site_type, int x0, int y0, int x1, int y1);
+    void update_spread_cell_area(int site_type, int x0, int y0, int x1, int y1);
     void find_overfilled_regions();
     void expand_overfilled_region(int st, OverfilledRegion &of);
     bool spread_cells(int site_type, SpreaderBox &box, std::vector<SpreaderBox> &spread_boxes);
+    void spread_cells_in_region(int site_type, OverfilledRegion &of);
     void cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi, double ratio);
 };
 
