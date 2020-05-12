@@ -59,7 +59,8 @@ struct RippleCellPort
 struct RippleSubcell
 {
     CellInfo *ci;
-    int offset_x = 0, offset_y = 0;
+    int offset_x = 0, offset_y = 0, offset_z = 0;
+    bool abs_z = false;
 };
 struct RippleCell
 {
@@ -77,7 +78,8 @@ struct RippleCell
     int placed_x, placed_y;
     bool locked = false;
 
-    BelId root_bel;
+    Loc root_loc;
+    bool placed = false;
 };
 
 // An index allowing us to map a nextpnr cell into a possibly-packed RippleCell
@@ -258,6 +260,11 @@ struct RippleFPGAPlacer
     bool spread_cells(int site_type, SpreaderBox &box, std::vector<SpreaderBox> &spread_boxes);
     void spread_cells_in_region(int site_type, OverfilledRegion &of);
     void cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi, double ratio);
+
+    bool place_cell(int cell, Loc root);
+    void ripup_cell(int cell);
+    bool check_placement(int cell);
+    bool find_conflicting_cells(int cell, Loc root, std::set<int> &conflicts);
 };
 
 } // namespace Ripple
