@@ -672,35 +672,37 @@ struct FasmBackend
         if (is_output) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
                 write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+            if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
+                write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
             if (iostandard == "SSTL135")
                 write_bit("SSTL135.DRIVE.I_FIXED");
             if (slew == "SLOW")
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.SLEW.SLOW");
-            else if (iostandard == "SSTL135")
-                write_bit("SSTL135.SLEW.FAST");
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW");
+            else if (iostandard == "SSTL135" || iostandard == "SSTL15")
+                write_bit("SSTL135_SSTL15.SLEW.FAST");
             else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
         }
         if (is_input && !diff) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
                 write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
-            if (iostandard == "SSTL135") {
+            if (iostandard == "SSTL135" || iostandard == "SSTL15") {
                 ioconfig_by_hclk[hclk].vref = true;
-                write_bit("SSTL135.IN");
+                write_bit("SSTL135_SSTL15.IN");
                 if (pad->attrs.count(ctx->id("IN_TERM")))
                     write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
             }
             if (!is_output)
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135.IN_ONLY");
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.IN_ONLY");
         }
         if (is_input && diff) {
-            write_bit(iostandard + ".IN_DIFF");
+            write_bit("SSTL135_SSTL15.IN_DIFF");
             if (pad->attrs.count(ctx->id("IN_TERM")))
                 write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
         }
         if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" ||
             iostandard == "SSTL135") {
-            write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135.STEPDOWN");
+            write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
             ioconfig_by_hclk[hclk].stepdown = true;
             is_stepdown = true;
         }
@@ -712,7 +714,7 @@ struct FasmBackend
         if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr)
             write_bit("OUT_DIFF");
         if (is_stepdown && !is_sing)
-            write_bit("IOB_Y" + std::to_string(ioLoc.y) + ".LVCMOS12_LVCMOS15_LVCMOS18_SSTL135.STEPDOWN");
+            write_bit("IOB_Y" + std::to_string(ioLoc.y) + ".LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
         pop();
     }
 
