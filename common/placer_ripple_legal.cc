@@ -59,10 +59,7 @@ bool RippleFPGAPlacer::place_cell(int cell, Loc root)
     auto &c = cells.at(cell);
     NPNR_ASSERT(!c.placed);
     for (auto &sc : c.base_cells) {
-        Loc l;
-        l.x = root.x + sc.offset_x;
-        l.y = root.y + sc.offset_y;
-        l.z = sc.abs_z ? sc.offset_z : (root.z + sc.offset_z);
+        Loc l = sc.actual_loc(root);
         BelId bel = ctx->getBelByLocation(l);
         if (bel == BelId())
             goto fail;
@@ -106,10 +103,7 @@ bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::set<int> 
 {
     auto &c = cells.at(cell);
     for (auto &sc : c.base_cells) {
-        Loc l;
-        l.x = root.x + sc.offset_x;
-        l.y = root.y + sc.offset_y;
-        l.z = sc.abs_z ? sc.offset_z : (root.z + sc.offset_z);
+        Loc l = sc.actual_loc(root);
         BelId bel = ctx->getBelByLocation(l);
         if (bel == BelId())
             return false;

@@ -61,6 +61,14 @@ struct RippleSubcell
     CellInfo *ci;
     int offset_x = 0, offset_y = 0, offset_z = 0;
     bool abs_z = false;
+    inline Loc actual_loc(const Loc &root_loc) const
+    {
+        Loc result;
+        result.x = root_loc.x + offset_x;
+        result.y = root_loc.y + offset_y;
+        result.z = abs_z ? offset_z : (root_loc.z + offset_z);
+        return result;
+    }
 };
 struct RippleCell
 {
