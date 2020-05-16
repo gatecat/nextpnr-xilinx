@@ -48,7 +48,7 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
     if (lts.cells[(7 << 4) | BEL_6LUT] != nullptr && lts.cells[(7 << 4) | BEL_6LUT]->lutInfo.is_memory)
         tile_is_memory = true;
     bool small_memory = false;
-    if (lts.cells[(3 << 4) | BEL_5LUT] != nullptr && lts.cells[(3 << 4) | BEL_5LUT]->lutInfo.is_memory)
+    if (lts.cells[(7 << 4) | BEL_5LUT] != nullptr && lts.cells[(7 << 4) | BEL_5LUT]->lutInfo.is_memory)
         small_memory = true;
     // Check eight-tiles (mostly LUT-related validity)
     for (int i = 0; i < 8; i++) {

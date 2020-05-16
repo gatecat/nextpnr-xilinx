@@ -8,6 +8,7 @@ import com.xilinx.rapidwright.device.*;
 import com.xilinx.rapidwright.edif.*;
 import com.xilinx.rapidwright.util.Utils;
 import com.xilinx.rapidwright.util.RapidWright;
+import com.xilinx.rapidwright.timing.*;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -70,17 +71,17 @@ public class bbaexport {
 
     static class NextpnrPip {
 
-        public NextpnrPip(int index, int from, int to, int delay, NextpnrPipType type) {
+        public NextpnrPip(int index, int from, int to, int tmg_cls, NextpnrPipType type) {
             this.index = index;
             this.from = from;
             this.to = to;
-            this.delay = delay;
+            this.tmg_cls = tmg_cls;
             this.type = type;
         }
 
         public int index;
         public int from, to;
-        public int delay;
+        public int tmg_cls;
         public NextpnrPipType type;
 
         public int bel = -1;
@@ -117,8 +118,123 @@ public class bbaexport {
         public ArrayList<NextpnrBelWire> belports;
     }
 
+    static class NextpnrPropDelay {
+        public NextpnrPropDelay(String from_port, String to_port, int min_delay, int max_delay) {
+            this.from_port = makeConstId(from_port);
+            this.to_port = makeConstId(to_port);
+            this.min_delay = min_delay;
+            this.max_delay = max_delay;
+        }
+        public int from_port;
+        public int to_port;
+        public int min_delay;
+        public int max_delay;
+    }
+
+    enum NextpnrTmgChkType {
+        TIMING_CHECK_SETUP,
+        TIMING_CHECK_HOLD,
+        TIMING_CHECK_WIDTHd,
+    }
+
+    static class NextpnrTimingCheck {
+        public NextpnrTimingCheck(NextpnrTmgChkType chktype, String sig_port, String clock_port, int min_value, int max_value) {
+            this.chktype = chktype;
+            this.sig_port = makeConstId(sig_port);
+            this.clock_port = makeConstId(clock_port);
+            this.min_value = min_value;
+            this.max_value = max_value;
+        }
+        public NextpnrTmgChkType chktype;
+        public int sig_port;
+        public int clock_port;
+        public int min_value;
+        public int max_value;
+    }
+
+    static class NextpnrCellTiming {
+        public NextpnrCellTiming(String variant_name) {
+            this.variant_name = makeConstId(variant_name);
+            this.delays = new ArrayList<>();
+            this.checks = new ArrayList<>();
+        }
+        public int variant_name;
+        public ArrayList<NextpnrPropDelay> delays;
+        public ArrayList<NextpnrTimingCheck> checks;
+        public void sort() {
+            Collections.sort(delays, new Comparator<NextpnrPropDelay>() {
+                @Override
+                public int compare(NextpnrPropDelay o1, NextpnrPropDelay o2) {
+                    int tc = Integer.compare(o1.to_port, o2.to_port);
+                    if (tc != 0)
+                        return tc;
+                    return Integer.compare(o1.from_port, o2.from_port);
+                }
+            });
+            Collections.sort(checks, new Comparator<NextpnrTimingCheck>() {
+                @Override
+                public int compare(NextpnrTimingCheck o1, NextpnrTimingCheck o2) {
+                    int tc = Integer.compare(o1.sig_port, o2.sig_port);
+                    if (tc != 0)
+                        return tc;
+                    return Integer.compare(o1.clock_port, o2.clock_port);
+                }
+            });
+        }
+    }
+
+    static class NextpnrInstanceTiming {
+        public NextpnrInstanceTiming(String inst_name) {
+            this.inst_name = makeConstId(inst_name);
+            this.variants = new ArrayList<>();
+        }
+
+        public void sort() {
+            Collections.sort(variants, new Comparator<NextpnrCellTiming>() {
+                @Override
+                public int compare(NextpnrCellTiming o1, NextpnrCellTiming o2) {
+                    return Integer.compare(o1.variant_name, o2.variant_name);
+                }
+            });
+        }
+
+        public int inst_name;
+        public ArrayList<NextpnrCellTiming> variants;
+    }
+
+    static class NextpnrTileCellTiming {
+        public NextpnrTileCellTiming(String tile_type) {
+            this.tile_type = makeConstId(tile_type);
+            this.instances = new ArrayList<>();
+        }
+
+        public void sort() {
+            Collections.sort(instances, new Comparator<NextpnrInstanceTiming>() {
+                @Override
+                public int compare(NextpnrInstanceTiming o1, NextpnrInstanceTiming o2) {
+                    return Integer.compare(o1.inst_name, o2.inst_name);
+                }
+            });
+        }
+
+        public int tile_type;
+        public ArrayList<NextpnrInstanceTiming> instances;
+    }
+
     private static ArrayList<String> constIds = new ArrayList<>();
     private static HashMap<String, Integer> knownConstIds = new HashMap<>();
+
+    private static ArrayList<Integer> pipDelays = new ArrayList<>();
+    private static HashMap<Integer, Integer> knownPipDelays = new HashMap<>();
+
+    private static int get_pip_timing_class(int delay_ps) {
+        if (knownPipDelays.containsKey(delay_ps))
+            return knownPipDelays.get(delay_ps);
+        int index = pipDelays.size();
+        knownPipDelays.put(delay_ps, index);
+        pipDelays.add(delay_ps);
+        return index;
+    }
 
     static class NextpnrTileType {
         public int index;
@@ -279,12 +395,20 @@ public class bbaexport {
             return np;
         }
 
-        private NextpnrPip addPIP(PIP p, boolean reverse) {
-            // YUCK! Waiting for proper interconnect delays in RapidWright ;)
-            int delay = p.getStartWire().getNode().getTile().getManhattanDistance(p.getEndWire().getNode().getTile());
+        private NextpnrPip addPIP(TimingModel m, PIP p, boolean reverse) {
 
-            NextpnrPip np = new NextpnrPip(pips.size(), reverse ?  p.getEndWireIndex() : p.getStartWireIndex(), reverse ?  p.getStartWireIndex() : p.getEndWireIndex(), delay, NextpnrPipType.TILE_ROUTING);
 
+            // Note this is a first-pass model. It assumes that all pips are buferred and all pips have the same
+            // delay regardless of location. It is to guide the nextpnr router rather than give sign-off quality
+            // STA.
+            TimingGroup tg = new TimingGroup(m);
+            tg.add(p.getStartNode(), p.getStartWire().getIntentCode());
+            tg.add(p);
+            tg.add(p.getEndNode(), p.getEndWire().getIntentCode());
+            var delay = m.calcDelay(tg);
+            int tmg_cls = get_pip_timing_class((int)(delay));
+
+            NextpnrPip np = new NextpnrPip(pips.size(), reverse ?  p.getEndWireIndex() : p.getStartWireIndex(), reverse ?  p.getStartWireIndex() : p.getEndWireIndex(), tmg_cls, NextpnrPipType.TILE_ROUTING);
             wires.get(np.from).pips_dh.add(np.index);
             wires.get(np.to).pips_uh.add(np.index);
             pips.add(np);
@@ -314,7 +438,8 @@ public class bbaexport {
             bels.add(nb);
         }
 
-        public void importTile(Device d, Design des, Tile t) {
+        public void importTile(Device d, Design des, TimingModel tmg, Tile t) {
+
 
             type = makeConstId(t.getTileTypeEnum().name());
             bels = new ArrayList<>();
@@ -381,7 +506,7 @@ public class bbaexport {
                     continue;
                 if (xc7_flag && p.getStartWireName().startsWith("CLK_BUFG_R_FBG_OUT"))
                     continue;
-                NextpnrPip np = addPIP(p, false);
+                NextpnrPip np = addPIP(tmg, p, false);
                 if (p.isRouteThru() && isLogic) {
                     np.type = NextpnrPipType.LUT_ROUTETHRU;
                     // extra data: eigth[3:0]; from[3:0]; to[3:0]
@@ -392,7 +517,7 @@ public class bbaexport {
                     np.extra_data = p.isRouteThru() ? 1 : 0;
                 }
                 if (p.isBidirectional())
-                    addPIP(p, true);
+                    addPIP(tmg, p, true);
             }
             // Add pseudo-bels driving Vcc and GND
             addPsuedoBel(t, "PSEUDO_GND_BEL", "PSEUDO_GND", "Y", global_gnd_wire_index);
@@ -672,6 +797,9 @@ public class bbaexport {
             ++known_id_count;
         }
 
+        TimingModel tmg = new TimingModel(des);
+        tmg.build();
+
         // Unique tiletypes
         HashSet<TileTypeEnum> seenTileTypes = new HashSet<>();
         for (Tile t : d.getAllTiles()) {
@@ -682,7 +810,7 @@ public class bbaexport {
 
             NextpnrTileType ntt = new NextpnrTileType();
             ntt.index = tileTypes.size();
-            ntt.importTile(d, des, t);
+            ntt.importTile(d, des, tmg, t);
             tileTypes.add(ntt);
             System.out.println("Processed tile type " + t.getTileTypeEnum().name());
         }
@@ -839,8 +967,8 @@ public class bbaexport {
             for (NextpnrPip p : tt.pips) {
                 bba.printf("u32 %d\n", p.from); //src tile wire index
                 bba.printf("u32 %d\n", p.to); //dst tile wire index
-                bba.printf("u32 %d\n", 0); //FIXME: timing class
-                bba.printf("u16 %d\n", p.delay); //"delay" (actually distance)
+                bba.printf("u32 %d\n", p.tmg_cls);
+                bba.printf("u16 %d\n", 0); // not used
                 bba.printf("u16 %d\n", p.type.ordinal()); // pip type/flags
 
                 bba.printf("u32 %d\n", p.bel); //bel name constid for site pips
@@ -1006,16 +1134,18 @@ public class bbaexport {
         bba.printf("u32 %d\n", 1); // resistance
         bba.printf("u32 %d\n", 0); // capacitance
         bba.printf("label pip_timing_classes\n");
-        bba.printf("u16 %d\n", 1); // is buffered
-        bba.printf("u16 %d\n", 0); // padding
-        bba.printf("u32 %d\n", 75); // min delay
-        bba.printf("u32 %d\n", 75); // max delay
-        bba.printf("u32 %d\n", 1); // resistance
-        bba.printf("u32 %d\n", 0); // capacitance
+        for (int dly : pipDelays) {
+            bba.printf("u16 %d\n", 1); // is buffered
+            bba.printf("u16 %d\n", 0); // padding
+            bba.printf("u32 %d\n", dly); // min delay
+            bba.printf("u32 %d\n", dly); // max delay
+            bba.printf("u32 %d\n", 1); // resistance
+            bba.printf("u32 %d\n", 0); // capacitance
+        }
         bba.println("label timing");
         bba.printf("u32 %d\n", 0); // number of tile types with cell timing info
         bba.printf("u32 %d\n", 1); // number of wire classes
-        bba.printf("u32 %d\n", 1); // number of pip classes
+        bba.printf("u32 %d\n", pipDelays.size()); // number of pip classes
         bba.printf("ref tile_cell_timing\n");
         bba.printf("ref wire_timing_classes\n");
         bba.printf("ref pip_timing_classes\n");
