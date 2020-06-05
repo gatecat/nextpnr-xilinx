@@ -273,6 +273,67 @@ struct RippleFPGAPlacer
     void ripup_cell(int cell);
     bool check_placement(int cell);
     bool find_conflicting_cells(int cell, Loc root, std::set<int> &conflicts);
+
+    struct MovedCell
+    {
+        int cell;
+        Loc old_root;
+    };
+
+    // For fast incremental bounding box updates
+    struct NetBoundingBox
+    {
+        // Actual bounding box
+        int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+        // Number of cells at each extremity
+        int nx0 = 0, nx1 = 0, ny0 = 0, ny1 = 0;
+    };
+
+    enum BoundChangeType
+    {
+        NO_CHANGE,
+        CELL_MOVED_INWARDS,
+        CELL_MOVED_OUTWARDS,
+        FULL_RECOMPUTE
+    };
+
+    struct DetailArcData
+    {
+        bool cost_changed;
+        float old_cost, new_cost;
+    };
+
+    struct DetailNetData
+    {
+        NetBoundingBox curr_bounds, new_bounds;
+        BoundChangeType change_type_x = NO_CHANGE, change_type_y = NO_CHANGE;
+        std::vector<DetailArcData> arcs;
+    };
+
+    std::vector<DetailNetData> dt_nets;
+
+    struct DetailMove
+    {
+        int root_cell;
+        Loc new_root_loc;
+
+        std::vector<MovedCell> moved;
+
+        // The list of nets and arcs that have changed bounds/delay as a result of the move
+        std::vector<decltype(NetInfo::udata)> bounds_changed_nets_x, bounds_changed_nets_y;
+
+        // The current kind of change that exists for a net/arc
+        std::vector<BoundChangeType> already_bounds_changed_x, already_bounds_changed_y;
+    };
+
+    bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
+
+    void update_move_costs(DetailMove &move, CellInfo *cell, BelId new_bel);
+    void compute_move_costs(DetailMove &move);
+    void reset_move(DetailMove &move);
+    void perform_move(DetailMove &move);
+    void revert_move(DetailMove &move);
+    void finalise_move(DetailMove &move);
 };
 
 } // namespace Ripple
