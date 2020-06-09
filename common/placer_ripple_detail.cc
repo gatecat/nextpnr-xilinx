@@ -56,4 +56,58 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
+namespace Ripple {
+
+void RippleFPGAPlacer::reset_move(DetailMove &move)
+{
+    move.moved.clear();
+    for (int bc : move.bounds_changed_nets_x)
+        dt_nets.at(bc).change_type_x = NO_CHANGE;
+    for (int bc : move.bounds_changed_nets_y)
+        dt_nets.at(bc).change_type_y = NO_CHANGE;
+    move.bounds_changed_nets_x.clear();
+    move.bounds_changed_nets_y.clear();
+}
+
+Loc RippleFPGAPlacer::move_get_cell_loc(DetailMove &move, int i)
+{
+    if (i == 0)
+        return move.new_root_loc;
+    Loc base_loc = cells.at(move.move_cells.at(0)).root_loc;
+    Loc new_loc = cells.at(move.move_cells.at(i)).root_loc;
+    new_loc.x += (move.new_root_loc.x - base_loc.x);
+    new_loc.y += (move.new_root_loc.y - base_loc.y);
+    new_loc.z += (move.new_root_loc.z - base_loc.z);
+    return new_loc;
+}
+
+bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
+{
+    move.conflicts.clear();
+    for (int i = 0; i < GetSize(move.move_cells); i++) {
+        std::map<int, Loc> cell_conflicts;
+        int cell_idx = move.move_cells.at(i);
+        Loc cell_loc = move_get_cell_loc(move, i);
+        bool ret = find_conflicting_cells(cell_idx, cell_loc, cell_conflicts);
+        // Translate conflicting cell coordinates from cell-relative to move-root-relative
+        for (auto &conflict : cell_conflicts) {
+            conflict.second.x += (cell_loc.x - move.new_root_loc.x);
+            conflict.second.y += (cell_loc.y - move.new_root_loc.y);
+            conflict.second.z += (cell_loc.z - move.new_root_loc.z);
+            // Abort if the conflicting cell would need to be placed at more than one distinct location
+            if (move.conflicts.count(conflict.first)) {
+                if (move.conflicts.at(conflict.first) != conflict.second)
+                    return false;
+            } else {
+                move.conflicts[conflict.first] = conflict.second;
+            }
+        }
+    }
+    return true;
+}
+
+void RippleFPGAPlacer::perform_move(DetailMove &move) {}
+
+} // namespace Ripple
+
 NEXTPNR_NAMESPACE_END

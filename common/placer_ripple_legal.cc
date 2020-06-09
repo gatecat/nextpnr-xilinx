@@ -99,8 +99,21 @@ bool RippleFPGAPlacer::check_placement(int cell)
     return true;
 }
 
-bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::set<int> &conflicts)
+bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::map<int, Loc> &conflicts)
 {
+    auto insert_conflicts = [&](CellInfo *conflict) {
+        int idx = cell_index.at(conflict->udata).cell;
+        Loc conflict_root = cells.at(idx).root_loc;
+        Loc offset;
+        offset.x = conflict_root.x - root.x;
+        offset.y = conflict_root.y - root.y;
+        offset.z = conflict_root.z - root.z;
+        if (!conflicts.count(idx))
+            conflicts[idx] = offset;
+        else
+            NPNR_ASSERT(conflicts.at(idx) == offset);
+    };
+
     auto &c = cells.at(cell);
     for (auto &sc : c.base_cells) {
         Loc l = sc.actual_loc(root);
@@ -115,14 +128,14 @@ bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::set<int> 
         if (bound != nullptr) {
             if (bound->belStrength > STRENGTH_STRONG)
                 return false;
-            conflicts.insert(cell_index.at(bound->udata).cell);
+            insert_conflicts(bound);
             continue;
         }
         CellInfo *conflicting = ctx->getConflictingBelCell(bel);
         if (conflicting != nullptr) {
             if (conflicting->belStrength > STRENGTH_STRONG)
                 return false;
-            conflicts.insert(cell_index.at(conflicting->udata).cell);
+            insert_conflicts(conflicting);
             continue;
         }
         return false;

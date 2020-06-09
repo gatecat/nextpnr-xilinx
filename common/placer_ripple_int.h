@@ -49,16 +49,20 @@ struct Bounds
 };
 
 // We create our own simple netlist structures, to account for packing and other transformations as well as efficient
-// handling of macros like carry chains as a single block
+// handling of macros like carry chains as a single block. A RippleCell might therefore be a single 'nextpnr' cell
+// or a combination of them, packed into a 'basic logic element'
 struct RippleCellPort
 {
     std::vector<PortRef> orig_ports;
     PortType dir;
     NetInfo *net;
 };
+// A RippleSubcell represents a single, leaf nextpnr cell; that a RippleCell may comprise one or more off
 struct RippleSubcell
 {
     CellInfo *ci;
+    // These are added to the location of the RippleCell to get the exact placement location
+    // for this subcell
     int offset_x = 0, offset_y = 0, offset_z = 0;
     bool abs_z = false;
     inline Loc actual_loc(const Loc &root_loc) const
@@ -272,7 +276,9 @@ struct RippleFPGAPlacer
     bool place_cell(int cell, Loc root);
     void ripup_cell(int cell);
     bool check_placement(int cell);
-    bool find_conflicting_cells(int cell, Loc root, std::set<int> &conflicts);
+
+    // conflicts is a map: cell index --> offset from root
+    bool find_conflicting_cells(int cell, Loc root, std::map<int, Loc> &conflicts);
 
     struct MovedCell
     {
@@ -280,7 +286,7 @@ struct RippleFPGAPlacer
         Loc old_root;
     };
 
-    // For fast incremental bounding box updates
+    // Data structures fast incremental bounding box updates
     struct NetBoundingBox
     {
         // Actual bounding box
@@ -302,7 +308,6 @@ struct RippleFPGAPlacer
         bool cost_changed;
         float old_cost, new_cost;
     };
-
     struct DetailNetData
     {
         NetBoundingBox curr_bounds, new_bounds;
@@ -312,15 +317,20 @@ struct RippleFPGAPlacer
 
     std::vector<DetailNetData> dt_nets;
 
+    // Data structure for representing a move made by the detail placer, and the cost changes
+    // associated with it
     struct DetailMove
     {
-        int root_cell;
+        std::vector<int> move_cells;
         Loc new_root_loc;
+
+        std::map<int, Loc> conflicts;
 
         std::vector<MovedCell> moved;
 
         // The list of nets and arcs that have changed bounds/delay as a result of the move
-        std::vector<decltype(NetInfo::udata)> bounds_changed_nets_x, bounds_changed_nets_y;
+        std::vector<int> bounds_changed_nets_x, bounds_changed_nets_y;
+        std::vector<std::pair<int, int>> cost_changed_arcs;
 
         // The current kind of change that exists for a net/arc
         std::vector<BoundChangeType> already_bounds_changed_x, already_bounds_changed_y;
@@ -328,7 +338,9 @@ struct RippleFPGAPlacer
 
     bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
 
+    bool find_move_conflicts(DetailMove &move);
     void update_move_costs(DetailMove &move, CellInfo *cell, BelId new_bel);
+    Loc move_get_cell_loc(DetailMove &move, int i);
     void compute_move_costs(DetailMove &move);
     void reset_move(DetailMove &move);
     void perform_move(DetailMove &move);
