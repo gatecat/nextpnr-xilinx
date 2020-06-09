@@ -322,8 +322,8 @@ struct RippleFPGAPlacer
     struct DetailMove
     {
         std::vector<int> move_cells;
-        Loc new_root_loc;
 
+        // map conflicting cell -> new loc for that cell
         std::map<int, Loc> conflicts;
 
         std::vector<MovedCell> moved;
@@ -339,11 +339,11 @@ struct RippleFPGAPlacer
     bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
 
     bool find_move_conflicts(DetailMove &move);
-    void update_move_costs(DetailMove &move, CellInfo *cell, BelId new_bel);
+    void update_move_costs(DetailMove &move, int cell, Loc new_loc);
     Loc move_get_cell_loc(DetailMove &move, int i);
     void compute_move_costs(DetailMove &move);
     void reset_move(DetailMove &move);
-    void perform_move(DetailMove &move);
+    bool perform_move(DetailMove &move);
     void revert_move(DetailMove &move);
     void finalise_move(DetailMove &move);
 };
