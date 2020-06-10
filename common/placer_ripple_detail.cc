@@ -107,14 +107,9 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
     return true;
 }
 
-void RippleFPGAPlacer::compute_move_costs(DetailMove &move)
-{
-    // Go through all the moving cells and update the costs
-    for (int i = 0; i < GetSize(move.move_cells); i++)
-        update_move_costs(move, move.move_cells.at(i), move_get_cell_loc(move, i));
-    for (auto conflict : move.conflicts)
-        update_move_costs(move, conflict.first, conflict.second);
-}
+void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel) {}
+
+void RippleFPGAPlacer::compute_move_costs(DetailMove &move) {}
 
 bool RippleFPGAPlacer::perform_move(DetailMove &move)
 {
@@ -140,11 +135,13 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
         bool ret = place_cell(move.move_cells.at(i), new_locs.at(i));
         if (!ret)
             goto fail;
+        update_move_costs(move, move.move_cells.at(i), new_locs.at(i));
     }
     for (auto conflict : move.conflicts) {
         bool ret = place_cell(conflict.first, conflict.second);
         if (!ret)
             goto fail;
+        update_move_costs(move, conflict.first, conflict.second);
     }
     // Check new locations for legality
     // TODO: speedup validity checks when swapping whole tiles?

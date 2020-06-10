@@ -54,7 +54,7 @@ NEXTPNR_NAMESPACE_BEGIN
 
 namespace Ripple {
 
-bool RippleFPGAPlacer::place_cell(int cell, Loc root)
+bool RippleFPGAPlacer::place_cell(int cell, Loc root, DetailMove *move_to_update)
 {
     auto &c = cells.at(cell);
     NPNR_ASSERT(!c.placed);
@@ -68,6 +68,8 @@ bool RippleFPGAPlacer::place_cell(int cell, Loc root)
         if (!ctx->checkBelAvail(bel))
             goto fail;
         ctx->bindBel(bel, sc.ci, STRENGTH_WEAK);
+        if (move_to_update != nullptr)
+            update_move_costs(*move_to_update, sc.ci, bel);
     }
     if (false) {
     fail:

@@ -263,22 +263,8 @@ struct RippleFPGAPlacer
 
     int min_expand_size = 1;
 
-    void setup_spreader_grid();
-    void setup_spreader_bins(int bin_w, int bin_h);
-    void reset_spread_cell_areas(int site_type, int x0, int y0, int x1, int y1);
-    void update_spread_cell_area(int site_type, int x0, int y0, int x1, int y1);
-    void find_overfilled_regions();
-    void expand_overfilled_region(int st, OverfilledRegion &of);
-    bool spread_cells(int site_type, SpreaderBox &box, std::vector<SpreaderBox> &spread_boxes);
-    void spread_cells_in_region(int site_type, OverfilledRegion &of);
-    void cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi, double ratio);
-
-    bool place_cell(int cell, Loc root);
-    void ripup_cell(int cell);
-    bool check_placement(int cell);
-
-    // conflicts is a map: cell index --> offset from root
-    bool find_conflicting_cells(int cell, Loc root, std::map<int, Loc> &conflicts);
+    // Data structure for representing a move made by the detail placer, and the cost changes
+    // associated with it
 
     struct MovedCell
     {
@@ -315,13 +301,11 @@ struct RippleFPGAPlacer
         std::vector<DetailArcData> arcs;
     };
 
-    std::vector<DetailNetData> dt_nets;
-
-    // Data structure for representing a move made by the detail placer, and the cost changes
-    // associated with it
     struct DetailMove
     {
         std::vector<int> move_cells;
+
+        Loc new_root_loc;
 
         // map conflicting cell -> new loc for that cell
         std::map<int, Loc> conflicts;
@@ -336,10 +320,29 @@ struct RippleFPGAPlacer
         std::vector<BoundChangeType> already_bounds_changed_x, already_bounds_changed_y;
     };
 
+    void setup_spreader_grid();
+    void setup_spreader_bins(int bin_w, int bin_h);
+    void reset_spread_cell_areas(int site_type, int x0, int y0, int x1, int y1);
+    void update_spread_cell_area(int site_type, int x0, int y0, int x1, int y1);
+    void find_overfilled_regions();
+    void expand_overfilled_region(int st, OverfilledRegion &of);
+    bool spread_cells(int site_type, SpreaderBox &box, std::vector<SpreaderBox> &spread_boxes);
+    void spread_cells_in_region(int site_type, OverfilledRegion &of);
+    void cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi, double ratio);
+
+    bool place_cell(int cell, Loc root, DetailMove *move_to_update = nullptr);
+    void ripup_cell(int cell);
+    bool check_placement(int cell);
+
+    // conflicts is a map: cell index --> offset from root
+    bool find_conflicting_cells(int cell, Loc root, std::map<int, Loc> &conflicts);
+
+    std::vector<DetailNetData> dt_nets;
+
     bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
 
     bool find_move_conflicts(DetailMove &move);
-    void update_move_costs(DetailMove &move, int cell, Loc new_loc);
+    void update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel);
     Loc move_get_cell_loc(DetailMove &move, int i);
     void compute_move_costs(DetailMove &move);
     void reset_move(DetailMove &move);
