@@ -342,6 +342,7 @@ struct RippleFPGAPlacer
     bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
 
     bool find_move_conflicts(DetailMove &move);
+    bool cost_ignore_net(NetInfo *net);
     void update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel);
     Loc move_get_cell_loc(DetailMove &move, int i);
     void compute_move_costs(DetailMove &move);

@@ -90,6 +90,8 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
         auto &cell_data = cells.at(cell_idx);
         Loc cell_loc = move_get_cell_loc(move, i);
         bool ret = find_conflicting_cells(cell_idx, cell_loc, cell_conflicts);
+        if (!ret)
+            return false;
         // Translate conflicting cell coordinates from cell-relative to absolute
         for (auto &conflict : cell_conflicts) {
             conflict.second.x += cell_data.root_loc.x;
@@ -107,7 +109,141 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
     return true;
 }
 
-void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel) {}
+void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel)
+{
+    Loc curr_loc = ctx->getBelLocation(cell->bel);
+    Loc old_loc = ctx->getBelLocation(old_bel);
+    // Check net bounds
+    for (const auto &port : cell->ports) {
+        NetInfo *pn = port.second.net;
+        if (pn == nullptr)
+            continue;
+        if (cost_ignore_net(pn))
+            continue;
+        auto &net_data = dt_nets.at(pn->udata);
+        NetBoundingBox &curr_bounds = net_data.curr_bounds;
+        // Incremental bounding box updates
+        // Note that everything other than full updates are applied immediately rather than being queued,
+        // so further updates to the same net in the same move are dealt with correctly.
+        // If a full update is already queued, this can be considered a no-op
+        if (net_data.change_type_x != BoundChangeType::FULL_RECOMPUTE) {
+            // Bounds x0
+            if (curr_loc.x < curr_bounds.x0) {
+                // Further out than current bounds x0
+                curr_bounds.x0 = curr_loc.x;
+                curr_bounds.nx0 = 1;
+                if (net_data.change_type_x == BoundChangeType::NO_CHANGE) {
+                    // Checking already_bounds_changed_x ensures that each net is only added once
+                    // to bounds_changed_nets, lest we add its HPWL change multiple times skewing the
+                    // overall cost change
+                    net_data.change_type_x = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_x.push_back(pn->udata);
+                }
+            } else if (curr_loc.x == curr_bounds.x0 && old_loc.x > curr_bounds.x0) {
+                curr_bounds.nx0++;
+                if (net_data.change_type_x == BoundChangeType::NO_CHANGE) {
+                    net_data.change_type_x = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_x.push_back(pn->udata);
+                }
+            } else if (old_loc.x == curr_bounds.x0 && curr_loc.x > curr_bounds.x0) {
+                if (net_data.change_type_x == BoundChangeType::NO_CHANGE)
+                    move.bounds_changed_nets_x.push_back(pn->udata);
+                if (curr_bounds.nx0 == 1) {
+                    net_data.change_type_x = BoundChangeType::FULL_RECOMPUTE;
+                } else {
+                    curr_bounds.nx0--;
+                    if (net_data.change_type_x == BoundChangeType::NO_CHANGE)
+                        net_data.change_type_x = BoundChangeType::CELL_MOVED_INWARDS;
+                }
+            }
+
+            // Bounds x1
+            if (curr_loc.x > curr_bounds.x1) {
+                // Further out than current bounds x1
+                curr_bounds.x1 = curr_loc.x;
+                curr_bounds.nx1 = 1;
+                if (net_data.change_type_x == BoundChangeType::NO_CHANGE) {
+                    // Checking already_bounds_changed_x ensures that each net is only added once
+                    // to bounds_changed_nets, lest we add its HPWL change multiple times skewing the
+                    // overall cost change
+                    net_data.change_type_x = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_x.push_back(pn->udata);
+                }
+            } else if (curr_loc.x == curr_bounds.x1 && old_loc.x < curr_bounds.x1) {
+                curr_bounds.nx1++;
+                if (net_data.change_type_x == BoundChangeType::NO_CHANGE) {
+                    net_data.change_type_x = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_x.push_back(pn->udata);
+                }
+            } else if (old_loc.x == curr_bounds.x1 && curr_loc.x < curr_bounds.x1) {
+                if (net_data.change_type_x == BoundChangeType::NO_CHANGE)
+                    move.bounds_changed_nets_x.push_back(pn->udata);
+                if (curr_bounds.nx1 == 1) {
+                    net_data.change_type_x = BoundChangeType::FULL_RECOMPUTE;
+                } else {
+                    curr_bounds.nx1--;
+                    if (net_data.change_type_x == BoundChangeType::NO_CHANGE)
+                        net_data.change_type_x = BoundChangeType::CELL_MOVED_INWARDS;
+                }
+            }
+        }
+        if (net_data.change_type_y != BoundChangeType::FULL_RECOMPUTE) {
+            // Bounds y0
+            if (curr_loc.y < curr_bounds.y0) {
+                // Further out than current bounds y0
+                curr_bounds.y0 = curr_loc.y;
+                curr_bounds.ny0 = 1;
+                if (net_data.change_type_y == BoundChangeType::NO_CHANGE) {
+                    net_data.change_type_y = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_y.push_back(pn->udata);
+                }
+            } else if (curr_loc.y == curr_bounds.y0 && old_loc.y > curr_bounds.y0) {
+                curr_bounds.ny0++;
+                if (net_data.change_type_y == BoundChangeType::NO_CHANGE) {
+                    net_data.change_type_y = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_y.push_back(pn->udata);
+                }
+            } else if (old_loc.y == curr_bounds.y0 && curr_loc.y > curr_bounds.y0) {
+                if (net_data.change_type_y == BoundChangeType::NO_CHANGE)
+                    move.bounds_changed_nets_y.push_back(pn->udata);
+                if (curr_bounds.ny0 == 1) {
+                    net_data.change_type_y = BoundChangeType::FULL_RECOMPUTE;
+                } else {
+                    curr_bounds.ny0--;
+                    if (net_data.change_type_y == BoundChangeType::NO_CHANGE)
+                        net_data.change_type_y = BoundChangeType::CELL_MOVED_INWARDS;
+                }
+            }
+
+            // Bounds y1
+            if (curr_loc.y > curr_bounds.y1) {
+                // Further out than current bounds y1
+                curr_bounds.y1 = curr_loc.y;
+                curr_bounds.ny1 = 1;
+                if (net_data.change_type_y == BoundChangeType::NO_CHANGE) {
+                    net_data.change_type_y = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_y.push_back(pn->udata);
+                }
+            } else if (curr_loc.y == curr_bounds.y1 && old_loc.y < curr_bounds.y1) {
+                curr_bounds.ny1++;
+                if (net_data.change_type_y == BoundChangeType::NO_CHANGE) {
+                    net_data.change_type_y = BoundChangeType::CELL_MOVED_OUTWARDS;
+                    move.bounds_changed_nets_y.push_back(pn->udata);
+                }
+            } else if (old_loc.y == curr_bounds.y1 && curr_loc.y < curr_bounds.y1) {
+                if (net_data.change_type_y == BoundChangeType::NO_CHANGE)
+                    move.bounds_changed_nets_y.push_back(pn->udata);
+                if (curr_bounds.ny1 == 1) {
+                    net_data.change_type_y = BoundChangeType::FULL_RECOMPUTE;
+                } else {
+                    curr_bounds.ny1--;
+                    if (net_data.change_type_y == BoundChangeType::NO_CHANGE)
+                        net_data.change_type_y = BoundChangeType::CELL_MOVED_INWARDS;
+                }
+            }
+        }
+    }
+}
 
 void RippleFPGAPlacer::compute_move_costs(DetailMove &move) {}
 
@@ -135,13 +271,11 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
         bool ret = place_cell(move.move_cells.at(i), new_locs.at(i));
         if (!ret)
             goto fail;
-        update_move_costs(move, move.move_cells.at(i), new_locs.at(i));
     }
     for (auto conflict : move.conflicts) {
         bool ret = place_cell(conflict.first, conflict.second);
         if (!ret)
             goto fail;
-        update_move_costs(move, conflict.first, conflict.second);
     }
     // Check new locations for legality
     // TODO: speedup validity checks when swapping whole tiles?
