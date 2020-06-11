@@ -279,6 +279,8 @@ struct RippleFPGAPlacer
         int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
         // Number of cells at each extremity
         int nx0 = 0, nx1 = 0, ny0 = 0, ny1 = 0;
+
+        inline int hpwl() const { return (x1 - x0) + (y1 - y0); }
     };
 
     enum BoundChangeType
@@ -291,7 +293,7 @@ struct RippleFPGAPlacer
 
     struct DetailArcData
     {
-        bool cost_changed;
+        bool cost_changed = false;
         float old_cost, new_cost;
     };
     struct DetailNetData
@@ -318,6 +320,10 @@ struct RippleFPGAPlacer
 
         // The current kind of change that exists for a net/arc
         std::vector<BoundChangeType> already_bounds_changed_x, already_bounds_changed_y;
+
+        // The cost deltas
+        int wirelen_delta;
+        int routeability_delta;
     };
 
     void setup_spreader_grid();
@@ -338,9 +344,12 @@ struct RippleFPGAPlacer
     bool find_conflicting_cells(int cell, Loc root, std::map<int, Loc> &conflicts);
 
     std::vector<DetailNetData> dt_nets;
+    std::vector<NetInfo *> nets_by_udata;
 
     bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
 
+    void setup_detail();
+    NetBoundingBox get_net_bounds(NetInfo *net);
     bool find_move_conflicts(DetailMove &move);
     bool cost_ignore_net(NetInfo *net);
     void update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel);

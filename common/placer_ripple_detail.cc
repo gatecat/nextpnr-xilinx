@@ -61,12 +61,18 @@ namespace Ripple {
 void RippleFPGAPlacer::reset_move(DetailMove &move)
 {
     move.moved.clear();
-    for (int bc : move.bounds_changed_nets_x)
+    for (int bc : move.bounds_changed_nets_x) {
         dt_nets.at(bc).change_type_x = NO_CHANGE;
-    for (int bc : move.bounds_changed_nets_y)
+        dt_nets.at(bc).new_bounds = dt_nets.at(bc).curr_bounds;
+    }
+    for (int bc : move.bounds_changed_nets_y) {
         dt_nets.at(bc).change_type_y = NO_CHANGE;
+        dt_nets.at(bc).new_bounds = dt_nets.at(bc).curr_bounds;
+    }
     move.bounds_changed_nets_x.clear();
     move.bounds_changed_nets_y.clear();
+    move.wirelen_delta = 0;
+    move.routeability_delta = 0;
 }
 
 Loc RippleFPGAPlacer::move_get_cell_loc(DetailMove &move, int i)
@@ -121,7 +127,7 @@ void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, BelId
         if (cost_ignore_net(pn))
             continue;
         auto &net_data = dt_nets.at(pn->udata);
-        NetBoundingBox &curr_bounds = net_data.curr_bounds;
+        NetBoundingBox &curr_bounds = net_data.new_bounds;
         // Incremental bounding box updates
         // Note that everything other than full updates are applied immediately rather than being queued,
         // so further updates to the same net in the same move are dealt with correctly.
@@ -245,7 +251,86 @@ void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, BelId
     }
 }
 
-void RippleFPGAPlacer::compute_move_costs(DetailMove &move) {}
+void RippleFPGAPlacer::setup_detail()
+{
+    dt_nets.reserve(GetSize(ctx->nets));
+    nets_by_udata.reserve(GetSize(ctx->nets));
+    for (auto net : sorted(ctx->nets)) {
+        NetInfo *ni = net.second;
+        ni->udata = GetSize(nets_by_udata);
+        nets_by_udata.push_back(ni);
+        dt_nets.emplace_back();
+        dt_nets.back().curr_bounds = get_net_bounds(ni);
+        dt_nets.back().arcs.resize(GetSize(ni->users));
+    }
+}
+
+RippleFPGAPlacer::NetBoundingBox RippleFPGAPlacer::get_net_bounds(NetInfo *net)
+{
+    NetBoundingBox bb;
+    Loc dloc = ctx->getBelLocation(net->driver.cell->bel);
+    bb.x0 = bb.x1 = dloc.x;
+    bb.y0 = bb.y1 = dloc.y;
+    bb.nx0 = bb.nx1 = bb.ny0 = bb.ny1 = 1;
+    for (auto &usr : net->users) {
+        if (usr.cell->bel == BelId())
+            continue;
+        Loc uloc = ctx->getBelLocation(usr.cell->bel);
+        /*
+         * If the location of the sink is on the current edge,
+         * increment the count of ports on that edge.
+         * If the location of the sink is beyond the current bounds,
+         * expand the bounding box and reset the number of edge ports to 1.
+         */
+        if (bb.x0 == uloc.x)
+            ++bb.nx0;
+        else if (uloc.x < bb.x0) {
+            bb.x0 = uloc.x;
+            bb.nx0 = 1;
+        }
+        if (bb.x1 == uloc.x)
+            ++bb.nx1;
+        else if (uloc.x > bb.x1) {
+            bb.x1 = uloc.x;
+            bb.nx1 = 1;
+        }
+        if (bb.y0 == uloc.y)
+            ++bb.ny0;
+        else if (uloc.y < bb.y0) {
+            bb.y0 = uloc.y;
+            bb.ny0 = 1;
+        }
+        if (bb.y1 == uloc.y)
+            ++bb.ny1;
+        else if (uloc.y > bb.y1) {
+            bb.y1 = uloc.y;
+            bb.ny1 = 1;
+        }
+    }
+    return bb;
+}
+
+void RippleFPGAPlacer::compute_move_costs(DetailMove &move)
+{
+    move.wirelen_delta = 0;
+    for (auto bc : move.bounds_changed_nets_x)
+        if (dt_nets.at(bc).change_type_x == BoundChangeType::FULL_RECOMPUTE)
+            dt_nets.at(bc).new_bounds = get_net_bounds(nets_by_udata.at(bc));
+    for (auto bc : move.bounds_changed_nets_y)
+        if (dt_nets.at(bc).change_type_x != BoundChangeType::FULL_RECOMPUTE &&
+            dt_nets.at(bc).change_type_y == BoundChangeType::FULL_RECOMPUTE)
+            dt_nets.at(bc).new_bounds = get_net_bounds(nets_by_udata.at(bc));
+    for (auto bc : move.bounds_changed_nets_x)
+        move.wirelen_delta += dt_nets.at(bc).new_bounds.hpwl() - dt_nets.at(bc).curr_bounds.hpwl();
+}
+
+void RippleFPGAPlacer::finalise_move(DetailMove &move)
+{
+    for (auto bc : move.bounds_changed_nets_x)
+        dt_nets.at(bc).curr_bounds = dt_nets.at(bc).new_bounds;
+    for (auto bc : move.bounds_changed_nets_y)
+        dt_nets.at(bc).curr_bounds = dt_nets.at(bc).new_bounds;
+}
 
 bool RippleFPGAPlacer::perform_move(DetailMove &move)
 {
