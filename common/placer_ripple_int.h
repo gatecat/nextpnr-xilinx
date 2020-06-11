@@ -20,6 +20,7 @@
 #define PLACER_RIPPLE_INT_H
 #include <deque>
 #include <queue>
+#include "hypergraph.h"
 #include "nextpnr.h"
 #include "placer_ripple_util.h"
 #include "timing.h"
@@ -325,6 +326,8 @@ struct RippleFPGAPlacer
         int wirelen_delta;
         int routeability_delta;
     };
+
+    void export_hypergraph(HyperPart::Hypergraph &g);
 
     void setup_spreader_grid();
     void setup_spreader_bins(int bin_w, int bin_h);
