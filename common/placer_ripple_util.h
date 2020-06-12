@@ -107,6 +107,14 @@ template <typename T> class indexed_store
     // Reserve a certain amount of space
     void reserve(int size) { slots.reserve(size); }
 
+    // Check if an index exists
+    int count(int idx)
+    {
+        if (idx < 0 || idx >= GetSize(slots))
+            return 0;
+        return slots.at(idx).empty() ? 0 : 1;
+    }
+
     // Get an item by index
     T &at(int idx) { return slots.at(idx).get(); }
     const T &at(int idx) const { return slots.at(idx).get(); }

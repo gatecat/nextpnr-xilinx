@@ -327,7 +327,13 @@ struct RippleFPGAPlacer
         int routeability_delta;
     };
 
-    void export_hypergraph(HyperPart::Hypergraph &g);
+    struct HypergraphMap
+    {
+        std::unordered_map<int, int> cell_to_node;
+        std::unordered_map<IdString, int> net_to_edge;
+    };
+
+    void export_hypergraph(HyperPart::Hypergraph &g, HypergraphMap &m);
 
     void setup_spreader_grid();
     void setup_spreader_bins(int bin_w, int bin_h);
