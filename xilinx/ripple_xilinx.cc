@@ -76,5 +76,50 @@ DeviceInfo RippleXilinx::getDeviceInfo()
     return info;
 }
 
+double RippleXilinx::getCellArea(const CellInfo *cell)
+{
+    if (cell->type == id_SLICE_LUTX) {
+        // Bigger LUTs cost more 'area' than smaller ones
+        return 0.5 + 0.1 * int(cell->ports.size());
+    } else if (cell->type == id_SLICE_FFX) {
+        // FFs can be considered cheaper than LUTs
+        return 0.75;
+    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX) {
+        // Muxes are virtually free
+        return 0.1;
+    } else if (cell->type == id_CARRY4 || cell->type == id_CARRY8) {
+        // As are CARRYs
+        return 0.2;
+    } else if (cell->type == id_RAMB36E2_RAMB36E2 || cell->type == id_RAMB36E1_RAMB36E1) {
+        return 1.0;
+    } else if (cell->type == id_RAMB18E1_RAMB18E1 || cell->type == id_RAMB18E2_RAMB18E2) {
+        return 0.5;
+    }
+    return 1.0;
+}
+
+Loc RippleXilinx::getSwitchbox(Loc cell_loc)
+{
+    BelId bel = ctx->getBelByLocation(cell_loc);
+    if (bel == BelId())
+        return Loc(cell_loc.x, cell_loc.y, 0);
+    int site = ctx->locInfo(bel).bel_data[bel.index].site;
+    if (site == -1)
+        return Loc(cell_loc.x, cell_loc.y, 0);
+    auto site_data = ctx->chip_info->tile_insts[bel.tile].site_insts[site];
+    return Loc(site_data.inter_x, site_data.inter_y, 0);
+}
+
+bool RippleXilinx::checkBleCompatability(const std::vector<CellInfo *> &cells)
+{
+    // This API is likely to disappear so leaving for now
+    return true;
+}
+bool RippleXilinx::checkClbCompatability(const std::vector<CellInfo *> &cells)
+{
+    // This API is likely to disappear so leaving for now
+    return true;
+}
+
 } // namespace Ripple
 NEXTPNR_NAMESPACE_END
