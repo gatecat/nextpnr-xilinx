@@ -123,17 +123,23 @@ struct DeviceInfo
     std::unordered_map<IdString, IdString> celltype_to_sitetype;
     std::unordered_map<IdString, std::vector<Loc>> site_locations;
 
-    IdString clb_type, ble_type;
+    // Hints for SLICE elements. There may be a more generic way of doing this in the long term
+    std::unordered_set<IdString> lut_types, dff_types, slice_misc_types;
 };
 
 class ArchFunctions
 {
   public:
+    // Return a DeviceInfo structure for the current context
     virtual DeviceInfo getDeviceInfo() = 0;
+    // Gets the area value of a score
     virtual double getCellArea(const CellInfo *cell) = 0;
-    virtual bool checkBleCompatability(const std::vector<CellInfo *> &cells) = 0;
-    virtual bool checkClbCompatability(const std::vector<CellInfo *> &cells) = 0;
+    // Get the switchbox location given a cell location
     virtual Loc getSwitchbox(Loc cell_loc) = 0;
+    // Do any packing of LUTs and FFs into BLEs (basic logic elements)
+    // as described in the HeAP paper. Due to the large variety of arches
+    // this is currently not generic.
+    virtual void doBlePacking() = 0;
     virtual ~ArchFunctions(){};
 };
 

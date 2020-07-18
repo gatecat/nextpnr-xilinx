@@ -28,8 +28,6 @@ class RippleXilinx : ArchFunctions
     RippleXilinx(Context *ctx) : ctx(ctx){};
     DeviceInfo getDeviceInfo() override;
     double getCellArea(const CellInfo *cell) override;
-    bool checkBleCompatability(const std::vector<CellInfo *> &cells) override;
-    bool checkClbCompatability(const std::vector<CellInfo *> &cells) override;
     Loc getSwitchbox(Loc cell_loc) override;
 
   private:
@@ -108,17 +106,6 @@ Loc RippleXilinx::getSwitchbox(Loc cell_loc)
         return Loc(cell_loc.x, cell_loc.y, 0);
     auto site_data = ctx->chip_info->tile_insts[bel.tile].site_insts[site];
     return Loc(site_data.inter_x, site_data.inter_y, 0);
-}
-
-bool RippleXilinx::checkBleCompatability(const std::vector<CellInfo *> &cells)
-{
-    // This API is likely to disappear so leaving for now
-    return true;
-}
-bool RippleXilinx::checkClbCompatability(const std::vector<CellInfo *> &cells)
-{
-    // This API is likely to disappear so leaving for now
-    return true;
 }
 
 } // namespace Ripple
