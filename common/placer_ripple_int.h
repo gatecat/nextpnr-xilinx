@@ -153,7 +153,6 @@ struct RippleFPGAPlacer
     RippleFPGAPlacer(Context *ctx, ArchFunctions *f)
             : ctx(ctx), f(f), d(f->getDeviceInfo()), grid(d.width, d.height, GridLocation{}){};
 
-  private:
     Context *ctx;
     ArchFunctions *f;
     DeviceInfo d;
@@ -178,10 +177,10 @@ struct RippleFPGAPlacer
     void pack_clb();
     void place_detail();
 
+    void run();
+
     void lower_bound_solver(double tol, double alpha, int iters);
     void upper_bound_spread();
-
-    void run();
 
     void est_congestion_map(array2d<double> &cong);
     int get_rr_cost(Loc a, Loc b);

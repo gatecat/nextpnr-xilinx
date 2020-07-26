@@ -626,6 +626,8 @@ bool Arch::place()
 {
     std::string placer = str_or_default(settings, id("placer"), defaultPlacer);
 
+    place_ripple();
+
     if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
         cfg.criticalityExponent = 7;

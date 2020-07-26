@@ -1616,6 +1616,8 @@ struct Arch : BaseCtx
     static const std::string defaultRouter;
     static const std::vector<std::string> availableRouters;
 
+    void place_ripple();
+
     // -------------------------------------------------
     template <typename Id> const TileTypeInfoPOD &locInfo(Id &id) const
     {

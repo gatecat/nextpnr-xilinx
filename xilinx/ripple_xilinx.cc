@@ -22,13 +22,14 @@
 NEXTPNR_NAMESPACE_BEGIN
 namespace Ripple {
 
-class RippleXilinx : ArchFunctions
+class RippleXilinx : public ArchFunctions
 {
   public:
     RippleXilinx(Context *ctx) : ctx(ctx){};
     DeviceInfo getDeviceInfo() override;
     double getCellArea(const CellInfo *cell) override;
     Loc getSwitchbox(Loc cell_loc) override;
+    void doBlePacking() override{};
 
   private:
     Context *ctx;
@@ -109,4 +110,13 @@ Loc RippleXilinx::getSwitchbox(Loc cell_loc)
 }
 
 } // namespace Ripple
+
+void Arch::place_ripple()
+{
+    using namespace Ripple;
+    RippleXilinx xlnx(getCtx());
+    RippleFPGAPlacer placer(getCtx(), &xlnx);
+    placer.run();
+}
+
 NEXTPNR_NAMESPACE_END
