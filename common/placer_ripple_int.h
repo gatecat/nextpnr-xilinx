@@ -125,6 +125,10 @@ struct DeviceInfo
 
     // Hints for SLICE elements. There may be a more generic way of doing this in the long term
     std::unordered_set<IdString> lut_types, dff_types, slice_misc_types;
+
+    // IO buffer types, that are not solved by the solver but randomly placed
+    // as a crude way of preventing singular matrices
+    std::unordered_set<IdString> iobuf_types;
 };
 
 class ArchFunctions
@@ -183,6 +187,8 @@ struct RippleFPGAPlacer
     int get_rr_cost(Loc a, Loc b);
 
     Loc get_cell_location(const CellInfo *cell);
+
+    bool has_connectivity(RippleCell &cell);
 
     struct GridLocation
     {

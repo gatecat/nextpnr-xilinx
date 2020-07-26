@@ -20,10 +20,10 @@
  *  Chak-Wa Pui, Gengjie Chen, Wing-Kai Chow, Ka-Chun Lam, Jian Kuang,Peishan Tu, Hang Zhang, Evangeline F. Y. Young,
  * Bei Yu https://chengengjie.github.io/papers/C2-ICCAD16-RippleFPGA.pdf
  *
-*/
+ */
 
-#include "placer_ripple_int.h"
 #include "log.h"
+#include "placer_ripple_int.h"
 NEXTPNR_NAMESPACE_BEGIN
 
 namespace Ripple {
@@ -63,7 +63,8 @@ void RippleFPGAPlacer::place_constraints()
                 log_error("Error placing cell '%s' on bel '%s'\n", ctx->nameOf(primary), ctx->nameOfBel(bel));
 
             if (!check_placement(i))
-                log_error("Validity check failed placing cell '%s' on bel '%s'\n", ctx->nameOf(primary), ctx->nameOfBel(bel));
+                log_error("Validity check failed placing cell '%s' on bel '%s'\n", ctx->nameOf(primary),
+                          ctx->nameOfBel(bel));
 
             cell.locked = true;
             placed_cells++;
@@ -72,6 +73,63 @@ void RippleFPGAPlacer::place_constraints()
     log_info("Placed %d cells based on constraints.\n", int(placed_cells));
     ctx->yield();
 }
+
+void RippleFPGAPlacer::place_initial()
+{
+    std::unordered_map<IdString, std::deque<BelId>> available_bels;
+    for (auto bel : ctx->getBels()) {
+        if (!ctx->checkBelAvail(bel))
+            continue;
+        available_bels[ctx->getBelType(bel)].push_back(bel);
+    }
+    for (size_t i = 0; i < GetSize(cells); i++) {
+        auto &cell = cells.at(i);
+        bool placed = false;
+        while (!placed) {
+            if (!available_bels.count(cell.type) || available_bels.at(cell.type).empty())
+                log_error("Unable to place cell '%s', no Bels remaining of type '%s'\n",
+                          ctx->nameOf(cell.base_cells.at(0).ci), ctx->nameOf(cell.type));
+            BelId bel = available_bels.at(cell.type).back();
+            available_bels.at(cell.type).pop_back();
+            Loc loc = ctx->getBelLocation(bel);
+            cell.solver_x = loc.x;
+            cell.solver_y = loc.y;
+            cell.placed_x = loc.x;
+            cell.placed_y = loc.y;
+            if (has_connectivity(cell) && !d.iobuf_types.count(cell.type)) {
+                placed = true;
+            } else {
+                // We place and lock the cell here
+                if (!place_cell(i, loc)) {
+                    // Unable to place
+                    available_bels.at(cell.type).push_front(bel);
+                    continue;
+                }
+                if (!check_placement(i)) {
+                    // Invalid placement
+                    ripup_cell(i);
+                    available_bels.at(cell.type).push_front(bel);
+                    continue;
+                }
+                cell.locked = true;
+                placed = true;
+            }
+        }
+    }
 }
+
+bool RippleFPGAPlacer::has_connectivity(RippleCell &cell)
+{
+    for (auto &subcell : cell.base_cells) {
+        for (auto port : subcell.ci->ports) {
+            if (port.second.net != nullptr && port.second.net->driver.cell != nullptr &&
+                !port.second.net->users.empty())
+                return true;
+        }
+    }
+    return false;
+}
+
+} // namespace Ripple
 
 NEXTPNR_NAMESPACE_END

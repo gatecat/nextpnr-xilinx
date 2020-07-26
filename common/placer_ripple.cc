@@ -81,10 +81,12 @@ void RippleFPGAPlacer::init_cells()
         c.macro_extent.x1 = 0;
         c.macro_extent.y1 = 0;
         c.is_packed = false;
+        c.is_macro = false;
         c.index = root;
         process_chain(root, ci, 0, 0);
     }
 }
+
 void RippleFPGAPlacer::process_chain(int root, CellInfo *ci, int dx, int dy)
 {
     auto &c = cells[root];
@@ -106,50 +108,6 @@ void RippleFPGAPlacer::process_chain(int root, CellInfo *ci, int dx, int dy)
                       (ch->constr_y == ch->UNCONSTR) ? 0 : ch->constr_y);
         c.is_macro = true;
     }
-}
-void RippleFPGAPlacer::place_constraints()
-{
-    int placed_cells = 0;
-    // Initial constraints placer
-    for (auto &cell_entry : ctx->cells) {
-        CellInfo *cell = cell_entry.second.get();
-        auto loc = cell->attrs.find(ctx->id("BEL"));
-        if (loc != cell->attrs.end()) {
-            std::string loc_name = loc->second.as_string();
-            BelId bel = ctx->getBelByName(ctx->id(loc_name));
-            if (bel == BelId()) {
-                log_error("No Bel named \'%s\' located for "
-                          "this chip (processing BEL attribute on \'%s\')\n",
-                          loc_name.c_str(), cell->name.c_str(ctx));
-            }
-
-            IdString bel_type = ctx->getBelType(bel);
-            if (bel_type != cell->type) {
-                log_error("Bel \'%s\' of type \'%s\' does not match cell "
-                          "\'%s\' of type \'%s\'\n",
-                          loc_name.c_str(), bel_type.c_str(ctx), cell->name.c_str(ctx), cell->type.c_str(ctx));
-            }
-            if (!ctx->isValidBelForCell(cell, bel)) {
-                log_error("Bel \'%s\' of type \'%s\' is not valid for cell "
-                          "\'%s\' of type \'%s\'\n",
-                          loc_name.c_str(), bel_type.c_str(ctx), cell->name.c_str(ctx), cell->type.c_str(ctx));
-            }
-
-            auto bound_cell = ctx->getBoundBelCell(bel);
-            if (bound_cell) {
-                log_error("Cell \'%s\' cannot be bound to bel \'%s\' since it is already bound to cell \'%s\'\n",
-                          cell->name.c_str(ctx), loc_name.c_str(), bound_cell->name.c_str(ctx));
-            }
-
-            ctx->bindBel(bel, cell, STRENGTH_USER);
-            Loc loc = ctx->getBelLocation(bel);
-            cells[cell_index.at(cell->udata).cell].placed_x = loc.x;
-            cells[cell_index.at(cell->udata).cell].placed_y = loc.y;
-            cells[cell_index.at(cell->udata).cell].locked = true;
-            placed_cells++;
-        }
-    }
-    log_info("Placed %d cells based on constraints.\n", placed_cells);
 }
 
 Loc RippleFPGAPlacer::get_cell_location(const CellInfo *cell)
