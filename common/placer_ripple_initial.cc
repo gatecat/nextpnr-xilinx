@@ -82,7 +82,7 @@ void RippleFPGAPlacer::place_initial()
             continue;
         available_bels[ctx->getBelType(bel)].push_back(bel);
     }
-    for (size_t i = 0; i < GetSize(cells); i++) {
+    for (int i = 0; i < GetSize(cells); i++) {
         auto &cell = cells.at(i);
         bool placed = false;
         while (!placed) {

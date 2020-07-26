@@ -206,7 +206,7 @@ aux_source_directory(common/ COMMON_SRC_FILES)
 aux_source_directory(json/ JSON_PARSER_FILES)
 aux_source_directory(3rdparty/json11 EXT_JSON11_FILES)
 aux_source_directory(frontend/ FRONTEND_FILES)
-aux_source_directory(3rdparty/hypergraph_part EXT_HYPERGRAPH_FILES)
+set(EXT_HYPERGRAPH_FILES 3rdparty/hypergraph_part/hypergraph.cc 3rdparty/hypergraph_part/hypergraph_part.cc)
 
 set(COMMON_FILES ${COMMON_SRC_FILES} ${EXT_JSON11_FILES} ${EXT_HYPERGRAPH_FILES} ${JSON_PARSER_FILES} ${FRONTEND_FILES})
 set(CMAKE_BUILD_TYPE Release)

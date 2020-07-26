@@ -372,7 +372,10 @@ struct RippleFPGAPlacer
     void setup_detail();
     NetBoundingBox get_net_bounds(NetInfo *net);
     bool find_move_conflicts(DetailMove &move);
-    bool cost_ignore_net(NetInfo *net);
+    bool cost_ignore_net(NetInfo *net)
+    { /* STUB */
+        return false;
+    }
     void update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel);
     Loc move_get_cell_loc(DetailMove &move, int i);
     void compute_move_costs(DetailMove &move);
