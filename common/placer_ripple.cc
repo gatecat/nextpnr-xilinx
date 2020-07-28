@@ -124,10 +124,12 @@ Loc RippleFPGAPlacer::get_cell_location(const CellInfo *cell)
 
 void RippleFPGAPlacer::run()
 {
+    ctx->lock();
     init_cells();
     place_constraints();
     place_initial();
     lower_bound_solver(1e-2, 0.1, 10);
+    ctx->unlock();
 }
 
 } // namespace Ripple

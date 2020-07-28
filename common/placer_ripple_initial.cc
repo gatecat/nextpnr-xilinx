@@ -85,6 +85,9 @@ void RippleFPGAPlacer::place_initial()
     for (int i = 0; i < GetSize(cells); i++) {
         auto &cell = cells.at(i);
         bool placed = false;
+        // IO etc may already have been placed by the constraints placer; skip these
+        if (cell.placed)
+            continue;
         while (!placed) {
             if (!available_bels.count(cell.type) || available_bels.at(cell.type).empty())
                 log_error("Unable to place cell '%s', no Bels remaining of type '%s'\n",
