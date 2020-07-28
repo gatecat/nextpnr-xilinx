@@ -194,11 +194,29 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
         solve_equations(false);
         solve_equations(true);
     }
+    for (auto &cell : cells) {
+        log_info("%s: (%d, %d)\n", ctx->nameOf(cell.base_cells[0].ci), cell.placed_x, cell.placed_y);
+    }
 }
 
 void RippleFPGAPlacer::setup_spreader_grid()
 {
+
+    for (auto &cell : cells) {
+        IdString site_type;
+        if (d.celltype_to_sitetype.count(cell.type))
+            site_type = d.celltype_to_sitetype.at(cell.type);
+        else
+            site_type = cell.type;
+        if (!sitetype_to_idx.count(site_type)) {
+            sitetype_to_idx[site_type] = GetSize(site_types);
+            site_types.push_back(site_type);
+            spread_site_data.emplace_back();
+        }
+    }
     for (auto loc : grid) {
+        loc.value.per_type.resize(GetSize(site_types));
+
         for (auto &type : loc.value.per_type) {
             type.avail_area = 0;
             type.cell_area = 0;
@@ -646,6 +664,21 @@ void RippleFPGAPlacer::cut_cells_by_area(const std::vector<int> &cells_in, std::
         accum_area += cells.at(c).area;
     }
     std::reverse(lo.begin(), lo.end());
+}
+
+void RippleFPGAPlacer::upper_bound_spread()
+{
+    setup_spreader_grid();
+    setup_spreader_bins(2, 2);
+    find_overfilled_regions();
+    for (int i = 0; i < GetSize(spread_site_data); i++) {
+        auto &st = spread_site_data.at(i);
+        for (auto &of : st.overfull) {
+            log_info("spreading cells of type '%s' in overfull region (%d, %d, %d, %d)", ctx->nameOf(site_types.at(i)),
+                     of.x0, of.y0, of.x1, of.y1);
+            spread_cells_in_region(i, of);
+        }
+    }
 }
 
 } // namespace Ripple

@@ -129,6 +129,7 @@ void RippleFPGAPlacer::run()
     place_constraints();
     place_initial();
     lower_bound_solver(1e-2, 0.1, 10);
+    upper_bound_spread();
     ctx->unlock();
 }
 
