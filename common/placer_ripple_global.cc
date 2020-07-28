@@ -48,6 +48,7 @@
  *
  */
 
+#include "log.h"
 #include "nextpnr.h"
 #include "place_common.h"
 #include "placer_ripple_int.h"
@@ -121,12 +122,13 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
             NPNR_ASSERT(ubport != nullptr);
 
             auto stamp_equation = [&](PortRef &var, PortRef &eqn, double weight) {
-                if (cell2var.at(eqn.cell->udata) == -1)
+                int row = cell2var.at(cell_index.at(eqn.cell->udata).cell);
+                if (row == -1)
                     return;
-                int row = cell2var.at(eqn.cell->udata);
+                int col = cell2var.at(cell_index.at(var.cell->udata).cell);
                 int v_pos = cell_pos(var.cell, yaxis);
-                if (cell2var.at(var.cell->udata) != -1) {
-                    eq.add_coeff(row, cell2var.at(var.cell->udata), weight);
+                if (col != -1) {
+                    eq.add_coeff(row, col, weight);
                 } else {
                     eq.add_rhs(row, -v_pos * weight);
                 }

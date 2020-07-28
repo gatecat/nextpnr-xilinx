@@ -99,7 +99,7 @@ struct RippleCell
 // cell is the index of the RippleCell, subcell is the index into RippleCell::base_cells
 struct RippleCellIndex
 {
-    RippleCellIndex(int cell, int subcell) : cell(cell), subcell(){};
+    RippleCellIndex(int cell, int subcell) : cell(cell), subcell(subcell){};
     int cell, subcell;
 };
 
