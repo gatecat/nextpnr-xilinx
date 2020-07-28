@@ -34,11 +34,12 @@ namespace Ripple {
 template <typename T> class indexed_store
 {
   private:
+    // This should move to using std::optional at some point
     class slot
     {
       private:
-        unsigned char storage[sizeof(T)];
         bool active;
+        alignas(T) unsigned char storage[sizeof(T)];
         int next_free;
         inline T &obj() { return reinterpret_cast<T &>(storage); }
         inline const T &obj() const { return reinterpret_cast<const T &>(storage); }
@@ -46,11 +47,22 @@ template <typename T> class indexed_store
 
       public:
         slot() : active(false), next_free(std::numeric_limits<int>::max()){};
+        slot(const slot &other) : active(other.active), next_free(other.next_free)
+        {
+            if (active)
+                ::new (static_cast<void *>(&storage)) T(other.obj());
+        }
+        slot(slot &&other) : active(other.active), next_free(other.next_free)
+        {
+            if (active)
+                ::new (static_cast<void *>(&storage)) T(std::move(other.obj()));
+        };
+
         template <class... Args> void create(Args &&... args)
         {
             NPNR_ASSERT(!active);
             active = true;
-            ::new (static_cast<void *>(&storage)) T(std::forward<Args>(args)...);
+            ::new (static_cast<void *>(&storage)) T(std::forward<Args &&>(args)...);
         }
         bool empty() const { return !active; }
         T &get()
@@ -85,14 +97,14 @@ template <typename T> class indexed_store
     {
         if (first_free == GetSize(slots)) {
             slots.emplace_back();
-            slots.back().create(std::forward<Args>(args)...);
+            slots.back().create(std::forward<Args &&>(args)...);
             ++first_free;
-            return GetSize(slots);
+            return GetSize(slots) - 1;
         } else {
             int idx = first_free;
             auto &slot = slots.at(idx);
             first_free = slot.next_free;
-            slot.create(std::forward<Args>(args)...);
+            slot.create(std::forward<Args &&>(args)...);
             return idx;
         }
     }
