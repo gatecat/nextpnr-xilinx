@@ -189,6 +189,8 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
     // Main loop
     for (int iter = 0; iter < iters; ++iter) {
         // FIXME: parallelise
+        eqx.reset();
+        eqy.reset();
         build_equations(false);
         build_equations(true);
         solve_equations(false);
@@ -277,6 +279,7 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
             auto &bin = s.bins.at(loc.x / bin_w, loc.y / bin_h);
             bin.avail_area += l.avail_area;
             bin.target_density += l.target_density / double(bin_w * bin_h);
+            bin.cell_area += l.cell_area;
         }
 
         double scale = 1.0;
@@ -436,8 +439,8 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
             break;
         case UP:
             if (of.y1 < (ny - 1) && (dis_box_ratio || (dy_cost <= dx_cost))) {
-                of.x1++;
-                box_w += 1.0;
+                of.y1++;
+                box_h += 1.0;
                 for (int x = of.x0; x <= of.x1; x++) {
                     auto &bin2 = spread_site_data.at(st).bins.at(x, of.y1);
                     of.expanded_avail_area += bin2.avail_area;
@@ -491,7 +494,7 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
 
     // Determine areas for each 1-bin wide/tall 'slither'
     for (int x = box.x0; x <= box.x1; x++) {
-        for (int y = box.x0; y <= box.x1; y++) {
+        for (int y = box.y0; y <= box.y1; y++) {
             double area = s.bins.at(x, y).target_area;
             target_areas.at(ydir ? (y - box.y0) : (x - box.x0)) += area;
             total_area += area;
@@ -674,8 +677,8 @@ void RippleFPGAPlacer::upper_bound_spread()
     for (int i = 0; i < GetSize(spread_site_data); i++) {
         auto &st = spread_site_data.at(i);
         for (auto &of : st.overfull) {
-            log_info("spreading cells of type '%s' in overfull region (%d, %d, %d, %d)", ctx->nameOf(site_types.at(i)),
-                     of.x0, of.y0, of.x1, of.y1);
+            log_info("spreading cells of type '%s' in overfull region (%d, %d, %d, %d)\n",
+                     ctx->nameOf(site_types.at(i)), of.x0, of.y0, of.x1, of.y1);
             spread_cells_in_region(i, of);
         }
     }

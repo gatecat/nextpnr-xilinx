@@ -77,6 +77,8 @@ bool RippleFPGAPlacer::place_cell(int cell, Loc root, DetailMove *move_to_update
         return false;
     }
     c.root_loc = root;
+    c.placed_x = root.x;
+    c.placed_y = root.y;
     c.placed = true;
     return true;
 }
