@@ -196,9 +196,11 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
         solve_equations(false);
         solve_equations(true);
     }
+#if 0
     for (auto &cell : cells) {
         log_info("%s: (%d, %d)\n", ctx->nameOf(cell.base_cells[0].ci), cell.placed_x, cell.placed_y);
     }
+#endif
 }
 
 void RippleFPGAPlacer::setup_spreader_grid()
@@ -482,7 +484,7 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
     // Sort input cells
     std::sort(box.spread_cells.begin(), box.spread_cells.end(), [&](int cell0, int cell1) {
         auto &c0 = cells.at(cell0);
-        auto &c1 = cells.at(cell0);
+        auto &c1 = cells.at(cell1);
         return ydir ? (c0.placed_y < c1.placed_y) : (c0.placed_x < c1.placed_x);
     });
 
@@ -681,6 +683,34 @@ void RippleFPGAPlacer::upper_bound_spread()
                      ctx->nameOf(site_types.at(i)), of.x0, of.y0, of.x1, of.y1);
             spread_cells_in_region(i, of);
         }
+    }
+}
+
+int RippleFPGAPlacer::total_hpwl()
+{
+    int hpwl = 0;
+    for (auto net : sorted(ctx->nets)) {
+        NetInfo *ni = net.second;
+        if (ni->driver.cell == nullptr)
+            continue;
+        Bounds bb;
+        Loc l = get_cell_location(ni->driver.cell);
+        bb.expand(l);
+        for (auto &usr : ni->users) {
+            bb.expand(get_cell_location(usr.cell));
+        }
+        hpwl += bb.hpwl();
+    }
+    return hpwl;
+}
+
+void RippleFPGAPlacer::place_global(int stage)
+{
+    for (int iter = 0; iter < 10; iter++) {
+        lower_bound_solver(1e-5, 0.2, 10);
+        log_info("iter %d lower-bound HPWL: %d\n", iter, total_hpwl());
+        upper_bound_spread();
+        log_info("iter %d upper-bound HPWL: %d\n", iter, total_hpwl());
     }
 }
 

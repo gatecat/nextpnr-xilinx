@@ -356,6 +356,8 @@ struct RippleFPGAPlacer
     void spread_cells_in_region(int site_type, OverfilledRegion &of);
     void cut_cells_by_area(const std::vector<int> &cells_in, std::vector<int> &lo, std::vector<int> &hi, double ratio);
 
+    int total_hpwl();
+
     bool place_cell(int cell, Loc root, DetailMove *move_to_update = nullptr);
     void ripup_cell(int cell);
     bool check_placement(int cell);
