@@ -220,7 +220,7 @@ struct RippleFPGAPlacer
         double avail_area = 0.0f;
         double cell_area = 0.0f;
         double target_area = 0.0f;
-        double target_density = 0.0f;
+        double target_density = 1.0f;
         bool is_overfull = false;
         std::vector<RippleCellIndex> placed_cells;
     };
@@ -271,7 +271,7 @@ struct RippleFPGAPlacer
 
     std::vector<SpreaderSiteType> spread_site_data;
 
-    double expand_box_ratio = 0.0, expand_box_limit = 0.0;
+    double expand_box_ratio = 0.0, expand_box_limit = 100.0;
 
     int min_expand_size = 1;
 

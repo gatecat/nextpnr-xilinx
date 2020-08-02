@@ -293,10 +293,10 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
         // Update per-bin target area
         for (auto bin_kv : s.bins) {
             auto &bin = bin_kv.value;
-            if (bin.target_density * scale > bin.avail_area)
+            if ((bin.target_area * scale) > bin.avail_area)
                 bin.target_area = bin.avail_area;
             else
-                bin.target_area = bin.avail_area * bin.target_area * scale;
+                bin.target_area = bin.avail_area * bin.target_density * scale;
         }
     }
 }
@@ -453,6 +453,7 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
             direction = LEFT;
             break;
         }
+        log_info("spread progress %f / %f\n", of.expanded_cell_area, of.expanded_target_area);
         bool fully_expanded_x = (of.x0 == 0 && of.x1 == (nx - 1));
         bool fully_expanded_y = (of.y0 == 0 && of.y1 == (ny - 1));
         if (dis_box_ratio) {
@@ -515,6 +516,7 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
         --hi_start;
         --hi_end;
     }
+    log_info("lo %d %d hi %d %d\n", lo_start, lo_end, hi_start, hi_end);
     if (lo_end == hi_start) {
         // Not enough bins with non-zero useful area to do spreading
         return false;
@@ -622,6 +624,9 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
     boxes.push(std::move(sbox));
     while (!boxes.empty()) {
         auto curr = std::move(boxes.front());
+#if 1
+        log_info("x0 %d y0 %d x1 %d y1 %d\n", curr.x0, curr.y0, curr.x1, curr.y1);
+#endif
         boxes.pop();
         split.clear();
         if (((curr.x1 - curr.x0) < (min_expand_size - 1)) || ((curr.y1 - curr.y0) < (min_expand_size - 1)))
@@ -643,6 +648,10 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
                 if (!r.spread_cells.empty() && r.level > 0)
                     boxes.push(r);
             }
+        } else {
+#if 1
+        log_info("***** failed\n");
+#endif
         }
     }
     // Update placements
