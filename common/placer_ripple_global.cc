@@ -299,6 +299,23 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
                 bin.target_area = bin.avail_area * bin.target_density * scale;
         }
     }
+    for (int i = 0; i < GetSize(cells); i++) {
+        auto &c = cells.at(i);
+        if (c.locked)
+            continue;
+        IdString type = c.type;
+        if (d.celltype_to_sitetype.count(type))
+            type = d.celltype_to_sitetype.at(type);
+        int type_idx = sitetype_to_idx.at(type);
+        auto &s = spread_site_data.at(type_idx);
+        for (int j = 0; j < GetSize(c.base_cells); j++) {
+            auto &sc = c.base_cells.at(j);
+            int bx = (c.placed_x + sc.offset_x) / bin_w;
+            int by = (c.placed_y + sc.offset_y) / bin_h;
+            auto &bin = s.bins.at(bx, by);
+            bin.placed_cells.emplace_back(i, j);
+        }
+    }
 }
 
 void RippleFPGAPlacer::reset_spread_cell_areas(int site_type, int x0, int y0, int x1, int y1)
@@ -328,7 +345,7 @@ void RippleFPGAPlacer::update_spread_cell_area(int site_type, int x0, int y0, in
         auto &c = cells.at(cell);
         for (int i = 0; i < c.base_cells.size(); i++) {
             auto &sc = c.base_cells.at(i);
-            int type = sitetype_to_idx.at(d.celltype_to_sitetype.at(sc.ci->type));
+            int type = sitetype_to_idx.at(d.celltype_to_sitetype.at(c.type));
             int bx = (c.placed_x + sc.offset_x) / bin_w;
             int by = (c.placed_y + sc.offset_y) / bin_h;
             if (bx < x0 || bx > x1 || by < y0 || by > y1)
@@ -453,7 +470,7 @@ void RippleFPGAPlacer::expand_overfilled_region(int st, OverfilledRegion &of)
             direction = LEFT;
             break;
         }
-        log_info("spread progress %f / %f\n", of.expanded_cell_area, of.expanded_target_area);
+        // log_info("spread progress %f / %f\n", of.expanded_cell_area, of.expanded_target_area);
         bool fully_expanded_x = (of.x0 == 0 && of.x1 == (nx - 1));
         bool fully_expanded_y = (of.y0 == 0 && of.y1 == (ny - 1));
         if (dis_box_ratio) {
@@ -516,7 +533,6 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
         --hi_start;
         --hi_end;
     }
-    log_info("lo %d %d hi %d %d\n", lo_start, lo_end, hi_start, hi_end);
     if (lo_end == hi_start) {
         // Not enough bins with non-zero useful area to do spreading
         return false;
@@ -533,9 +549,13 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
             hi_area += target_areas.at(hi_start - start);
         }
     }
+    log_info("lo %d %d hi %d %d\n", lo_start, lo_end, hi_start, hi_end);
+    log_info("lo_area=%f hi_area=%f\n", lo_area, hi_area);
 
     std::vector<int> lo_cells, hi_cells;
     cut_cells_by_area(box.spread_cells, lo_cells, hi_cells, lo_area / total_area);
+    log_info("spread_cells=%d lo_cells=%d hi_cells=%d\n", GetSize(box.spread_cells), GetSize(lo_cells),
+             GetSize(hi_cells));
 
     auto spread_cut_cells = [&](const std::vector<int> &box_cells, int box_start, int box_end, bool lo) {
         int cell_start = 0, cell_end = 0;
@@ -645,12 +665,14 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
             for (auto &r : split) {
                 r.dir = other_dir;
                 // Add result to queue
+                log_info("   add to queue: %d %d %d %d, %d, %d\n", r.x0, r.y0, r.x1, r.y1, r.level,
+                         GetSize(r.spread_cells));
                 if (!r.spread_cells.empty() && r.level > 0)
                     boxes.push(r);
             }
         } else {
 #if 1
-        log_info("***** failed\n");
+            log_info("***** failed\n");
 #endif
         }
     }
