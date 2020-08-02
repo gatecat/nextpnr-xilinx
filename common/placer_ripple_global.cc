@@ -343,14 +343,17 @@ void RippleFPGAPlacer::update_spread_cell_area(int site_type, int x0, int y0, in
 
     for (auto cell : update_cells) {
         auto &c = cells.at(cell);
+        IdString type = c.type;
+        if (d.celltype_to_sitetype.count(type))
+            type = d.celltype_to_sitetype.at(type);
+        int type_idx = sitetype_to_idx.at(type);
         for (int i = 0; i < c.base_cells.size(); i++) {
             auto &sc = c.base_cells.at(i);
-            int type = sitetype_to_idx.at(d.celltype_to_sitetype.at(c.type));
             int bx = (c.placed_x + sc.offset_x) / bin_w;
             int by = (c.placed_y + sc.offset_y) / bin_h;
             if (bx < x0 || bx > x1 || by < y0 || by > y1)
                 continue;
-            auto &bin = spread_site_data.at(type).bins.at(bx, by);
+            auto &bin = spread_site_data.at(type_idx).bins.at(bx, by);
             bin.cell_area += f->getCellArea(sc.ci);
             bin.placed_cells.emplace_back(cell, i);
         }
@@ -565,16 +568,18 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
             double accum_area = 0.0;
             int bin_cells = 0;
             cell_end = cell_start;
-            double orig_lo = ydir ? cells.at(cell_start).solver_y : cells.at(cell_start).solver_x;
+            auto &start_cell = cells.at(box_cells.at(cell_start));
+            double orig_lo = ydir ? start_cell.solver_y : start_cell.solver_x;
             double orig_hi = orig_lo;
             // Determine number of cells in bin
-            while (cell_start < GetSize(box_cells) &&
+            while (cell_end < GetSize(box_cells) &&
                    ((i == (lo ? box_start : box_end)) || accum_area < target_areas.at(i - start))) {
-                accum_area += cells.at(cell_end).area;
+                auto &end_cell = cells.at(box_cells.at(cell_end));
+                accum_area += end_cell.area;
                 if (lo)
-                    orig_lo = ydir ? cells.at(cell_end).solver_y : cells.at(cell_end).solver_x;
+                    orig_lo = ydir ? end_cell.solver_y : end_cell.solver_x;
                 else
-                    orig_hi = ydir ? cells.at(cell_end).solver_y : cells.at(cell_end).solver_x;
+                    orig_hi = ydir ? end_cell.solver_y : end_cell.solver_x;
                 bin_cells++;
                 cell_end++;
             }
@@ -586,7 +591,7 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
                                                      : (bin_w - (bin_w / double(bin_cells))));
                 double spread_scale = (spread_hi - spread_lo) / std::max<double>(orig_hi - orig_lo, 1.0);
                 for (int j = cell_start; j < cell_end; j++) {
-                    auto &c = cells.at(j);
+                    auto &c = cells.at(box_cells.at(j));
                     if (ydir) {
                         c.solver_y = spread_lo + (c.solver_y - orig_lo) * spread_scale;
                         c.placed_y = std::min(std::max(int(c.solver_y), 0), d.height);
