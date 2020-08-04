@@ -266,11 +266,11 @@ template <typename T> class array2d
     struct iterator
     {
       public:
-        entry operator*() { return {x, y, base.at(x, y)}; }
+        entry operator*() { return {x, y, base->at(x, y)}; }
         inline iterator operator++()
         {
             ++x;
-            if (x >= base.width()) {
+            if (x >= base->width()) {
                 x = 0;
                 ++y;
             }
@@ -280,7 +280,7 @@ template <typename T> class array2d
         {
             iterator prior(x, y, base);
             ++x;
-            if (x >= base.width()) {
+            if (x >= base->width()) {
                 x = 0;
                 ++y;
             }
@@ -290,9 +290,9 @@ template <typename T> class array2d
         inline bool operator==(const iterator &other) const { return other.x == x && other.y == y; }
 
       private:
-        iterator(int x, int y, array2d<T> &base) : x(x), y(y), base(base){};
+        iterator(int x, int y, array2d<T> &base) : x(x), y(y), base(&base){};
         int x, y;
-        array2d<T> &base;
+        array2d<T> *base;
         friend class array2d;
     };
     iterator begin() { return {0, 0, *this}; }

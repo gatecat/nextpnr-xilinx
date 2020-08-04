@@ -106,7 +106,10 @@ Loc RippleXilinx::getSwitchbox(Loc cell_loc)
     if (site == -1)
         return Loc(cell_loc.x, cell_loc.y, 0);
     auto site_data = ctx->chip_info->tile_insts[bel.tile].site_insts[site];
-    return Loc(site_data.inter_x, site_data.inter_y, 0);
+    if (site_data.inter_x != -1)
+        return Loc(site_data.inter_x, site_data.inter_y, 0);
+    else
+        return Loc(cell_loc.x, cell_loc.y, 0);
 }
 
 } // namespace Ripple
