@@ -137,6 +137,8 @@ template <typename T> class indexed_store
     // Total size of the container
     int size() const { return GetSize(slots); }
 
+    class enumerated_iterator;
+
     // Iterate over items
     class iterator
     {
@@ -186,8 +188,12 @@ template <typename T> class indexed_store
         enumerated_iterator(const iterator &base) : base(base){};
         inline bool operator!=(const enumerated_iterator &other) const { return other.base != base; }
         inline bool operator==(const enumerated_iterator &other) const { return other.base == base; }
-        inline iterator operator++() { ++base; }
-        inline iterator operator++(int)
+        inline enumerated_iterator operator++()
+        {
+            ++base;
+            return *this;
+        }
+        inline enumerated_iterator operator++(int)
         {
             iterator prior(*this);
             ++base;
@@ -204,7 +210,7 @@ template <typename T> class indexed_store
         enumerated_iterator end() { return m_end; }
     };
 
-    enumerated_range enumerate() { return {begin(), end()}; }
+    enumerated_range enumerate() { return enumerated_range{begin(), end()}; }
 };
 
 // A simple internal representation for a sparse system of equations Ax = rhs

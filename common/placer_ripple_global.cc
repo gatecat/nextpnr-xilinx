@@ -299,8 +299,8 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
                 bin.target_area = bin.avail_area * bin.target_density * scale;
         }
     }
-    for (int i = 0; i < GetSize(cells); i++) {
-        auto &c = cells.at(i);
+    for (auto cell_entry : cells.enumerate()) {
+        auto &c = cell_entry.value;
         if (c.locked)
             continue;
         IdString type = c.type;
@@ -308,12 +308,12 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
             type = d.celltype_to_sitetype.at(type);
         int type_idx = sitetype_to_idx.at(type);
         auto &s = spread_site_data.at(type_idx);
-        for (int j = 0; j < GetSize(c.base_cells); j++) {
-            auto &sc = c.base_cells.at(j);
+        for (auto sc_entry : c.base_cells.enumerate()) {
+            auto &sc = sc_entry.value;
             int bx = (c.placed_x + sc.offset_x) / bin_w;
             int by = (c.placed_y + sc.offset_y) / bin_h;
             auto &bin = s.bins.at(bx, by);
-            bin.placed_cells.emplace_back(i, j);
+            bin.placed_cells.emplace_back(cell_entry.index, sc_entry.index);
         }
     }
 }
@@ -347,15 +347,15 @@ void RippleFPGAPlacer::update_spread_cell_area(int site_type, int x0, int y0, in
         if (d.celltype_to_sitetype.count(type))
             type = d.celltype_to_sitetype.at(type);
         int type_idx = sitetype_to_idx.at(type);
-        for (int i = 0; i < c.base_cells.size(); i++) {
-            auto &sc = c.base_cells.at(i);
+        for (auto sc_entry : c.base_cells.enumerate()) {
+            auto &sc = sc_entry.value;
             int bx = (c.placed_x + sc.offset_x) / bin_w;
             int by = (c.placed_y + sc.offset_y) / bin_h;
             if (bx < x0 || bx > x1 || by < y0 || by > y1)
                 continue;
             auto &bin = spread_site_data.at(type_idx).bins.at(bx, by);
             bin.cell_area += f->getCellArea(sc.ci);
-            bin.placed_cells.emplace_back(cell, i);
+            bin.placed_cells.emplace_back(cell, sc_entry.index);
         }
     }
 }
