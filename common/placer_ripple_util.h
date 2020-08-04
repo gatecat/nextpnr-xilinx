@@ -88,6 +88,7 @@ template <typename T> class indexed_store
                 obj().~T();
         }
     };
+
     std::vector<slot> slots;
     int first_free = 0;
 
@@ -164,9 +165,46 @@ template <typename T> class indexed_store
             return prior;
         }
         T &operator*() { return base->at(index); }
+        friend class enumerated_iterator;
     };
     iterator begin() { return iterator{this, 0}; }
     iterator end() { return iterator{this, GetSize(slots)}; }
+
+    struct enumerated_item
+    {
+        enumerated_item(int index, T &value) : index(index), value(value){};
+        int index;
+        T &value;
+    };
+
+    class enumerated_iterator
+    {
+      private:
+        iterator base;
+
+      public:
+        enumerated_iterator(const iterator &base) : base(base){};
+        inline bool operator!=(const enumerated_iterator &other) const { return other.base != base; }
+        inline bool operator==(const enumerated_iterator &other) const { return other.base == base; }
+        inline iterator operator++() { ++base; }
+        inline iterator operator++(int)
+        {
+            iterator prior(*this);
+            ++base;
+            return prior;
+        }
+        enumerated_item operator*() { return enumerated_item{base.index, *base}; }
+    };
+
+    struct enumerated_range
+    {
+        enumerated_range(const iterator &begin, const iterator &end) : m_begin(begin), m_end(end){};
+        enumerated_iterator m_begin, m_end;
+        enumerated_iterator begin() { return m_begin; }
+        enumerated_iterator end() { return m_end; }
+    };
+
+    enumerated_range enumerate() { return {begin(), end()}; }
 };
 
 // A simple internal representation for a sparse system of equations Ax = rhs
