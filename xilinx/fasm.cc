@@ -783,26 +783,11 @@ struct FasmBackend
             push("ISERDES");
             write_bit("IN_USE");
             int width = int_or_default(ci->params, ctx->id("DATA_WIDTH"), 8);
-            if (width == 8 || width == 3)
-                write_bit("DATA_WIDTH.W" + std::to_string(width));
-            else if (width == 4 || width == 6)
-                write_bit("DATA_WIDTH.W4_6");
-            else if (width == 5 || width == 7)
-                write_bit("DATA_WIDTH.W5_7");
-            if (str_or_default(ci->params, ctx->id("DATA_RATE"), "DDR") == "SDR")
-                write_bit("DATA_RATE.SDR");
-            if (int_or_default(ci->params, ctx->id("NUM_CE"), 1) == 2)
-                write_bit("NUM_CE.N2");
-            std::string type = str_or_default(ci->params, ctx->id("INTERFACE_TYPE"), "NETWORKING");
-            if (type == "MEMORY_DDR3")
-                write_bit("INTERFACE_TYPE.MEMORY_DDR3");
-            else if (type == "MEMORY") {
-            } else {
-                write_bit("INTERFACE_TYPE.Z_MEMORY");
-                write_bit("INTERFACE_TYPE.NOT_MEMORY");
-            }
-            if (type == "OVERSAMPLE")
-                write_bit("INTERFACE_TYPE.OVERSAMPLE");
+            std::string mode = str_or_default(ci->params, ctx->id("INTERFACE_TYPE"), "NETWORKING");
+            std::string rate = str_or_default(ci->params, ctx->id("DATA_RATE"), "DDR");
+            write_bit(mode + "." + rate + ".W" + std::to_string(width));
+            write_bit("MODE." + str_or_default(ci->params, ctx->id("SERDES_MODE"), "MASTER"));
+            write_bit("NUM_CE.N" + std::to_string(int_or_default(ci->params, ctx->id("NUM_CE"), 1)));
             pop();
         } else if (ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
             write_bit("IN_USE");
