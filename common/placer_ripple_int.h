@@ -131,11 +131,15 @@ struct DeviceInfo
     std::unordered_set<IdString> iobuf_types;
 };
 
+struct RippleFPGAPlacer;
+
 class ArchFunctions
 {
   public:
     // Return a DeviceInfo structure for the current context
     virtual DeviceInfo getDeviceInfo() = 0;
+    // Sets the pointer of ourselves, for the sake of structure manipulation during packing etc
+    virtual void setPlacer(RippleFPGAPlacer *placer) = 0;
     // Gets the area value of a score
     virtual double getCellArea(const CellInfo *cell) = 0;
     // Get the switchbox location given a cell location
@@ -384,6 +388,12 @@ struct RippleFPGAPlacer
     bool perform_move(DetailMove &move);
     void revert_move(DetailMove &move);
     void finalise_move(DetailMove &move);
+
+    // Helper functions for arch-provided packer
+    void merge_positions(RippleCell &a, RippleCell &b);
+    void merge_cells(RippleCell &base, RippleCell &sub, int rel_x, int rel_y, int rel_z);
+    // As above but (dx, dy) = (0, 0)
+    void merge_cells(RippleCell &base, RippleCell &sub, int rel_z);
 };
 
 } // namespace Ripple

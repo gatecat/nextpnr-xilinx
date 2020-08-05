@@ -22,17 +22,24 @@
 NEXTPNR_NAMESPACE_BEGIN
 namespace Ripple {
 
-class RippleXilinx : public ArchFunctions
+class RippleXilinx final : public ArchFunctions
 {
   public:
     RippleXilinx(Context *ctx) : ctx(ctx){};
+    void setPlacer(RippleFPGAPlacer *placer) override { this->placer = placer; }
     DeviceInfo getDeviceInfo() override;
     double getCellArea(const CellInfo *cell) override;
     Loc getSwitchbox(Loc cell_loc) override;
-    void doBlePacking() override{};
+    void doBlePacking() override;
 
   private:
     Context *ctx;
+    RippleFPGAPlacer *placer;
+
+    // Structures and functions for BLE packing
+    std::unordered_map<IdString, IdString> lut2ff;
+    void find_lut_ffs();
+    void find_lut_luts();
 };
 
 DeviceInfo RippleXilinx::getDeviceInfo()
@@ -110,6 +117,38 @@ Loc RippleXilinx::getSwitchbox(Loc cell_loc)
         return Loc(site_data.inter_x, site_data.inter_y, 0);
     else
         return Loc(cell_loc.x, cell_loc.y, 0);
+}
+
+void RippleXilinx::doBlePacking()
+{
+    find_lut_ffs();
+    find_lut_luts();
+}
+
+void RippleXilinx::find_lut_ffs()
+{
+    for (auto cell : placer->cells) {
+        // Currently, only pack FFs with unconstrained LUTs
+        if (GetSize(cell.base_cells) != 1)
+            continue;
+        CellInfo *ff = cell.base_cells[0].ci;
+        if (ff->type != id_SLICE_FFX)
+            continue;
+        // Look at the D port of the FF for the driving LUT
+        NetInfo *d = get_net_or_empty(ff, id_D);
+        if (d == nullptr)
+            continue;
+        CellInfo *lut = d->driver.cell;
+        if (lut == nullptr || lut->type != id_SLICE_LUTX)
+            continue;
+        auto lut_idx = placer->cell_index.at(lut->udata);
+        auto &lut_cell = placer->cells.at(lut_idx.cell);
+        if (GetSize(lut_cell.base_cells) != 1)
+            continue;
+        // Should we add a heuristic here to skip merging if distance
+        // is very high??
+        placer->merge_cells(lut_cell, cell, BEL_FF - BEL_6LUT);
+    }
 }
 
 } // namespace Ripple

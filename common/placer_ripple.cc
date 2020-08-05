@@ -138,6 +138,37 @@ void RippleFPGAPlacer::run()
     ctx->unlock();
 }
 
+void RippleFPGAPlacer::merge_positions(RippleCell &a, RippleCell &b)
+{
+    auto do_merge = [&](int &p1, int &p2) {
+        p1 = (p1 * GetSize(a.base_cells) + p2 * GetSize(b.base_cells)) /
+             (GetSize(a.base_cells) + GetSize(b.base_cells));
+    };
+    do_merge(a.placed_x, b.placed_x);
+    do_merge(a.placed_y, b.placed_y);
+    a.solver_x = a.placed_x;
+    a.solver_y = a.placed_y;
+}
+
+void RippleFPGAPlacer::merge_cells(RippleCell &base, RippleCell &sub, int rel_x, int rel_y, int rel_z)
+{
+    merge_positions(base, sub);
+    for (auto sc : sub.base_cells) {
+        auto &cell_idx = cell_index.at(sc.ci->udata);
+        sc.offset_x += rel_x;
+        sc.offset_y += rel_y;
+        sc.offset_z += rel_z;
+        cell_idx.cell = base.index;
+        cell_idx.subcell = base.base_cells.add(sc);
+    }
+    cells.reserve(sub.index);
+}
+
+void RippleFPGAPlacer::merge_cells(RippleCell &base, RippleCell &sub, int rel_z)
+{
+    merge_cells(base, sub, 0, 0, rel_z);
+}
+
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END
