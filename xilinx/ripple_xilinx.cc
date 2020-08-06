@@ -19,6 +19,8 @@
 
 #include "placer_ripple_int.h"
 
+#include "log.h"
+
 NEXTPNR_NAMESPACE_BEGIN
 namespace Ripple {
 
@@ -39,7 +41,7 @@ class RippleXilinx final : public ArchFunctions
     // Structures and functions for BLE packing
     std::unordered_map<IdString, IdString> lut2ff;
     void find_lut_ffs();
-    void find_lut_luts();
+    void find_lut_luts(){};
 };
 
 DeviceInfo RippleXilinx::getDeviceInfo()
@@ -127,6 +129,7 @@ void RippleXilinx::doBlePacking()
 
 void RippleXilinx::find_lut_ffs()
 {
+    int merged = 0;
     for (auto cell : placer->cells) {
         // Currently, only pack FFs with unconstrained LUTs
         if (GetSize(cell.base_cells) != 1)
@@ -148,7 +151,9 @@ void RippleXilinx::find_lut_ffs()
         // Should we add a heuristic here to skip merging if distance
         // is very high??
         placer->merge_cells(lut_cell, cell, BEL_FF - BEL_6LUT);
+        ++merged;
     }
+    log_info("BLE packer merged %d LUT-FF pairs\n", merged);
 }
 
 } // namespace Ripple

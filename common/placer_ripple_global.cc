@@ -552,14 +552,16 @@ bool RippleFPGAPlacer::spread_cells(int site_type, SpreaderBox &box, std::vector
             hi_area += target_areas.at(hi_start - start);
         }
     }
+#if 0
     log_info("lo %d %d hi %d %d\n", lo_start, lo_end, hi_start, hi_end);
     log_info("lo_area=%f hi_area=%f\n", lo_area, hi_area);
-
+#endif
     std::vector<int> lo_cells, hi_cells;
     cut_cells_by_area(box.spread_cells, lo_cells, hi_cells, lo_area / total_area);
+#if 0
     log_info("spread_cells=%d lo_cells=%d hi_cells=%d\n", GetSize(box.spread_cells), GetSize(lo_cells),
              GetSize(hi_cells));
-
+#endif
     auto spread_cut_cells = [&](const std::vector<int> &box_cells, int box_start, int box_end, bool lo) {
         int cell_start = 0, cell_end = 0;
         for (int i = (lo ? box_end : box_start); lo ? (i >= box_start) : (i <= box_end); lo ? i-- : i++) {
@@ -649,7 +651,7 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
     boxes.push(std::move(sbox));
     while (!boxes.empty()) {
         auto curr = std::move(boxes.front());
-#if 1
+#if 0
         log_info("x0 %d y0 %d x1 %d y1 %d\n", curr.x0, curr.y0, curr.x1, curr.y1);
 #endif
         boxes.pop();
@@ -670,13 +672,15 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
             for (auto &r : split) {
                 r.dir = other_dir;
                 // Add result to queue
+#if 0
                 log_info("   add to queue: %d %d %d %d, %d, %d\n", r.x0, r.y0, r.x1, r.y1, r.level,
                          GetSize(r.spread_cells));
+#endif
                 if (!r.spread_cells.empty() && r.level > 0)
                     boxes.push(r);
             }
         } else {
-#if 1
+#if 0
             log_info("***** failed\n");
 #endif
         }
@@ -715,8 +719,10 @@ void RippleFPGAPlacer::upper_bound_spread()
     for (int i = 0; i < GetSize(spread_site_data); i++) {
         auto &st = spread_site_data.at(i);
         for (auto &of : st.overfull) {
+#if 0
             log_info("spreading cells of type '%s' in overfull region (%d, %d, %d, %d)\n",
                      ctx->nameOf(site_types.at(i)), of.x0, of.y0, of.x1, of.y1);
+#endif
             spread_cells_in_region(i, of);
         }
     }

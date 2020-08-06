@@ -125,6 +125,7 @@ Loc RippleFPGAPlacer::get_cell_location(const CellInfo *cell)
 void RippleFPGAPlacer::run()
 {
     ctx->lock();
+    f->setPlacer(this);
     init_cells();
     place_constraints();
     place_initial();
@@ -135,6 +136,10 @@ void RippleFPGAPlacer::run()
             cong.begin(), cong.end(),
             [&](const decltype(*cong.begin()) &a, const decltype(*cong.begin()) &b) { return a.value < b.value; });
     log_info("Max congestion: %d, %d: %f\n", max_cong.x, max_cong.y, max_cong.value);
+
+    f->doBlePacking();
+    place_global(0);
+
     ctx->unlock();
 }
 
