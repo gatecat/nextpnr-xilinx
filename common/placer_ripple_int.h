@@ -186,8 +186,11 @@ struct RippleFPGAPlacer
     void lower_bound_solver(double tol, double alpha, int iters);
     void upper_bound_spread();
 
+    array2d<double> current_cong_map;
+    std::vector<std::tuple<int, int, double>> sorted_by_cong;
     void est_congestion_map(array2d<double> &cong);
     int get_rr_cost(Loc a, Loc b);
+    void update_area_scale();
 
     Loc get_cell_location(const CellInfo *cell);
     Loc clamp_location(Loc loc);
@@ -197,7 +200,6 @@ struct RippleFPGAPlacer
     struct GridLocation
     {
         int chiplet;
-        std::vector<int> placed_cells;
 
         struct PerType
         {
@@ -209,6 +211,9 @@ struct RippleFPGAPlacer
         };
 
         std::vector<PerType> per_type;
+
+        // 0 = least congested, N-1 = most congested
+        int cong_ranking;
 
         int region_id;
         Loc switchbox;
@@ -395,6 +400,8 @@ struct RippleFPGAPlacer
     void merge_cells(RippleCell &base, RippleCell &sub, int rel_x, int rel_y, int rel_z);
     // As above but (dx, dy) = (0, 0)
     void merge_cells(RippleCell &base, RippleCell &sub, int rel_z);
+
+    void print_max_congestion();
 };
 
 } // namespace Ripple

@@ -129,6 +129,16 @@ Loc RippleFPGAPlacer::clamp_location(Loc loc)
     return loc;
 }
 
+void RippleFPGAPlacer::print_max_congestion()
+{
+    array2d<double> cong(d.width, d.height);
+    est_congestion_map(cong);
+    auto max_cong = *std::max_element(
+            cong.begin(), cong.end(),
+            [&](const decltype(*cong.begin()) &a, const decltype(*cong.begin()) &b) { return a.value < b.value; });
+    log_info("Max congestion: %d, %d: %f\n", max_cong.x, max_cong.y, max_cong.value);
+}
+
 void RippleFPGAPlacer::run()
 {
     ctx->lock();
@@ -137,15 +147,17 @@ void RippleFPGAPlacer::run()
     place_constraints();
     place_initial();
     place_global(0);
-    array2d<double> cong(d.width, d.height);
-    est_congestion_map(cong);
-    auto max_cong = *std::max_element(
-            cong.begin(), cong.end(),
-            [&](const decltype(*cong.begin()) &a, const decltype(*cong.begin()) &b) { return a.value < b.value; });
-    log_info("Max congestion: %d, %d: %f\n", max_cong.x, max_cong.y, max_cong.value);
+
+    print_max_congestion();
 
     f->doBlePacking();
     place_global(0);
+
+    print_max_congestion();
+
+    place_global(2);
+
+    print_max_congestion();
 
     ctx->unlock();
 }

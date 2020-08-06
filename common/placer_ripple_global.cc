@@ -269,7 +269,7 @@ void RippleFPGAPlacer::setup_spreader_grid()
             if (d.celltype_to_sitetype.count(type))
                 type = d.celltype_to_sitetype.at(type);
             int type_idx = sitetype_to_idx.at(type);
-            float area = f->getCellArea(sc.ci);
+            float area = f->getCellArea(sc.ci) * cell.area_scale;
             cell.area += area;
             grid.at(cell.placed_x + sc.offset_x, cell.placed_y + sc.offset_y).per_type.at(type_idx).cell_area += area;
         }
@@ -764,6 +764,8 @@ int RippleFPGAPlacer::total_hpwl()
 void RippleFPGAPlacer::place_global(int stage)
 {
     for (int iter = 0; iter < 10; iter++) {
+        if (stage >= 2)
+            update_area_scale();
         lower_bound_solver(1e-5, iter * 0.1, 10);
         log_info("iter %d lower-bound HPWL: %d\n", iter, total_hpwl());
         upper_bound_spread();

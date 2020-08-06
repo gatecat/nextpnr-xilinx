@@ -128,5 +128,40 @@ int RippleFPGAPlacer::get_rr_cost(Loc a, Loc b)
     return f_switchbox + f_shape;
 }
 
+void RippleFPGAPlacer::update_area_scale()
+{
+    current_cong_map.reset(d.width, d.height);
+    est_congestion_map(current_cong_map);
+    sorted_by_cong.clear();
+    for (auto entry : current_cong_map) {
+        if (entry.value == 0)
+            continue;
+        sorted_by_cong.emplace_back(entry.x, entry.y, entry.value);
+    }
+    std::sort(sorted_by_cong.begin(), sorted_by_cong.end(),
+              [&](const std::tuple<int, int, double> &a, const std::tuple<int, int, double> &b) {
+                  return std::get<2>(a) < std::get<2>(b);
+              });
+    for (auto loc : grid) {
+        loc.value.cong_ranking = 0;
+    }
+    for (int i = 0; i < GetSize(sorted_by_cong); i++) {
+        auto &entry = sorted_by_cong.at(i);
+        grid.at(std::get<0>(entry), std::get<1>(entry)).cong_ranking = i;
+    }
+    for (auto &cell : cells) {
+        if (cell.locked)
+            continue;
+        int ranking = grid.at(cell.placed_x, cell.placed_y).cong_ranking;
+        if (ranking >= GetSize(sorted_by_cong) * 0.9) {
+            // Increase effective area in the 10% most congested
+            cell.area_scale *= 1.2;
+        } else if (ranking <= GetSize(sorted_by_cong) * 0.3) {
+            // Decrease effective area in the 30% least congested
+            cell.area_scale *= 0.8;
+        }
+    }
+}
+
 } // namespace Ripple
 NEXTPNR_NAMESPACE_END
