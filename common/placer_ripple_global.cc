@@ -71,11 +71,13 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
 {
 
     std::vector<int> cell2var(cells.size(), -1);
+    std::vector<std::pair<int, int>> legal_pos(cells.size());
     int num_vars = 0;
     for (auto &cell : cells) {
         if (cell.locked)
             continue;
         cell2var[cell.index] = num_vars++;
+        legal_pos[cell.index] = std::make_pair(cell.placed_x, cell.placed_y);
     }
 
     EquationSystem eqx(num_vars, num_vars), eqy(num_vars, num_vars);
@@ -154,6 +156,19 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
                 process_arc(lbport);
                 process_arc(ubport);
             });
+        }
+
+        if (alpha > 0) {
+            for (auto &cell : cells) {
+                if (cell.locked)
+                    continue;
+                int l_pos = yaxis ? legal_pos.at(cell.index).second : legal_pos.at(cell.index).first;
+                int c_pos = yaxis ? cell.placed_y : cell.placed_x;
+                double weight = alpha / std::max<double>(1, std::abs(l_pos - c_pos));
+                int row = cell2var.at(cell.index);
+                eq.add_coeff(row, row, weight);
+                eq.add_rhs(row, weight * l_pos);
+            }
         }
     };
     auto solve_equations = [&](bool yaxis) {
@@ -749,7 +764,7 @@ int RippleFPGAPlacer::total_hpwl()
 void RippleFPGAPlacer::place_global(int stage)
 {
     for (int iter = 0; iter < 10; iter++) {
-        lower_bound_solver(1e-5, 0.2, 10);
+        lower_bound_solver(1e-5, iter * 0.1, 10);
         log_info("iter %d lower-bound HPWL: %d\n", iter, total_hpwl());
         upper_bound_spread();
         log_info("iter %d upper-bound HPWL: %d\n", iter, total_hpwl());
