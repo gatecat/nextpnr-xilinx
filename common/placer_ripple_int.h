@@ -190,6 +190,7 @@ struct RippleFPGAPlacer
     int get_rr_cost(Loc a, Loc b);
 
     Loc get_cell_location(const CellInfo *cell);
+    Loc clamp_location(Loc loc);
 
     bool has_connectivity(RippleCell &cell);
 

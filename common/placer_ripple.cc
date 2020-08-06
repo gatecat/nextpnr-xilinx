@@ -119,6 +119,13 @@ Loc RippleFPGAPlacer::get_cell_location(const CellInfo *cell)
     loc.x = c.placed_x + sc.offset_x;
     loc.y = c.placed_y + sc.offset_y;
     loc.z = 0;
+    return clamp_location(loc);
+}
+
+Loc RippleFPGAPlacer::clamp_location(Loc loc)
+{
+    loc.x = std::max(0, std::min(loc.x, d.width - 1));
+    loc.y = std::max(0, std::min(loc.y, d.height - 1));
     return loc;
 }
 
