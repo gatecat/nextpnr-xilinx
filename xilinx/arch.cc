@@ -111,7 +111,7 @@ void Arch::setup_byname() const
 {
     if (tile_by_name.empty()) {
         for (int i = 0; i < chip_info->num_tiles; i++) {
-            tile_by_name[chip_info->tile_insts[i].name.get()] = i;
+            tile_by_name[tile_name(i)] = i;
         }
     }
 
@@ -119,7 +119,7 @@ void Arch::setup_byname() const
         for (int i = 0; i < chip_info->num_tiles; i++) {
             auto &tile = chip_info->tile_insts[i];
             for (int j = 0; j < tile.num_sites; j++)
-                site_by_name[tile.site_insts[j].name.get()] = std::make_pair(i, j);
+                site_by_name[site_name(i, j)] = std::make_pair(i, j);
         }
     }
 }
@@ -313,14 +313,12 @@ IdString Arch::getPipName(PipId pip) const
     NPNR_ASSERT(pip != PipId());
     if (locInfo(pip).pip_data[pip.index].site != -1 && locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL &&
         locInfo(pip).pip_data[pip.index].bel != -1) {
-        return id(std::string("SITEPIP/") +
-                  chip_info->tile_insts[pip.tile].site_insts[locInfo(pip).pip_data[pip.index].site].name.get() +
+        return id(std::string("SITEPIP/") + site_name(pip.tile, locInfo(pip).pip_data[pip.index].site) +
                   std::string("/") + IdString(locInfo(pip).pip_data[pip.index].bel).str(this) + "/" +
                   IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this));
     } else {
-        return id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
-                  std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
-                  std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
+        return id(std::string(tile_name(pip.tile)) + "/" + std::to_string(locInfo(pip).pip_data[pip.index].src_index) +
+                  "." + std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
     }
 }
 
@@ -1009,7 +1007,7 @@ std::string Arch::getPackagePinSite(const std::string &pin) const
             for (int s = 0; s < tile.num_sites; s++) {
                 auto &site = tile.site_insts[s];
                 if (site.pin[0] != '\0' && site.pin[0] != '.')
-                    pin_to_site[site.pin.get()] = site.name.get();
+                    pin_to_site[site.pin.get()] = site_name(t, s);
             }
         }
     }

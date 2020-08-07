@@ -229,7 +229,7 @@ NPNR_PACKED_STRUCT(struct TileTypeInfoPOD {
 });
 
 NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
-    RelPtr<char> name;
+    int32_t base_name;
     RelPtr<char> pin;
     int32_t site_x, site_y;
     int32_t rel_x, rel_y;
@@ -237,7 +237,8 @@ NPNR_PACKED_STRUCT(struct SiteInstInfoPOD {
 });
 
 NPNR_PACKED_STRUCT(struct TileInstInfoPOD {
-    RelPtr<char> name;
+    int32_t base_name;
+    int16_t name_x, name_y;
     int32_t type;
     int32_t shape;
     // Number of tile wires; excluding any site-internal wires
@@ -787,6 +788,25 @@ struct Arch : BaseCtx
 
     void setup_byname() const;
 
+    std::string tile_name(int tile) const
+    {
+        std::ostringstream oss;
+        auto &tile_data = chip_info->tile_insts[tile];
+        oss << IdString(tile_data.base_name).c_str(this) << "_";
+        oss << "X" << tile_data.name_x << "Y" << tile_data.name_y;
+        return oss.str();
+    }
+
+    std::string site_name(int tile, int site) const
+    {
+        std::ostringstream oss;
+        auto &tile_data = chip_info->tile_insts[tile];
+        auto &site_data = tile_data.site_insts[site];
+        oss << IdString(site_data.base_name).c_str(this) << "_";
+        oss << "X" << site_data.site_x << "Y" << site_data.site_y;
+        return oss.str();
+    }
+
     BelId getBelByName(IdString name) const;
 
     IdString getBelName(BelId bel) const
@@ -794,11 +814,9 @@ struct Arch : BaseCtx
         NPNR_ASSERT(bel != BelId());
         int site = locInfo(bel).bel_data[bel.index].site;
         if (site != -1) {
-            return id(std::string(chip_info->tile_insts[bel.tile].site_insts[site].name.get()) + "/" +
-                      IdString(locInfo(bel).bel_data[bel.index].name).str(this));
+            return id(site_name(bel.tile, site) + "/" + IdString(locInfo(bel).bel_data[bel.index].name).str(this));
         } else {
-            return id(std::string(chip_info->tile_insts[bel.tile].name.get()) + "/" +
-                      IdString(locInfo(bel).bel_data[bel.index].name).str(this));
+            return id(tile_name(bel.tile) + "/" + IdString(locInfo(bel).bel_data[bel.index].name).str(this));
         }
     }
 
@@ -1007,13 +1025,11 @@ struct Arch : BaseCtx
     IdString getWireName(WireId wire) const
     {
         NPNR_ASSERT(wire != WireId());
-        if (wire.tile != -1 && locInfo(wire).wire_data[wire.index].site != -1) {
-            return id(std::string("SITEWIRE/") +
-                      chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +
+        if (locInfo(wire).wire_data[wire.index].site != -1) {
+            return id(std::string("SITEWIRE/") + site_name(wire.tile, locInfo(wire).wire_data[wire.index].site) +
                       std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this));
         } else {
-            return id(std::string(chip_info->tile_insts[wire.tile].name.get()) + "/" +
-                      IdString(wireInfo(wire).name).c_str(this));
+            return id(tile_name(wire.tile) + "/" + IdString(wireInfo(wire).name).c_str(this));
         }
     }
 
@@ -1611,7 +1627,7 @@ struct Arch : BaseCtx
     {
         std::vector<std::pair<std::string, std::string>> tt;
         for (int i = 0; i < chip_info->num_tiles; i++)
-            tt.emplace_back(chip_info->tile_insts[i].name.get(),
+            tt.emplace_back(tile_name(i),
                             IdString(chip_info->tile_types[chip_info->tile_insts[i].type].type).str(this));
         return tt;
     }
@@ -1640,9 +1656,7 @@ struct Arch : BaseCtx
     {
         int s = locInfo(bel).bel_data[bel.index].site;
         NPNR_ASSERT(s != -1);
-        auto &tile = chip_info->tile_insts[bel.tile];
-        auto &site = tile.site_insts[s];
-        return site.name.get();
+        return site_name(bel.tile, s);
     }
 
     int getHclkForIob(BelId pad);

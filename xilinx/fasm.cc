@@ -201,7 +201,7 @@ struct FasmBackend
 
         if (pp_config.count(ppk)) {
             auto &pp = pp_config.at(ppk);
-            std::string tile_name = get_tile_name(pip.tile);
+            std::string tile_name = ctx->tile_name(pip.tile);
             for (auto c : pp) {
                 if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING")) {
                     // Need to flip for top HCLK
@@ -217,13 +217,13 @@ struct FasmBackend
             if (!pp.empty())
                 last_was_blank = false;
         } else {
+            std::string tile_name = ctx->tile_name(pip.tile);
 
             if (pd.extra_data == 1)
-                log_warning("Unprocessed route-thru %s.%s.%s\n!", get_tile_name(pip.tile).c_str(),
+                log_warning("Unprocessed route-thru %s.%s.%s\n!", tile_name.c_str(),
                             IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).c_str(ctx),
                             IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).c_str(ctx));
 
-            std::string tile_name = get_tile_name(pip.tile);
             std::string dst_name = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).str(ctx);
             std::string src_name = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name).str(ctx);
 
@@ -359,8 +359,6 @@ struct FasmBackend
     // Return the final part of a bel name
     std::string get_bel_name(BelId bel) { return IdString(ctx->locInfo(bel).bel_data[bel.index].name).str(ctx); }
 
-    std::string get_tile_name(int tile) { return ctx->chip_info->tile_insts[tile].name.get(); }
-
     void write_routing_bel(WireId dst_wire)
     {
         for (auto pip : ctx->getPipsUphill(dst_wire)) {
@@ -409,7 +407,7 @@ struct FasmBackend
         else                                                                                                           \
             dst = (src);                                                                                               \
     } while (0)
-        std::string tname = get_tile_name(tile);
+        std::string tname = ctx->tile_name(tile);
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
@@ -498,7 +496,7 @@ struct FasmBackend
     {
         bool wa7_used = false, wa8_used = false;
 
-        std::string tname = get_tile_name(tile);
+        std::string tname = ctx->tile_name(tile);
         bool is_mtile = tname.find("CLBLM") != std::string::npos;
         bool is_slicem = is_mtile && (half == 0);
 
@@ -563,7 +561,7 @@ struct FasmBackend
 
     void write_carry_config(int tile, int half)
     {
-        std::string tname = get_tile_name(tile);
+        std::string tname = ctx->tile_name(tile);
         bool is_mtile = tname.find("CLBLM") != std::string::npos;
 
         auto lts = ctx->tileStatus[tile].lts;
@@ -640,7 +638,7 @@ struct FasmBackend
         for (auto &usr : pad_net->users)
             if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
                 is_input = true;
-        std::string tile = get_tile_name(pad->bel.tile);
+        std::string tile = ctx->tile_name(pad->bel.tile);
         push(tile);
 
         bool is_sing = tile.find("_SING_") != std::string::npos;
@@ -697,7 +695,7 @@ struct FasmBackend
 
     void write_iol_config(CellInfo *ci)
     {
-        std::string tile = get_tile_name(ci->bel.tile);
+        std::string tile = ctx->tile_name(ci->bel.tile);
         push(tile);
         bool is_sing = tile.find("_SING_") != std::string::npos;
         bool is_top_sing = ci->bel.tile < ctx->getHclkForIoi(ci->bel.tile);
@@ -811,7 +809,7 @@ struct FasmBackend
             }
         }
         for (auto &hclk : ioconfig_by_hclk) {
-            push(get_tile_name(hclk.first));
+            push(ctx->tile_name(hclk.first));
             write_bit("STEPDOWN", hclk.second.stepdown);
             write_bit("VREF.V_675_MV", hclk.second.vref);
             pop();
@@ -844,7 +842,7 @@ struct FasmBackend
         for (auto cell : sorted(ctx->cells)) {
             CellInfo *ci = cell.second;
             if (ci->type == ctx->id("BUFGCTRL")) {
-                push(get_tile_name(ci->bel.tile));
+                push(ctx->tile_name(ci->bel.tile));
                 auto xy = ctx->getSiteLocInTile(ci->bel);
                 push("BUFGCTRL.BUFGCTRL_X" + std::to_string(xy.x) + "Y" + std::to_string(xy.y));
                 write_bit("IN_USE");
@@ -990,7 +988,7 @@ struct FasmBackend
 
     void write_bram_half(int tile, int half, CellInfo *ci)
     {
-        push(get_tile_name(tile));
+        push(ctx->tile_name(tile));
         push("RAMB18_Y" + std::to_string(half));
         if (ci != nullptr) {
             bool is_36 = ci->type == id_RAMB36E1_RAMB36E1;
@@ -1111,7 +1109,7 @@ struct FasmBackend
 
     void write_pll(CellInfo *ci)
     {
-        push(get_tile_name(ci->bel.tile));
+        push(ctx->tile_name(ci->bel.tile));
         push("PLLE2");
         write_bit("IN_USE");
         // FIXME: should be INV not ZINV (XRay error?)
@@ -1147,7 +1145,7 @@ struct FasmBackend
 
     void write_dsp_cell(CellInfo *ci)
     {
-        push(get_tile_name(ci->bel.tile));
+        push(ctx->tile_name(ci->bel.tile));
         push("DSP48");
         auto xy = ctx->getSiteLocInTile(ci->bel);
         push("DSP_" + std::to_string(xy.y));

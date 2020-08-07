@@ -382,7 +382,7 @@ std::string XC7Packer::get_ioctrl_site(const std::string &io_bel)
     auto &td = ctx->chip_info->tile_insts[hclk_tile];
     for (int i = 0; i < td.num_sites; i++) {
         auto &sd = td.site_insts[i];
-        std::string sn = sd.name.get();
+        std::string sn = ctx->site_name(hclk_tile, i);
         if (boost::starts_with(sn, "IDELAYCTRL"))
             return sn;
     }

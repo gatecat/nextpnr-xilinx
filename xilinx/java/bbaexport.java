@@ -409,7 +409,7 @@ public class bbaexport {
     }
 
     static class NextpnrSiteInst {
-        public String name;
+        public int base_name;
         public String packagePin;
         public int site_x, site_y;
         public int rel_x, rel_y;
@@ -417,7 +417,8 @@ public class bbaexport {
     }
     static class NextpnrTileInst {
         public int index;
-        public String name;
+        public int base_name;
+        public int name_x, name_y;
         public int type;
         public int shape;
 
@@ -832,7 +833,10 @@ public class bbaexport {
             for (int x = 0; x < d.getColumns(); x++) {
                 Tile t = d.getTile(y, x);
                 NextpnrTileInst nti = new NextpnrTileInst();
-                nti.name = t.getName();
+                String name = t.getName();
+                nti.base_name = makeConstId(name.substring(0, name.lastIndexOf('_')));
+                nti.name_x = t.getTileXCoordinate();
+                nti.name_y = t.getTileYCoordinate();
                 nti.type = tileTypeIndices.get(t.getTileTypeEnum());
                 nti.shape = ss.index_tile(t);
                 nti.index = tileInsts.size();
@@ -854,7 +858,8 @@ public class bbaexport {
 
                 for (Site s : t.getSites()) {
                     NextpnrSiteInst nsi = new NextpnrSiteInst();
-                    nsi.name = s.getName();
+                    String sitename = s.getName();
+                    nsi.base_name = makeConstId(sitename.substring(0, sitename.lastIndexOf('_')));
                     if (siteToPin.containsKey(s.getName()))
                         nsi.packagePin = siteToPin.get(s.getName());
                     else
@@ -1093,10 +1098,10 @@ public class bbaexport {
         }
  */
         for (NextpnrTileInst ti : tileInsts) {
-            // Tilewire -> node mappings
+            // Site names inside tiles
             bba.printf("label ti%d_sites\n", ti.index);
             for (NextpnrSiteInst si : ti.sites) {
-                bba.printf("str |%s|\n", si.name);
+                bba.printf("u32 %d\n", si.base_name); //base name constid
                 bba.printf("str |%s|\n", si.packagePin);
                 bba.printf("u32 %d\n", si.site_x); //X nominal coordinate
                 bba.printf("u32 %d\n", si.site_y); //Y nominal coordinate
@@ -1148,7 +1153,9 @@ public class bbaexport {
         }
         bba.printf("label tile_insts\n");
         for (NextpnrTileInst ti : tileInsts) {
-            bba.printf("str |%s|\n", ti.name); //tile name
+            bba.printf("u32 %d\n", ti.base_name); //base name constid
+            bba.printf("u32 %d\n", ti.name_x); //tile name X coordinate
+            bba.printf("u32 %d\n", ti.name_y); //tile name Y coordinate
             bba.printf("u32 %d\n", ti.type); //tile type index into tiletype_data
             bba.printf("u32 %d\n", ti.shape); // tile shape index into tile_shapes
             bba.printf("u32 %d\n", ti.sites.size());
