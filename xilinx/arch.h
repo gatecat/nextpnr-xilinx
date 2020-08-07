@@ -328,7 +328,7 @@ NPNR_PACKED_STRUCT(struct ChipInfoPOD {
 
     int32_t version;
     int32_t width, height;
-    int32_t num_tiles, num_tiletypes, num_nodes;
+    int32_t num_tiles, num_tiletypes;
     RelPtr<TileTypeInfoPOD> tile_types;
     RelPtr<TileInstInfoPOD> tile_insts;
     RelPtr<NodeShapePOD> node_shapes;

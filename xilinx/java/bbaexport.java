@@ -1194,7 +1194,6 @@ public class bbaexport {
         bba.printf("u32 %d\n", d.getRows()); //height
         bba.printf("u32 %d\n", tileInsts.size()); //number of tiles
         bba.printf("u32 %d\n", tileTypes.size()); //number of tiletypes
-        bba.printf("u32 %d\n", nodeWireCount.size()); //number of nodes
         bba.println("ref tiletype_data"); // reference to tiletype data
         bba.println("ref tile_insts"); // reference to tile instances
         bba.println("ref node_shapes"); // reference to node shape list

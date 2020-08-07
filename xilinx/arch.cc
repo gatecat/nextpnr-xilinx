@@ -435,8 +435,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     int src_intent = wireIntent(src), dst_intent = wireIntent(dst);
     // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
     //    return 500;
-    int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
-    int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
+    int dst_tile = dst.tile;
+    int src_tile = src.tile;
 
     if (sink_locs.count(dst)) {
         dst_x = sink_locs.at(dst).x;
@@ -476,24 +476,25 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
             if (wireInfo(src).name == gnd_row.index || wireInfo(src).name == vcc_row.index)
                 src_x = chip_info->width / 2;
         } else {
-            auto &src_n = chip_info->nodes[src.index];
             src_x = -1;
             src_y = -1;
-            for (int i = 0; i < std::min(200, src_n.num_tile_wires); i++) {
+            int i = 0;
+            for (WireId twi : getTileWireRange(src)) {
+                if ((i++) > 50)
+                    break;
                 // Approximate the nearest location to dest
-                int ti = src_n.tile_wires[i].tile;
-                auto &tw = chip_info->tile_types[chip_info->tile_insts[ti].type].wire_data[src_n.tile_wires[i].index];
+                auto &tw = locInfo(twi).wire_data[twi.index];
                 if (tw.num_downhill == 0 && src_intent != ID_NODE_PINFEED)
                     continue;
-                int tix = ti % chip_info->width, tiy = ti / chip_info->width;
+                int tix = twi.tile % chip_info->width, tiy = twi.tile / chip_info->width;
                 if (src_x == -1 || std::abs(tix - dst_x) < std::abs(src_x - dst_x))
                     src_x = tix;
                 if (src_y == -1 || std::abs(tiy - dst_y) < std::abs(src_y - dst_y))
                     src_y = tiy;
             }
             if (src_x == -1) {
-                src_x = chip_info->nodes[src.index].tile_wires[0].tile % chip_info->width;
-                src_y = chip_info->nodes[src.index].tile_wires[0].tile / chip_info->width;
+                src_x = src.tile % chip_info->width;
+                src_y = src.tile / chip_info->width;
             }
         }
 
@@ -543,8 +544,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
 
 ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
 {
-    int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
-    int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
+    int dst_tile = dst.tile;
+    int src_tile = src.tile;
 
     int x0, x1, y0, y1;
     x0 = src_tile % chip_info->width;
@@ -893,7 +894,7 @@ void Arch::findSourceSinkLocations()
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
                         intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
                         intent != ID_PINFEED && intent != ID_INPUT) {
-                        int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
+                        int tile = cursor.tile;
                         sink_locs[sink] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
                             log_info("%s <---- %s\n", nameOfWire(sink), nameOfWire(cursor));
@@ -943,7 +944,7 @@ void Arch::findSourceSinkLocations()
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
                         intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
                         intent != ID_NODE_OUTPUT && intent != ID_NODE_INT_INTERFACE) {
-                        int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
+                        int tile = cursor.tile;
                         source_locs[source] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
                             log_info("%s ----> %s\n", nameOfWire(source), nameOfWire(cursor));
