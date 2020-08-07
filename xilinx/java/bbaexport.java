@@ -1091,11 +1091,9 @@ public class bbaexport {
             nodeWireCount.add(wireCount);
             nodeIntent.add(makeConstId(i == 1 ? "PSEUDO_VCC" : "PSEUDO_GND"));
         }
+ */
         for (NextpnrTileInst ti : tileInsts) {
             // Tilewire -> node mappings
-            bba.printf("label ti%d_wire_to_node\n", ti.index);
-            for (int w2n : ti.tilewire_to_node)
-                bba.printf("u32 %d\n", w2n);
             bba.printf("label ti%d_sites\n", ti.index);
             for (NextpnrSiteInst si : ti.sites) {
                 bba.printf("str |%s|\n", si.name);
@@ -1108,7 +1106,7 @@ public class bbaexport {
                 bba.printf("u32 %d\n", si.inter_y); //Y intercon coordinate
             }
         }
-*/
+
 
         for (int i  = 0; i < ss.tile_shapes.size(); i++) {
             var shape = ss.tile_shapes.get(i);
