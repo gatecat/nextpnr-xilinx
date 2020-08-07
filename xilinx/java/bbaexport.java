@@ -419,6 +419,7 @@ public class bbaexport {
         public int index;
         public String name;
         public int type;
+        public int shape;
 
         public Integer[] tilewire_to_node;
 
@@ -654,7 +655,24 @@ public class bbaexport {
                 return index;
             }
         }
+
+        int index_tile(Tile tile)  throws NoSuchAlgorithmException {
+            TileShape shape = new TileShape(this, tile);
+            String hash = shape.hash();
+            if (tile_shape_idx.containsKey(hash)) {
+                return tile_shape_idx.get(hash);
+            } else {
+                int index = tile_shapes.size();
+                tile_shapes.add(shape);
+                tile_shape_idx.put(hash, index);
+                return index;
+            }
+        }
     };
+
+    public static int is_special = 0x70012345;
+    public static int NODE_IS_ROOT = 0x4567ABC0;
+    public static int NODE_IS_ROW = 0x4567ABC1;
 
     public static class TileShape {
         public int [][] wire_to_node;
@@ -676,8 +694,8 @@ public class bbaexport {
                     wire_to_node[i][2] = i;
                     continue;
                 }
-                wire_to_node[i][0] = 0x1234; // FIXME: proper flags
-                wire_to_node[i][1] = 0x5678;
+                wire_to_node[i][0] = is_special;
+                wire_to_node[i][1] = NODE_IS_ROOT;
                 try {
                     wire_to_node[i][2] = shapes.index_node(new NodeShape(tile, n));
                 } catch (NoSuchAlgorithmException e) {
@@ -707,9 +725,11 @@ public class bbaexport {
     }
     public static class NodeShape {
         public int [][] tile_wires;
+        public int intent_id;
         public NodeShape(Tile base, Node node) {
             int nonuseless_wires = 0;
             var wires = node.getAllWiresInNode();
+            intent_id = makeConstId(wires[0].getIntentCode().toString());
             for (Wire w : wires) {
                 if (!w.getForwardPIPs().isEmpty() || !w.getBackwardPIPs().isEmpty() || w.getSitePin() != null)
                     ++nonuseless_wires;
@@ -735,6 +755,7 @@ public class bbaexport {
                 md.update(tempbuf);
             };
             add_int.accept(tile_wires.length);
+            add_int.accept(intent_id);
             for (var entry : tile_wires) {
                 add_int.accept(entry[0]); // dx
                 add_int.accept(entry[1]); // dy
@@ -752,7 +773,7 @@ public class bbaexport {
     public static HashMap<Integer, NextpnrTileInst> tileToTileInst = new HashMap<>();
 
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
 
         if (args.length < 3) {
             System.err.println("Usage: bbaexport <device> <constids.inc> <output.bba>");
@@ -765,6 +786,7 @@ public class bbaexport {
 
         // Seems like we need to use a Design to create SiteInsts to probe alternate site types...
         Design des = new Design("top",  args[0]);
+        ShapeStore ss = new ShapeStore();
 
         if (args[0].contains("xc7"))
             xc7_flag = true;
@@ -812,6 +834,7 @@ public class bbaexport {
                 NextpnrTileInst nti = new NextpnrTileInst();
                 nti.name = t.getName();
                 nti.type = tileTypeIndices.get(t.getTileTypeEnum());
+                nti.shape = ss.index_tile(t);
                 nti.index = tileInsts.size();
                 nti.sites = new ArrayList<>();
 
@@ -867,7 +890,6 @@ public class bbaexport {
 
         FileWriter bbaf = new FileWriter(args[2], false);
         PrintWriter bba = new PrintWriter(bbaf);
-
 
         // Header
         bba.println("pre #include \"nextpnr.h\"");
@@ -978,7 +1000,7 @@ public class bbaexport {
         HashSet<TileTypeEnum> intTileTypes = Utils.getIntTileTypes();
         int curr = 0, total = d.getAllTiles().size();
         ArrayList<Integer> nodeWireCount = new ArrayList<>(), nodeIntent = new ArrayList<>();
-
+/*
         for (int row = 0; row < d.getRows(); row++) {
             HashSet<Node> gndNodes = new HashSet<>(), vccNodes = new HashSet<>();
             for (int col = 0; col < d.getColumns(); col++) {
@@ -1069,7 +1091,6 @@ public class bbaexport {
             nodeWireCount.add(wireCount);
             nodeIntent.add(makeConstId(i == 1 ? "PSEUDO_VCC" : "PSEUDO_GND"));
         }
-
         for (NextpnrTileInst ti : tileInsts) {
             // Tilewire -> node mappings
             bba.printf("label ti%d_wire_to_node\n", ti.index);
@@ -1087,22 +1108,63 @@ public class bbaexport {
                 bba.printf("u32 %d\n", si.inter_y); //Y intercon coordinate
             }
         }
+*/
+
+        for (int i  = 0; i < ss.tile_shapes.size(); i++) {
+            var shape = ss.tile_shapes.get(i);
+            bba.printf("label ts%d_node_to_wire\n", i);
+            for (var w2n : shape.wire_to_node) {
+                if (w2n[0] == is_special) {
+                    // Special nodes, wn[1] is a unique u32 key
+                    bba.printf("u32 %d\n", w2n[1]);
+                } else {
+                    bba.printf("u16 %d\n", w2n[0]); // rel_x
+                    bba.printf("u16 %d\n", w2n[1]); // rel_y
+                }
+                bba.printf("u32 %d\n", w2n[2]); // node shape or index
+            }
+        }
+
+        bba.printf("label tile_shapes\n");
+        for (int i  = 0; i < ss.tile_shapes.size(); i++) {
+            var shape = ss.tile_shapes.get(i);
+            bba.printf("u32 %d\n", shape.wire_to_node.length); // wire2node length
+            bba.printf("ref ts%d_node_to_wire\n", i); // ref to wire2node list
+        }
+
+        for (int i  = 0; i < ss.node_shapes.size(); i++) {
+            var shape = ss.node_shapes.get(i);
+            bba.printf("label ns%d_tile_wires\n", i);
+            for (var w2n : shape.tile_wires) {
+                bba.printf("u16 %d\n", w2n[0]); // rel_x
+                bba.printf("u16 %d\n", w2n[1]); // rel_y
+                bba.printf("u32 %d\n", w2n[2]); // tile wire index
+            }
+        }
+        bba.printf("label node_shapes\n");
+        for (int i  = 0; i < ss.node_shapes.size(); i++) {
+            var shape = ss.node_shapes.get(i);
+            bba.printf("u32 %d\n", shape.tile_wires.length); // tile_wires length
+            bba.printf("u32 %d\n", shape.intent_id); // node intent code
+            bba.printf("ref ns%d_tile_wires\n", i); // ref to tile_wires list
+        }
         bba.printf("label tile_insts\n");
         for (NextpnrTileInst ti : tileInsts) {
             bba.printf("str |%s|\n", ti.name); //tile name
             bba.printf("u32 %d\n", ti.type); //tile type index into tiletype_data
-            bba.printf("u32 %d\n", ti.tilewire_to_node.length); //length of tilewire_to_node
-            bba.printf("ref ti%d_wire_to_node\n", ti.index); //ref to tilewire_to_node
+            bba.printf("u32 %d\n", ti.shape); // tile shape index into tile_shapes
             bba.printf("u32 %d\n", ti.sites.size());
             bba.printf("ref ti%d_sites\n", ti.index); //ref to list of site names
         }
 
+/*
         bba.printf("label nodes\n");
         for (int i = 0; i < nodeWireCount.size(); i++) {
             bba.printf("u32 %d\n", nodeWireCount.get(i)); //number of tilewires in node
             bba.printf("u32 %d\n", nodeIntent.get(i)); //node intent constid
             bba.printf("ref n%d_tw\n", i); //ref to list of tilewires
         }
+        */
         // FIXME: Placeholder timing data
         bba.println("label tile_cell_timing");
         // Nothing here yet
@@ -1135,7 +1197,8 @@ public class bbaexport {
         bba.printf("u32 %d\n", nodeWireCount.size()); //number of nodes
         bba.println("ref tiletype_data"); // reference to tiletype data
         bba.println("ref tile_insts"); // reference to tile instances
-        bba.println("ref nodes"); // reference to node data
+        bba.println("ref node_shapes"); // reference to node shape list
+        bba.println("ref tile_shapes"); // reference to tile shape list
         bba.println("ref extra_constids"); // reference to bel data
         bba.printf("u32 %d\n", 1); // number of speed grades
         bba.println("ref timing"); // reference to bel data
