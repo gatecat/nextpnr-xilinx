@@ -48,6 +48,7 @@
  *
  */
 
+#include "log.h"
 #include "placer_ripple_int.h"
 
 NEXTPNR_NAMESPACE_BEGIN
@@ -202,7 +203,14 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
     Bounds last_bounds;
 
     DetailMove curr;
-    int type_idx = sitetype_to_idx.at(front_cell.type);
+
+    IdString site_type;
+    if (d.celltype_to_sitetype.count(front_cell.type))
+        site_type = d.celltype_to_sitetype.at(front_cell.type);
+    else
+        site_type = front_cell.type;
+
+    int type_idx = sitetype_to_idx.at(site_type);
     auto &type_rc = site_rows_cols.at(type_idx);
 
     for (auto cell : move_cells)
@@ -219,23 +227,32 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
             curr.new_root_loc.z = front_cell.base_cells.at(0).offset_z;
         } else {
             auto &available_z = grid.at(x, y).per_type.at(type_idx).origin_z;
+            if (available_z.empty())
+                return;
             // FIXME: improve this logic for more complex cases
             curr.new_root_loc.z = available_z.at(ctx->rng(GetSize(available_z)));
         }
-        find_move_conflicts(curr);
+        log_info("    trying (%d, %d, %d)\n", x, y, curr.new_root_loc.z);
+        if (!find_move_conflicts(curr)) {
+            // This means the move failed some early feasibility check, like one of the sub-cells
+            // not actually having a corresponding cell
+            log_info("        find conflicts failed\n");
+            return;
+        }
         if (perform_move(curr)) {
             ++moves_checked;
+            compute_move_costs(curr);
             if (curr.wirelen_delta < best_delta) {
                 optimal = curr.new_root_loc;
                 best_delta = curr.wirelen_delta;
             }
+            revert_move(curr);
         }
-        revert_move(curr);
     };
 
     // Keep searching until radius limit is reached; enough candidate locations have been checked or no more progress is
     // being made
-    while (radius < max_radius && found_cells < locs_to_check && search_bounds != last_bounds) {
+    while (radius < max_radius && moves_checked < locs_to_check && search_bounds != last_bounds) {
         last_bounds = search_bounds;
         for (int x = search_bounds.x0; x <= search_bounds.x1; x++) {
             // Top edge
@@ -253,21 +270,54 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
                 proc_xy(search_bounds.x1, y);
         }
         // Extend bounds by 1 until we find a column with cells, or reach the limit
-        for (; search_bounds.x0 >= -macro_bounds.x0; search_bounds.x0--)
+        for (; search_bounds.x0 > -macro_bounds.x0; search_bounds.x0--)
             if (search_bounds.x0 != last_bounds.x0 && type_rc.cols.at(search_bounds.x0))
                 break;
-        for (; search_bounds.y0 >= -macro_bounds.y0; search_bounds.y0--)
+        for (; search_bounds.y0 > -macro_bounds.y0; search_bounds.y0--)
             if (search_bounds.y0 != last_bounds.y0 && type_rc.rows.at(search_bounds.y0))
                 break;
-        for (; search_bounds.x1 < d.width - macro_bounds.x1; search_bounds.x1++)
+        for (; search_bounds.x1 < (d.width - macro_bounds.x1 - 1); search_bounds.x1++)
             if (search_bounds.x1 != last_bounds.x1 && type_rc.cols.at(search_bounds.x1))
                 break;
-        for (; search_bounds.y1 < d.height - macro_bounds.y1; search_bounds.y1++)
+        for (; search_bounds.y1 < (d.height - macro_bounds.y1 - 1); search_bounds.y1++)
             if (search_bounds.y1 != last_bounds.y1 && type_rc.rows.at(search_bounds.y1))
                 break;
     }
 
-    return (found_cells > 0);
+    return (moves_checked > 0);
+}
+
+void RippleFPGAPlacer::do_legalisation()
+{
+    for (auto entry : cells.enumerate()) {
+        auto &cell = entry.value;
+        if (cell.placed || cell.locked)
+            continue;
+        legaliser_queue.push(entry.index);
+    }
+    DetailMove commit_move;
+    int total_delta = 0;
+    while (!legaliser_queue.empty()) {
+        int cell_idx = legaliser_queue.front();
+        legaliser_queue.pop();
+        reset_move(commit_move);
+        commit_move.move_cells.clear();
+        commit_move.move_cells.push_back(cell_idx);
+        bool found_loc = detail_find_candidate_locs(commit_move.move_cells, commit_move.new_root_loc);
+        if (!found_loc)
+            log_error("failed to legalise cell %s\n", ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci));
+        NPNR_ASSERT(find_move_conflicts(commit_move));
+        NPNR_ASSERT(perform_move(commit_move));
+        compute_move_costs(commit_move);
+        finalise_move(commit_move);
+#if 1
+        log_info("legalised cell %s to (%d, %d, %d), dHPWL=%d\n", ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci),
+                 commit_move.new_root_loc.x, commit_move.new_root_loc.y, commit_move.new_root_loc.z,
+                 commit_move.wirelen_delta);
+#endif
+        total_delta += commit_move.wirelen_delta;
+    }
+    log_info("legalisation total wirelen delta: %d, hpwl: %d\n", total_delta, total_hpwl());
 }
 
 } // namespace Ripple

@@ -310,6 +310,7 @@ struct RippleFPGAPlacer
     {
         int cell;
         Loc old_root;
+        bool was_previously_placed;
     };
 
     // Data structures fast incremental bounding box updates
@@ -401,6 +402,8 @@ struct RippleFPGAPlacer
     bool detail_timing_driven = false;
     bool detail_routeability_driven = false;
 
+    std::queue<int> legaliser_queue;
+
     void setup_detail();
     NetBoundingBox get_net_bounds(NetInfo *net);
     bool find_move_conflicts(DetailMove &move);
@@ -421,6 +424,8 @@ struct RippleFPGAPlacer
     void merge_cells(RippleCell &base, RippleCell &sub, int rel_x, int rel_y, int rel_z);
     // As above but (dx, dy) = (0, 0)
     void merge_cells(RippleCell &base, RippleCell &sub, int rel_z);
+
+    void do_legalisation();
 
     void print_max_congestion();
 };

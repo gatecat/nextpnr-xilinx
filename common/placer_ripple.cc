@@ -159,6 +159,10 @@ void RippleFPGAPlacer::run()
 
     print_max_congestion();
 
+    setup_detail();
+    do_legalisation();
+    print_max_congestion();
+
     ctx->unlock();
 }
 

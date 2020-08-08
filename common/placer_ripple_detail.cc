@@ -79,7 +79,13 @@ Loc RippleFPGAPlacer::move_get_cell_loc(DetailMove &move, int i)
 {
     if (i == 0)
         return move.new_root_loc;
-    Loc base_loc = cells.at(move.move_cells.at(0)).root_loc;
+    auto &front_cell = cells.at(move.move_cells.at(0));
+    Loc base_loc;
+    if (front_cell.placed) {
+        base_loc = front_cell.root_loc;
+    } else {
+        base_loc = {front_cell.placed_x, front_cell.placed_y, 0};
+    }
     Loc new_loc = cells.at(move.move_cells.at(i)).root_loc;
     new_loc.x += (move.new_root_loc.x - base_loc.x);
     new_loc.y += (move.new_root_loc.y - base_loc.y);
@@ -97,6 +103,11 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
         Loc cell_loc = move_get_cell_loc(move, i);
         bool ret = find_conflicting_cells(cell_idx, cell_loc, cell_conflicts);
         if (!ret)
+            return false;
+        // Don't allow conflicts during legalisation
+        // Potentially, this could be fixed by actually ripping up the conflicting cells
+        // and adding them back to the legaliser queue
+        if (!cell_conflicts.empty() && !cell_data.placed)
             return false;
         // Translate conflicting cell coordinates from cell-relative to absolute
         for (auto &conflict : cell_conflicts) {
@@ -125,7 +136,7 @@ void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, Loc o
     // Check net bounds
     for (const auto &port : cell->ports) {
         NetInfo *pn = port.second.net;
-        if (pn == nullptr)
+        if (pn == nullptr || pn->driver.cell == nullptr)
             continue;
         if (cost_ignore_net(pn))
             continue;
@@ -272,7 +283,9 @@ RippleFPGAPlacer::NetBoundingBox RippleFPGAPlacer::get_net_bounds(NetInfo *net)
 {
     NetBoundingBox bb;
     Loc dloc;
-    if (net->driver.cell->bel == BelId())
+    if (net->driver.cell == nullptr)
+        dloc = Loc(0, 0, 0);
+    else if (net->driver.cell->bel == BelId())
         dloc = get_cell_location(net->driver.cell);
     else
         dloc = ctx->getBelLocation(net->driver.cell->bel);
@@ -352,6 +365,7 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
         move.moved.emplace_back();
         move.moved.back().cell = conflict.first;
         move.moved.back().old_root = cells.at(conflict.first).root_loc;
+        move.moved.back().was_previously_placed = cells.at(conflict.first).placed;
         ripup_cell(conflict.first);
     }
     std::vector<Loc> new_locs;
@@ -362,6 +376,7 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
         move.moved.emplace_back();
         move.moved.back().cell = cell_idx;
         move.moved.back().old_root = cells.at(cell_idx).root_loc;
+        move.moved.back().was_previously_placed = cells.at(cell_idx).placed;
         ripup_cell(cell_idx);
     }
     // Now place cells at their new locations
@@ -394,7 +409,8 @@ void RippleFPGAPlacer::revert_move(DetailMove &move)
         ripup_cell(m.cell);
     // Now place cells back in their original location
     for (auto m : move.moved)
-        place_cell(m.cell, m.old_root);
+        if (m.was_previously_placed)
+            place_cell(m.cell, m.old_root);
 }
 
 } // namespace Ripple
