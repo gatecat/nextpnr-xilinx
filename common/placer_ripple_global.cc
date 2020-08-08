@@ -220,7 +220,7 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
 
 void RippleFPGAPlacer::setup_spreader_grid()
 {
-
+    int exisiting_site_types = GetSize(site_types);
     for (auto &cell : cells) {
         IdString site_type;
         if (d.celltype_to_sitetype.count(cell.type))
@@ -231,23 +231,29 @@ void RippleFPGAPlacer::setup_spreader_grid()
             sitetype_to_idx[site_type] = GetSize(site_types);
             site_types.push_back(site_type);
             spread_site_data.emplace_back();
+            site_rows_cols.emplace_back();
+            site_rows_cols.back().rows.resize(d.height, false);
+            site_rows_cols.back().cols.resize(d.width, false);
         }
     }
     for (auto loc : grid) {
         loc.value.per_type.resize(GetSize(site_types));
 
         for (auto &type : loc.value.per_type) {
-            type.avail_area = 0;
             type.cell_area = 0;
-            type.overfull = false;
         }
     }
-    for (auto st : site_types) {
-        int idx = sitetype_to_idx.at(st);
+    for (int idx = exisiting_site_types; idx < GetSize(site_types); idx++) {
+        IdString st = site_types.at(idx);
+        auto &rc = site_rows_cols.at(idx);
         if (d.site_locations.count(st)) {
             // Overriden location grid
-            for (auto l : d.site_locations.at(st))
+            for (auto l : d.site_locations.at(st)) {
                 grid.at(l).per_type.at(idx).avail_area += 1.0;
+                grid.at(l).per_type.at(idx).origin_z.push_back(l.z);
+                rc.cols.at(l.x) = true;
+                rc.rows.at(l.y) = true;
+            }
         } else {
             // Assume this type has a 1:1 mapping with Bels
             for (BelId b : ctx->getBels()) {
@@ -257,6 +263,9 @@ void RippleFPGAPlacer::setup_spreader_grid()
                     continue;
                 Loc l = ctx->getBelLocation(b);
                 grid.at(l).per_type.at(idx).avail_area += 1.0;
+                grid.at(l).per_type.at(idx).origin_z.push_back(l.z);
+                rc.cols.at(l.x) = true;
+                rc.rows.at(l.y) = true;
             }
         }
     }

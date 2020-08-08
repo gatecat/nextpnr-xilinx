@@ -49,6 +49,16 @@ struct Bounds
     }
 };
 
+inline bool operator==(const Bounds &a, const Bounds &b)
+{
+    return a.x0 == b.x0 && a.y0 == b.y0 && a.x1 == b.x1 && a.y1 == b.y1;
+}
+
+inline bool operator!=(const Bounds &a, const Bounds &b)
+{
+    return a.x0 != b.x0 || a.y0 != b.y0 || a.x1 != b.x1 || a.y1 != b.y1;
+}
+
 // We create our own simple netlist structures, to account for packing and other transformations as well as efficient
 // handling of macros like carry chains as a single block. A RippleCell might therefore be a single 'nextpnr' cell
 // or a combination of them, packed into a 'basic logic element'
@@ -208,6 +218,7 @@ struct RippleFPGAPlacer
             double target_density = 1.0f;
             inline double target_area() const { return avail_area * target_density; }
             bool overfull = false;
+            std::vector<int> origin_z;
         };
 
         std::vector<PerType> per_type;
@@ -219,7 +230,14 @@ struct RippleFPGAPlacer
         Loc switchbox;
     };
 
+    struct SiteRowCols
+    {
+        // These bitvectors indicate presence of at least one site in a given row or column
+        std::vector<bool> rows, cols;
+    };
+
     std::vector<IdString> site_types;
+    std::vector<SiteRowCols> site_rows_cols;
     std::unordered_map<IdString, int> sitetype_to_idx;
 
     array2d<GridLocation> grid;
@@ -378,7 +396,7 @@ struct RippleFPGAPlacer
     std::vector<DetailNetData> dt_nets;
     std::vector<NetInfo *> nets_by_udata;
 
-    bool detail_find_candidate_locs(std::vector<int> cell, DetailMove &optimal);
+    bool detail_find_candidate_locs(const std::vector<int> &move_cells, DetailMove &optimal);
 
     bool detail_timing_driven = false;
     bool detail_routeability_driven = false;
