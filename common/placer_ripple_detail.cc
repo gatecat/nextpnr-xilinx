@@ -115,10 +115,13 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
     return true;
 }
 
-void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, BelId old_bel)
+void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, Loc old_loc, BelId old_bel)
 {
+    // Note that old_loc and old_bel seem redundant, but aren't.
+    // For the first stage of legalisation, old_bel does not exist as the cell has only been roughly placed
+    // analytically which may not correspond to an exact bel. Then old_loc is used, which contains the solver
+    // location, instead.
     Loc curr_loc = ctx->getBelLocation(cell->bel);
-    Loc old_loc = ctx->getBelLocation(old_bel);
     // Check net bounds
     for (const auto &port : cell->ports) {
         NetInfo *pn = port.second.net;
@@ -268,14 +271,24 @@ void RippleFPGAPlacer::setup_detail()
 RippleFPGAPlacer::NetBoundingBox RippleFPGAPlacer::get_net_bounds(NetInfo *net)
 {
     NetBoundingBox bb;
-    Loc dloc = ctx->getBelLocation(net->driver.cell->bel);
+    Loc dloc;
+    if (net->driver.cell->bel == BelId())
+        dloc = get_cell_location(net->driver.cell);
+    else
+        dloc = ctx->getBelLocation(net->driver.cell->bel);
     bb.x0 = bb.x1 = dloc.x;
     bb.y0 = bb.y1 = dloc.y;
     bb.nx0 = bb.nx1 = bb.ny0 = bb.ny1 = 1;
     for (auto &usr : net->users) {
+        Loc uloc;
+        /* If usr.cell->bel is BelId() then the cell has not been legalised yet.
+        This happens as we re-use the detail placement logic for legalisation
+        In this case, get_cell_location will give us the solver location as an
+           estimate. */
         if (usr.cell->bel == BelId())
-            continue;
-        Loc uloc = ctx->getBelLocation(usr.cell->bel);
+            uloc = get_cell_location(usr.cell);
+        else
+            uloc = ctx->getBelLocation(usr.cell->bel);
         /*
          * If the location of the sink is on the current edge,
          * increment the count of ports on that edge.
