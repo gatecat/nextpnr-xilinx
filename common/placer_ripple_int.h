@@ -396,7 +396,7 @@ struct RippleFPGAPlacer
     std::vector<DetailNetData> dt_nets;
     std::vector<NetInfo *> nets_by_udata;
 
-    bool detail_find_candidate_locs(const std::vector<int> &move_cells, DetailMove &optimal);
+    bool detail_find_candidate_locs(const std::vector<int> &move_cells, Loc &optimal);
 
     bool detail_timing_driven = false;
     bool detail_routeability_driven = false;

@@ -147,7 +147,7 @@ bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::map<int, 
     return true;
 }
 
-bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_cells, DetailMove &optimal)
+bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_cells, Loc &optimal)
 {
     // We might be moving more than one ripple-cell at once, when we do whole-tile swaps
     // In this case we need to keep track of offsets from cell 0
@@ -196,17 +196,42 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
     };
 
     int max_radius = 5, locs_to_check = 10;
-    int radius = 0, found_cells = 0;
+    int radius = 0, moves_checked = 0;
     Bounds search_bounds;
     search_bounds.expand(cx, cy);
     Bounds last_bounds;
 
-    auto proc_xy = [&](int x, int y) {
-
-    };
-
+    DetailMove curr;
     int type_idx = sitetype_to_idx.at(front_cell.type);
     auto &type_rc = site_rows_cols.at(type_idx);
+
+    for (auto cell : move_cells)
+        curr.move_cells.push_back(cell);
+
+    int best_delta = std::numeric_limits<int>::max();
+
+    auto proc_xy = [&](int x, int y) {
+        reset_move(curr);
+        curr.new_root_loc.x = x;
+        curr.new_root_loc.y = y;
+        // The case of whole-tile moves is ignored here for now...
+        if (front_cell.base_cells.at(0).abs_z) {
+            curr.new_root_loc.z = front_cell.base_cells.at(0).offset_z;
+        } else {
+            auto &available_z = grid.at(x, y).per_type.at(type_idx).origin_z;
+            // FIXME: improve this logic for more complex cases
+            curr.new_root_loc.z = available_z.at(ctx->rng(GetSize(available_z)));
+        }
+        find_move_conflicts(curr);
+        if (perform_move(curr)) {
+            ++moves_checked;
+            if (curr.wirelen_delta < best_delta) {
+                optimal = curr.new_root_loc;
+                best_delta = curr.wirelen_delta;
+            }
+        }
+        revert_move(curr);
+    };
 
     // Keep searching until radius limit is reached; enough candidate locations have been checked or no more progress is
     // being made
@@ -242,7 +267,7 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
                 break;
     }
 
-    return false;
+    return (found_cells > 0);
 }
 
 } // namespace Ripple
