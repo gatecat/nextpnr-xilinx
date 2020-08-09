@@ -232,11 +232,15 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
             // FIXME: improve this logic for more complex cases
             curr.new_root_loc.z = available_z.at(ctx->rng(GetSize(available_z)));
         }
+#if 0
         log_info("    trying (%d, %d, %d)\n", x, y, curr.new_root_loc.z);
+#endif
         if (!find_move_conflicts(curr)) {
             // This means the move failed some early feasibility check, like one of the sub-cells
             // not actually having a corresponding cell
+#if 0
             log_info("        find conflicts failed\n");
+#endif
             return;
         }
         if (perform_move(curr)) {

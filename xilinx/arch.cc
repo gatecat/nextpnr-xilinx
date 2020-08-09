@@ -626,9 +626,9 @@ bool Arch::place()
 {
     std::string placer = str_or_default(settings, id("placer"), defaultPlacer);
 
-    place_ripple();
-
-    if (placer == "heap") {
+    if (placer == "ripple") {
+        place_ripple();
+    } else if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
         cfg.criticalityExponent = 7;
         cfg.ioBufTypes.insert(id("IOB_IBUFCTRL"));
@@ -1330,12 +1330,12 @@ bool Arch::xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdSt
 }
 
 #ifdef WITH_HEAP
-const std::string Arch::defaultPlacer = "heap";
+const std::string Arch::defaultPlacer = "ripple";
 #else
 const std::string Arch::defaultPlacer = "sa";
 #endif
 
-const std::vector<std::string> Arch::availablePlacers = {"sa",
+const std::vector<std::string> Arch::availablePlacers = {"sa", "ripple",
 #ifdef WITH_HEAP
                                                          "heap"
 #endif

@@ -99,6 +99,8 @@ void RippleFPGAPlacer::process_chain(int root, CellInfo *ci, int dx, int dy)
     sc.ci = ci;
     sc.offset_x = dx;
     sc.offset_y = dy;
+    sc.offset_z = (ci->constr_z == ci->UNCONSTR) ? 0 : ci->constr_z;
+    sc.abs_z = ci->constr_abs_z;
     ci->udata = GetSize(cells_by_udata);
     cells_by_udata.push_back(ci);
     cell_index.emplace_back(root, subcell_idx);

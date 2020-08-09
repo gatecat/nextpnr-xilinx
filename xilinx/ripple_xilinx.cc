@@ -61,11 +61,14 @@ DeviceInfo RippleXilinx::getDeviceInfo()
     info.celltype_to_sitetype[id_F8MUX] = slice;
     info.celltype_to_sitetype[id_F9MUX] = slice;
     info.celltype_to_sitetype[ctx->id("SELMUX2_1")] = slice;
-#endif
+
     info.celltype_to_sitetype[id_RAMB18E1_RAMB18E1] = bram;
     info.celltype_to_sitetype[id_RAMB36E1_RAMB36E1] = bram;
     info.celltype_to_sitetype[id_RAMB18E2_RAMB18E2] = bram;
     info.celltype_to_sitetype[id_RAMB36E2_RAMB36E2] = bram;
+#endif
+    info.iobuf_types.insert(id_PSEUDO_GND);
+    info.iobuf_types.insert(id_PSEUDO_VCC);
 
     for (int y = 0; y < info.height; y++) {
         for (int x = 0; x < info.width; x++) {

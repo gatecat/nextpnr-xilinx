@@ -348,6 +348,9 @@ void RippleFPGAPlacer::compute_move_costs(DetailMove &move)
             dt_nets.at(bc).new_bounds = get_net_bounds(nets_by_udata.at(bc));
     for (auto bc : move.bounds_changed_nets_x)
         move.wirelen_delta += dt_nets.at(bc).new_bounds.hpwl() - dt_nets.at(bc).curr_bounds.hpwl();
+    for (auto bc : move.bounds_changed_nets_y)
+        if (dt_nets.at(bc).change_type_x == BoundChangeType::NO_CHANGE)
+            move.wirelen_delta += dt_nets.at(bc).new_bounds.hpwl() - dt_nets.at(bc).curr_bounds.hpwl();
 }
 
 void RippleFPGAPlacer::finalise_move(DetailMove &move)
