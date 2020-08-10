@@ -101,7 +101,9 @@ struct RippleCell
     int placed_x, placed_y;
     bool locked = false;
 
-    Loc root_loc;
+    // For use during detail placement only
+    // root_loc will _not_ be set until legalisation starts;
+    Loc root_loc, old_root_loc;
     bool placed = false;
 };
 
@@ -411,7 +413,7 @@ struct RippleFPGAPlacer
     { /* STUB */
         return false;
     }
-    void update_move_costs(DetailMove &move, CellInfo *cell, Loc old_loc, BelId old_bel);
+    void update_move_costs(DetailMove &move, CellInfo *cell, Loc old_loc);
     Loc move_get_cell_loc(DetailMove &move, int i);
     void compute_move_costs(DetailMove &move);
     void reset_move(DetailMove &move);

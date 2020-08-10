@@ -126,12 +126,8 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
     return true;
 }
 
-void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, Loc old_loc, BelId old_bel)
+void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, Loc old_loc)
 {
-    // Note that old_loc and old_bel seem redundant, but aren't.
-    // For the first stage of legalisation, old_bel does not exist as the cell has only been roughly placed
-    // analytically which may not correspond to an exact bel. Then old_loc is used, which contains the solver
-    // location, instead.
     Loc curr_loc = ctx->getBelLocation(cell->bel);
     // Check net bounds
     for (const auto &port : cell->ports) {
@@ -365,31 +361,41 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
 {
     // Ripup all cells involved in the move, and save the original locations
     for (auto conflict : move.conflicts) {
+        auto &cell = cells.at(conflict.first);
         move.moved.emplace_back();
         move.moved.back().cell = conflict.first;
-        move.moved.back().old_root = cells.at(conflict.first).root_loc;
-        move.moved.back().was_previously_placed = cells.at(conflict.first).placed;
+        move.moved.back().old_root = cell.root_loc;
+        move.moved.back().was_previously_placed = cell.placed;
+        if (cell.placed)
+            cell.old_root_loc = cell.root_loc;
+        else
+            cell.old_root_loc = Loc(cell.placed_x, cell.placed_y, 0);
         ripup_cell(conflict.first);
     }
     std::vector<Loc> new_locs;
     for (int i = 0; i < GetSize(move.move_cells); i++) {
         int cell_idx = move.move_cells.at(i);
+        auto &cell = cells.at(cell_idx);
         Loc new_loc = move_get_cell_loc(move, i);
         new_locs.push_back(new_loc);
         move.moved.emplace_back();
         move.moved.back().cell = cell_idx;
-        move.moved.back().old_root = cells.at(cell_idx).root_loc;
-        move.moved.back().was_previously_placed = cells.at(cell_idx).placed;
+        move.moved.back().old_root = cell.root_loc;
+        move.moved.back().was_previously_placed = cell.placed;
+        if (cell.placed)
+            cell.old_root_loc = cell.root_loc;
+        else
+            cell.old_root_loc = Loc(cell.placed_x, cell.placed_y, 0);
         ripup_cell(cell_idx);
     }
     // Now place cells at their new locations
     for (int i = 0; i < GetSize(move.move_cells); i++) {
-        bool ret = place_cell(move.move_cells.at(i), new_locs.at(i));
+        bool ret = place_cell(move.move_cells.at(i), new_locs.at(i), &move);
         if (!ret)
             goto fail;
     }
     for (auto conflict : move.conflicts) {
-        bool ret = place_cell(conflict.first, conflict.second);
+        bool ret = place_cell(conflict.first, conflict.second, &move);
         if (!ret)
             goto fail;
     }

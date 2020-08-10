@@ -70,7 +70,7 @@ bool RippleFPGAPlacer::place_cell(int cell, Loc root, DetailMove *move_to_update
             goto fail;
         ctx->bindBel(bel, sc.ci, STRENGTH_WEAK);
         if (move_to_update != nullptr)
-            update_move_costs(*move_to_update, sc.ci, ctx->getBelLocation(bel), bel);
+            update_move_costs(*move_to_update, sc.ci, sc.actual_loc(c.old_root_loc));
     }
     if (false) {
     fail:
@@ -125,8 +125,10 @@ bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::map<int, 
         BelId bel = ctx->getBelByLocation(l);
         if (bel == BelId())
             return false;
-        if (ctx->getBelType(bel) != sc.ci->type)
+        if (ctx->getBelType(bel) != sc.ci->type) {
+            log_info("z mismatch: %s %s\n", ctx->nameOf(ctx->getBelType(bel)), ctx->nameOf(sc.ci->type));
             return false;
+        }
         if (ctx->checkBelAvail(bel))
             continue;
         CellInfo *bound = ctx->getBoundBelCell(bel);
@@ -315,9 +317,10 @@ void RippleFPGAPlacer::do_legalisation()
         compute_move_costs(commit_move);
         finalise_move(commit_move);
 #if 1
-        log_info("legalised cell %s to (%d, %d, %d), dHPWL=%d\n", ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci),
-                 commit_move.new_root_loc.x, commit_move.new_root_loc.y, commit_move.new_root_loc.z,
-                 commit_move.wirelen_delta);
+        if (commit_move.wirelen_delta != 0)
+            log_info("legalised cell %s to (%d, %d, %d), dHPWL=%d\n",
+                     ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), commit_move.new_root_loc.x,
+                     commit_move.new_root_loc.y, commit_move.new_root_loc.z, commit_move.wirelen_delta);
 #endif
         total_delta += commit_move.wirelen_delta;
     }
