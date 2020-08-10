@@ -299,13 +299,14 @@ void RippleFPGAPlacer::do_legalisation()
         auto &cell = entry.value;
         if (cell.placed || cell.locked)
             continue;
-        legaliser_queue.push(entry.index);
+        legaliser_queue.emplace(entry.index, cell.area);
     }
     DetailMove commit_move;
     int total_delta = 0;
     while (!legaliser_queue.empty()) {
-        int cell_idx = legaliser_queue.front();
+        auto queue_entry = legaliser_queue.top();
         legaliser_queue.pop();
+        int cell_idx = queue_entry.first;
         reset_move(commit_move);
         commit_move.move_cells.clear();
         commit_move.move_cells.push_back(cell_idx);

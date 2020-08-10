@@ -163,6 +163,11 @@ class ArchFunctions
     virtual ~ArchFunctions(){};
 };
 
+struct QueueAreaCompare
+{
+    bool operator()(const std::pair<int, float> &a, const std::pair<int, float> &b) { return a.second < b.second; }
+};
+
 struct RippleFPGAPlacer
 {
   public:
@@ -404,7 +409,7 @@ struct RippleFPGAPlacer
     bool detail_timing_driven = false;
     bool detail_routeability_driven = false;
 
-    std::queue<int> legaliser_queue;
+    std::priority_queue<std::pair<int, float>> legaliser_queue;
 
     void setup_detail();
     NetBoundingBox get_net_bounds(NetInfo *net);
