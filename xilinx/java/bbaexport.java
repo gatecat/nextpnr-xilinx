@@ -753,7 +753,10 @@ public class bbaexport {
             // Other bels (e.g. extra xc7 routing bels) can be ignored for nextpnr porpoises
             return -1;
         } else {
-            return belsInTile.getOrDefault(t, 0);
+            int base = belsInTile.getOrDefault(t, 0);
+            if (b.getBELClass() == BELClass.RBEL)
+                base += 1024;
+            return base;
         }
 
     }
