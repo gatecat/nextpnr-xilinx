@@ -293,12 +293,24 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
     return (moves_checked > 0);
 }
 
-void RippleFPGAPlacer::do_legalisation()
+void RippleFPGAPlacer::do_legalisation(int stage)
 {
     for (auto entry : cells.enumerate()) {
         auto &cell = entry.value;
         if (cell.placed || cell.locked)
             continue;
+        if (stage == 1) {
+            // Hard IP
+            if (cell.type == id_SLICE_LUTX || cell.type == id_SLICE_FFX || cell.type == id_CARRY8 ||
+                cell.type == id_CARRY4 || cell.type == id_F7MUX || cell.type == id_F8MUX || cell.type == id_F9MUX)
+                continue;
+        } else if (stage == 2) {
+            // Large macros
+            if ((cell.area / cell.area_scale) < 5)
+                continue;
+        } else {
+            // Everything else
+        }
         legaliser_queue.emplace(entry.index, cell.area);
     }
     DetailMove commit_move;
@@ -324,6 +336,7 @@ void RippleFPGAPlacer::do_legalisation()
                      commit_move.new_root_loc.y, commit_move.new_root_loc.z, commit_move.wirelen_delta);
 #endif
         total_delta += commit_move.wirelen_delta;
+        cells.at(cell_idx).locked = true;
     }
     log_info("legalisation total wirelen delta: %d, hpwl: %d\n", total_delta, total_hpwl());
 }
