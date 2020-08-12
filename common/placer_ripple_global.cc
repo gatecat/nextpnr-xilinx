@@ -280,7 +280,7 @@ void RippleFPGAPlacer::setup_spreader_grid(bool detail_mode)
             int type_idx = sitetype_to_idx.at(type);
             float area = f->getCellArea(sc.ci) * cell.area_scale;
             cell.area += area;
-            grid.at(cell.placed_x + sc.offset_x, cell.placed_y + sc.offset_y).per_type.at(type_idx).cell_area += area;
+            grid.at(get_cell_location(sc.ci)).per_type.at(type_idx).cell_area += area;
         }
     }
 }
@@ -317,7 +317,7 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
         // Update per-bin target area
         for (auto bin_kv : s.bins) {
             auto &bin = bin_kv.value;
-            if ((bin.target_area * scale) > bin.avail_area)
+            if ((bin.avail_area * bin.target_density * scale) > bin.avail_area)
                 bin.target_area = bin.avail_area;
             else
                 bin.target_area = bin.avail_area * bin.target_density * scale;
@@ -378,7 +378,7 @@ void RippleFPGAPlacer::update_spread_cell_area(int site_type, int x0, int y0, in
             if (bx < x0 || bx > x1 || by < y0 || by > y1)
                 continue;
             auto &bin = spread_site_data.at(type_idx).bins.at(bx, by);
-            bin.cell_area += f->getCellArea(sc.ci);
+            bin.cell_area += f->getCellArea(sc.ci) * c.area_scale;
             bin.placed_cells.emplace_back(cell, sc_entry.index);
         }
     }
@@ -648,6 +648,14 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
     auto &s = spread_site_data.at(site_type);
 
     expand_overfilled_region(site_type, of);
+#if 1
+    if (site_types.at(site_type) == ctx->id("BRAM") && of.expanded_cell_area > 0) {
+        log("Box: (%d, %d) |-> (%d, %d)\n", of.x0, of.x1, of.y0, of.y1);
+        log("     cell_area:   %f\n", of.expanded_cell_area);
+        log("     avail_area:  %f\n", of.expanded_avail_area);
+        log("     target_area: %f\n", of.expanded_target_area);
+    }
+#endif
     const int max_level = 1000;
     SpreaderBox sbox(of.x0, of.y0, of.x1, of.y1, SpreaderBox::HORIZ, max_level);
     std::set<int> placed_cells;
