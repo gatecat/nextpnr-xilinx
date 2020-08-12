@@ -206,11 +206,7 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
 
     DetailMove curr;
 
-    IdString site_type;
-    if (d.celltype_to_sitetype.count(front_cell.type))
-        site_type = d.celltype_to_sitetype.at(front_cell.type);
-    else
-        site_type = front_cell.type;
+    IdString site_type = front_cell.type;
 
     int type_idx = sitetype_to_idx.at(site_type);
     auto &type_rc = site_rows_cols.at(type_idx);
@@ -296,6 +292,7 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
 
 void RippleFPGAPlacer::do_legalisation(int stage)
 {
+    setup_spreader_grid(true);
     recompute_net_bounds();
     for (auto entry : cells.enumerate()) {
         auto &cell = entry.value;
@@ -321,6 +318,8 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         auto queue_entry = legaliser_queue.top();
         legaliser_queue.pop();
         int cell_idx = queue_entry.first;
+        int orig_x = cells.at(cell_idx).placed_x;
+        int orig_y = cells.at(cell_idx).placed_y;
         reset_move(commit_move);
         commit_move.move_cells.clear();
         commit_move.move_cells.push_back(cell_idx);
@@ -333,8 +332,8 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         finalise_move(commit_move);
 #if 1
         if (commit_move.wirelen_delta != 0)
-            log_info("legalised cell %s to (%d, %d, %d), dHPWL=%d\n",
-                     ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), commit_move.new_root_loc.x,
+            log_info("legalised cell %s from (%d, %d) to (%d, %d, %d), dHPWL=%d\n",
+                     ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), orig_x, orig_y, commit_move.new_root_loc.x,
                      commit_move.new_root_loc.y, commit_move.new_root_loc.z, commit_move.wirelen_delta);
 #endif
         total_delta += commit_move.wirelen_delta;

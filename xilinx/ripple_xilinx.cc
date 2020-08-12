@@ -52,7 +52,6 @@ DeviceInfo RippleXilinx::getDeviceInfo()
     // FIXME: SLR regions, once they are in the database
     IdString slice = ctx->id("SLICE"), bram = ctx->id("BRAM");
     // Consider all logic elements as part of a SLICE
-#if 0
     info.celltype_to_sitetype[id_SLICE_LUTX] = slice;
     info.celltype_to_sitetype[id_SLICE_FFX] = slice;
     info.celltype_to_sitetype[id_CARRY4] = slice;
@@ -66,7 +65,6 @@ DeviceInfo RippleXilinx::getDeviceInfo()
     info.celltype_to_sitetype[id_RAMB36E1_RAMB36E1] = bram;
     info.celltype_to_sitetype[id_RAMB18E2_RAMB18E2] = bram;
     info.celltype_to_sitetype[id_RAMB36E2_RAMB36E2] = bram;
-#endif
     info.iobuf_types.insert(id_PSEUDO_GND);
     info.iobuf_types.insert(id_PSEUDO_VCC);
 

@@ -218,12 +218,12 @@ void RippleFPGAPlacer::lower_bound_solver(double tol, double alpha, int iters)
 #endif
 }
 
-void RippleFPGAPlacer::setup_spreader_grid()
+void RippleFPGAPlacer::setup_spreader_grid(bool detail_mode)
 {
     int exisiting_site_types = GetSize(site_types);
     for (auto &cell : cells) {
         IdString site_type;
-        if (d.celltype_to_sitetype.count(cell.type))
+        if (d.celltype_to_sitetype.count(cell.type) && !detail_mode)
             site_type = d.celltype_to_sitetype.at(cell.type);
         else
             site_type = cell.type;
@@ -737,7 +737,7 @@ void RippleFPGAPlacer::cut_cells_by_area(const std::vector<int> &cells_in, std::
 
 void RippleFPGAPlacer::upper_bound_spread()
 {
-    setup_spreader_grid();
+    setup_spreader_grid(false);
     setup_spreader_bins(2, 2);
     find_overfilled_regions();
     for (int i = 0; i < GetSize(spread_site_data); i++) {

@@ -382,7 +382,7 @@ struct RippleFPGAPlacer
 
     void export_hypergraph(HyperPart::Hypergraph &g, HypergraphMap &m);
 
-    void setup_spreader_grid();
+    void setup_spreader_grid(bool detail_mode);
     void setup_spreader_bins(int bin_w, int bin_h);
     void reset_spread_cell_areas(int site_type, int x0, int y0, int x1, int y1);
     void update_spread_cell_area(int site_type, int x0, int y0, int x1, int y1);
