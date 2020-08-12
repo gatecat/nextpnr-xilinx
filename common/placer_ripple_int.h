@@ -412,6 +412,7 @@ struct RippleFPGAPlacer
     std::priority_queue<std::pair<int, float>> legaliser_queue;
 
     void setup_detail();
+    void recompute_net_bounds();
     NetBoundingBox get_net_bounds(NetInfo *net);
     bool find_move_conflicts(DetailMove &move);
     bool cost_ignore_net(NetInfo *net)

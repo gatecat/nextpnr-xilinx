@@ -153,10 +153,11 @@ void RippleFPGAPlacer::update_area_scale()
         if (cell.locked)
             continue;
         int ranking = grid.at(cell.placed_x, cell.placed_y).cong_ranking;
-        if (ranking >= GetSize(sorted_by_cong) * 0.9) {
+        double cong = current_cong_map.at(cell.placed_x, cell.placed_y);
+        if (ranking >= GetSize(sorted_by_cong) * 0.9 && cong > 360) {
             // Increase effective area in the 10% most congested
             cell.area_scale *= 1.2;
-        } else if (ranking <= GetSize(sorted_by_cong) * 0.3) {
+        } else if (ranking <= GetSize(sorted_by_cong) * 0.3 && cong < 180) {
             // Decrease effective area in the 30% least congested
             cell.area_scale *= 0.8;
         }

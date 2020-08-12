@@ -275,6 +275,14 @@ void RippleFPGAPlacer::setup_detail()
     }
 }
 
+void RippleFPGAPlacer::recompute_net_bounds()
+{
+    for (auto net : sorted(ctx->nets)) {
+        NetInfo *ni = net.second;
+        dt_nets.at(ni->udata).curr_bounds = get_net_bounds(ni);
+    }
+}
+
 RippleFPGAPlacer::NetBoundingBox RippleFPGAPlacer::get_net_bounds(NetInfo *net)
 {
     NetBoundingBox bb;

@@ -253,6 +253,7 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
                 best_delta = curr.wirelen_delta;
             }
             revert_move(curr);
+            reset_move(curr);
         }
     };
 
@@ -295,6 +296,7 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
 
 void RippleFPGAPlacer::do_legalisation(int stage)
 {
+    recompute_net_bounds();
     for (auto entry : cells.enumerate()) {
         auto &cell = entry.value;
         if (cell.placed || cell.locked)
