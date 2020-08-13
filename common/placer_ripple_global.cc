@@ -239,8 +239,13 @@ void RippleFPGAPlacer::setup_spreader_grid(bool detail_mode)
     for (auto loc : grid) {
         loc.value.per_type.resize(GetSize(site_types));
 
-        for (auto &type : loc.value.per_type) {
-            type.cell_area = 0;
+        for (int i = 0; i < GetSize(loc.value.per_type); i++) {
+            auto &type_data = loc.value.per_type.at(i);
+            type_data.cell_area = 0;
+            IdString site_type = site_types.at(i);
+            if (d.site_target_density.count(site_type)) {
+                type_data.target_density = d.site_target_density.at(site_type);
+            }
         }
     }
     for (int idx = exisiting_site_types; idx < GetSize(site_types); idx++) {
@@ -309,11 +314,12 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
         }
 
         double scale = 1.0;
+#if 0
         if (s.target_area <= s.cell_area) {
             // Target area is too low, need to increase target density
             scale = s.cell_area / s.target_area;
         }
-
+#endif
         // Update per-bin target area
         for (auto bin_kv : s.bins) {
             auto &bin = bin_kv.value;

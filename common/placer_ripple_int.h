@@ -135,6 +135,9 @@ struct DeviceInfo
     std::unordered_map<IdString, IdString> celltype_to_sitetype;
     std::unordered_map<IdString, std::vector<Loc>> site_locations;
 
+    // The target placement density for a given site type
+    std::unordered_map<IdString, float> site_target_density;
+
     // Hints for SLICE elements. There may be a more generic way of doing this in the long term
     std::unordered_set<IdString> lut_types, dff_types, slice_misc_types;
 
@@ -255,7 +258,7 @@ struct RippleFPGAPlacer
         double avail_area = 0.0f;
         double cell_area = 0.0f;
         double target_area = 0.0f;
-        double target_density = 1.0f;
+        double target_density = 0.0f;
         bool is_overfull = false;
         std::vector<RippleCellIndex> placed_cells;
     };
