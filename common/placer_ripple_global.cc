@@ -314,12 +314,10 @@ void RippleFPGAPlacer::setup_spreader_bins(int bin_w, int bin_h)
         }
 
         double scale = 1.0;
-#if 0
         if (s.target_area <= s.cell_area) {
             // Target area is too low, need to increase target density
             scale = s.cell_area / s.target_area;
         }
-#endif
         // Update per-bin target area
         for (auto bin_kv : s.bins) {
             auto &bin = bin_kv.value;
@@ -761,6 +759,14 @@ void RippleFPGAPlacer::upper_bound_spread()
             log_info("spreading cells of type '%s' in overfull region (%d, %d, %d, %d)\n",
                      ctx->nameOf(site_types.at(i)), of.x0, of.y0, of.x1, of.y1);
 #endif
+            bool still_has_overfull = false;
+            for (int x = of.x0; x <= of.x1; x++) {
+                for (int y = of.y0; y <= of.y1; y++) {
+                    still_has_overfull |= st.bins.at(x, y).is_overfull;
+                };
+            }
+            if (!still_has_overfull)
+                continue;
             spread_cells_in_region(i, of);
         }
     }
