@@ -90,16 +90,15 @@ double RippleXilinx::getCellArea(const CellInfo *cell)
 {
     if (cell->type == id_SLICE_LUTX) {
         // Bigger LUTs cost more 'area' than smaller ones
-        return 0.5 + 0.1 * int(cell->ports.size());
+        return 1.0 + 0.2 * int(cell->ports.size());
     } else if (cell->type == id_SLICE_FFX) {
         // FFs can be considered cheaper than LUTs
         return 0.75;
     } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX) {
         // Muxes are virtually free
-        return 0.1;
+        return 0.4;
     } else if (cell->type == id_CARRY4 || cell->type == id_CARRY8) {
-        // As are CARRYs
-        return 0.2;
+        return 0.5;
     } else if (cell->type == id_RAMB36E2_RAMB36E2 || cell->type == id_RAMB36E1_RAMB36E1) {
         return 1.0;
     } else if (cell->type == id_RAMB18E1_RAMB18E1 || cell->type == id_RAMB18E2_RAMB18E2) {

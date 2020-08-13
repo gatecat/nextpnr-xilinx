@@ -279,7 +279,11 @@ void RippleFPGAPlacer::recompute_net_bounds()
 {
     for (auto net : sorted(ctx->nets)) {
         NetInfo *ni = net.second;
-        dt_nets.at(ni->udata).curr_bounds = get_net_bounds(ni);
+        auto &dt = dt_nets.at(ni->udata);
+        dt.curr_bounds = get_net_bounds(ni);
+        dt.new_bounds = dt.curr_bounds;
+        dt.change_type_x = BoundChangeType::NO_CHANGE;
+        dt.change_type_y = BoundChangeType::NO_CHANGE;
     }
 }
 

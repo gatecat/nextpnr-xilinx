@@ -274,7 +274,7 @@ void RippleFPGAPlacer::setup_spreader_grid(bool detail_mode)
             continue;
         cell.area = 0;
         for (auto &sc : cell.base_cells) {
-            IdString type = sc.ci->type;
+            IdString type = cell.type;
             if (d.celltype_to_sitetype.count(type))
                 type = d.celltype_to_sitetype.at(type);
             int type_idx = sitetype_to_idx.at(type);
@@ -648,7 +648,7 @@ void RippleFPGAPlacer::spread_cells_in_region(int site_type, OverfilledRegion &o
     auto &s = spread_site_data.at(site_type);
 
     expand_overfilled_region(site_type, of);
-#if 1
+#if 0
     if (site_types.at(site_type) == ctx->id("BRAM") && of.expanded_cell_area > 0) {
         log("Box: (%d, %d) |-> (%d, %d)\n", of.x0, of.x1, of.y0, of.y1);
         log("     cell_area:   %f\n", of.expanded_cell_area);
