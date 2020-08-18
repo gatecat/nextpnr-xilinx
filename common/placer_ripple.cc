@@ -202,7 +202,7 @@ void RippleFPGAPlacer::merge_cells(RippleCell &base, RippleCell &sub, int rel_x,
         cell_idx.cell = base.index;
         cell_idx.subcell = base.base_cells.add(sc);
     }
-    cells.reserve(sub.index);
+    cells.remove(sub.index);
 }
 
 void RippleFPGAPlacer::merge_cells(RippleCell &base, RippleCell &sub, int rel_z)

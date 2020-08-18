@@ -271,6 +271,7 @@ void RippleFPGAPlacer::setup_detail()
         nets_by_udata.push_back(ni);
         dt_nets.emplace_back();
         dt_nets.back().curr_bounds = get_net_bounds(ni);
+        dt_nets.back().new_bounds = dt_nets.back().curr_bounds;
         dt_nets.back().arcs.resize(GetSize(ni->users));
     }
 }

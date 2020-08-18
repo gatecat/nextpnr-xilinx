@@ -98,9 +98,19 @@ bool RippleFPGAPlacer::check_placement(int cell)
 {
     auto &c = cells.at(cell);
     NPNR_ASSERT(c.placed);
-    for (auto &sc : c.base_cells)
+    NPNR_ASSERT(c.root_loc.x == c.placed_x);
+    NPNR_ASSERT(c.root_loc.y == c.placed_y);
+    for (auto &sc : c.base_cells) {
         if (!ctx->isBelLocationValid(sc.ci->bel))
             return false;
+        Loc l = ctx->getBelLocation(sc.ci->bel);
+        NPNR_ASSERT(l.x == (c.placed_x + sc.offset_x));
+        NPNR_ASSERT(l.y == (c.placed_y + sc.offset_y));
+        NPNR_ASSERT(l.z == (sc.abs_z ? sc.offset_z : (c.root_loc.z + sc.offset_z)));
+        NPNR_ASSERT(l.x == get_cell_location(sc.ci).x);
+        NPNR_ASSERT(l.y == get_cell_location(sc.ci).y);
+
+    }
     return true;
 }
 
@@ -198,6 +208,9 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
         cy = front_cell.placed_y;
     };
 
+    cx = std::max(0, std::min(d.width - 1, cx));
+    cy = std::max(0, std::min(d.height - 1, cy));
+
     int max_radius = 5, locs_to_check = 10;
     int radius = 0, moves_checked = 0;
     Bounds search_bounds;
@@ -249,6 +262,8 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
                 best_delta = curr.wirelen_delta;
             }
             revert_move(curr);
+            reset_move(curr);
+        } else {
             reset_move(curr);
         }
     };
@@ -318,7 +333,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         auto queue_entry = legaliser_queue.top();
         legaliser_queue.pop();
         int cell_idx = queue_entry.first;
-#if 0
+#if 1
         int orig_x = cells.at(cell_idx).placed_x;
         int orig_y = cells.at(cell_idx).placed_y;
 #endif
@@ -331,7 +346,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         NPNR_ASSERT(perform_move(commit_move));
         compute_move_costs(commit_move);
         finalise_move(commit_move);
-#if 0
+#if 1
         if (commit_move.wirelen_delta != 0)
             log_info("legalised cell %s from (%d, %d) to (%d, %d, %d), dHPWL=%d\n",
                      ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), orig_x, orig_y, commit_move.new_root_loc.x,
@@ -342,6 +357,23 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         cells.at(cell_idx).locked = true;
     }
     log_info("legalisation total wirelen delta: %d, hpwl: %d\n", total_delta, total_hpwl());
+    int detail_hpwl = 0;
+    for (auto net : sorted(ctx->nets)) {
+        NetInfo *ni = net.second;
+        if (ni->driver.cell == nullptr)
+            continue;
+        detail_hpwl += dt_nets.at(ni->udata).curr_bounds.hpwl();
+    }
+    log_info("incr detail hpwl: %d\n", detail_hpwl);
+    recompute_net_bounds();
+    detail_hpwl = 0;
+    for (auto net : sorted(ctx->nets)) {
+        NetInfo *ni = net.second;
+        if (ni->driver.cell == nullptr)
+            continue;
+        detail_hpwl += dt_nets.at(ni->udata).curr_bounds.hpwl();
+    }
+    log_info("recomputed detail hpwl: %d\n", detail_hpwl);
 }
 
 } // namespace Ripple
