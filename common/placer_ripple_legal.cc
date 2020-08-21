@@ -109,7 +109,6 @@ bool RippleFPGAPlacer::check_placement(int cell)
         NPNR_ASSERT(l.z == (sc.abs_z ? sc.offset_z : (c.root_loc.z + sc.offset_z)));
         NPNR_ASSERT(l.x == get_cell_location(sc.ci).x);
         NPNR_ASSERT(l.y == get_cell_location(sc.ci).y);
-
     }
     return true;
 }
@@ -333,7 +332,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         auto queue_entry = legaliser_queue.top();
         legaliser_queue.pop();
         int cell_idx = queue_entry.first;
-#if 1
+#if 0
         int orig_x = cells.at(cell_idx).placed_x;
         int orig_y = cells.at(cell_idx).placed_y;
 #endif
@@ -346,7 +345,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         NPNR_ASSERT(perform_move(commit_move));
         compute_move_costs(commit_move);
         finalise_move(commit_move);
-#if 1
+#if 0
         if (commit_move.wirelen_delta != 0)
             log_info("legalised cell %s from (%d, %d) to (%d, %d, %d), dHPWL=%d\n",
                      ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), orig_x, orig_y, commit_move.new_root_loc.x,
@@ -363,6 +362,9 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         if (ni->driver.cell == nullptr)
             continue;
         detail_hpwl += dt_nets.at(ni->udata).curr_bounds.hpwl();
+        NPNR_ASSERT(dt_nets.at(ni->udata).change_type_x == NO_CHANGE);
+        NPNR_ASSERT(dt_nets.at(ni->udata).change_type_y == NO_CHANGE);
+        NPNR_ASSERT(dt_nets.at(ni->udata).new_bounds.hpwl() == dt_nets.at(ni->udata).curr_bounds.hpwl());
     }
     log_info("incr detail hpwl: %d\n", detail_hpwl);
     recompute_net_bounds();

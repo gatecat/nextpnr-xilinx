@@ -375,6 +375,12 @@ struct RippleFPGAPlacer
         // The cost deltas
         int wirelen_delta;
         int routeability_delta;
+
+        ~DetailMove()
+        {
+            NPNR_ASSERT(bounds_changed_nets_x.empty());
+            NPNR_ASSERT(bounds_changed_nets_y.empty());
+        }
     };
 
     struct HypergraphMap
