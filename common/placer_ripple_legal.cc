@@ -145,7 +145,6 @@ bool RippleFPGAPlacer::find_conflicting_cells(int cell, Loc root, std::map<int, 
         if (bel == BelId())
             return false;
         if (ctx->getBelType(bel) != sc.ci->type) {
-            log_info("z mismatch: %s %s\n", ctx->nameOf(ctx->getBelType(bel)), ctx->nameOf(sc.ci->type));
             return false;
         }
         if (ctx->checkBelAvail(bel))
@@ -327,10 +326,6 @@ void RippleFPGAPlacer::do_legalisation(int stage)
             if (cell.type == id_SLICE_LUTX || cell.type == id_SLICE_FFX || cell.type == id_CARRY8 ||
                 cell.type == id_CARRY4 || cell.type == id_F7MUX || cell.type == id_F8MUX || cell.type == id_F9MUX)
                 continue;
-        } else if (stage == 2) {
-            // Large macros
-            if ((cell.area / cell.area_scale) < 5)
-                continue;
         } else {
             // Everything else
         }
@@ -342,7 +337,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         auto queue_entry = legaliser_queue.top();
         legaliser_queue.pop();
         int cell_idx = queue_entry.first;
-#if 1
+#if p
         int orig_x = cells.at(cell_idx).placed_x;
         int orig_y = cells.at(cell_idx).placed_y;
 #endif
@@ -351,12 +346,12 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         bool found_loc = detail_find_candidate_locs(commit_move.move_cells, commit_move.new_root_loc);
         if (!found_loc)
             log_error("failed to legalise cell %s\n", ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci));
-        move_debug = true;
+        // move_debug = true;
         NPNR_ASSERT(find_move_conflicts(commit_move));
         NPNR_ASSERT(perform_move(commit_move));
         compute_move_costs(commit_move);
         finalise_move(commit_move);
-#if 1
+#if p
         if (commit_move.wirelen_delta != 0)
             log_info("legalised cell %s from (%d, %d) to (%d, %d, %d), dHPWL=%d\n",
                      ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), orig_x, orig_y, commit_move.new_root_loc.x,
@@ -365,7 +360,8 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         total_delta += commit_move.wirelen_delta;
         reset_move(commit_move);
         move_debug = false;
-        cells.at(cell_idx).locked = true;
+        if (stage == 1)
+            cells.at(cell_idx).locked = true;
     }
     log_info("legalisation total wirelen delta: %d, hpwl: %d\n", total_delta, total_hpwl());
     int detail_hpwl = 0;
@@ -388,6 +384,18 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         detail_hpwl += dt_nets.at(ni->udata).curr_bounds.hpwl();
     }
     log_info("recomputed detail hpwl: %d\n", detail_hpwl);
+}
+
+void RippleFPGAPlacer::undo_legalisation()
+{
+    for (auto cell_entry : cells.enumerate()) {
+        auto &c = cell_entry.value;
+        if (c.locked)
+            continue;
+        if (!c.placed)
+            continue;
+        ripup_cell(cell_entry.index);
+    }
 }
 
 } // namespace Ripple

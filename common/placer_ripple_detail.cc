@@ -130,8 +130,8 @@ void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, Loc o
 {
     Loc curr_loc = ctx->getBelLocation(cell->bel);
     if (move_debug)
-        log_info("    update_move_costs %s: (%d, %d, %d) --> (%d, %d, %d)\n",
-                 ctx->nameOf(cell), old_loc.x, old_loc.y, old_loc.z, curr_loc.x, curr_loc.y, curr_loc.z);
+        log_info("    update_move_costs %s: (%d, %d, %d) --> (%d, %d, %d)\n", ctx->nameOf(cell), old_loc.x, old_loc.y,
+                 old_loc.z, curr_loc.x, curr_loc.y, curr_loc.z);
     // Check net bounds
     for (const auto &port : cell->ports) {
         NetInfo *pn = port.second.net;

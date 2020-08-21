@@ -445,6 +445,7 @@ struct RippleFPGAPlacer
     void merge_cells(RippleCell &base, RippleCell &sub, int rel_z);
 
     void do_legalisation(int stage);
+    void undo_legalisation();
 
     void print_max_congestion();
 };

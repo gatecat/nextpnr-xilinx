@@ -793,15 +793,21 @@ int RippleFPGAPlacer::total_hpwl()
 void RippleFPGAPlacer::place_global(int stage)
 {
     for (int iter = 0; iter < (stage == 3 ? 3 : 10); iter++) {
-        if (stage >= 2)
+        if (stage >= 2) {
+            undo_legalisation();
             update_area_scale();
-        lower_bound_solver(1e-5, (iter + (stage >= 2 ? 10 : 0)) * 0.1, 5);
+        }
+        lower_bound_solver(1e-5, (iter + (stage >= 2 ? 20 : 0)) * 0.1, 5);
         log_info("iter %d lower-bound HPWL: %d\n", iter, total_hpwl());
         upper_bound_spread();
         log_info("iter %d upper-bound HPWL: %d\n", iter, total_hpwl());
+        if (stage == 2) {
+            print_max_congestion();
+            do_legalisation(2);
+            print_max_congestion();
+        }
     }
 }
-
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END
