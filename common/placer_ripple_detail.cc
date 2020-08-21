@@ -129,6 +129,9 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
 void RippleFPGAPlacer::update_move_costs(DetailMove &move, CellInfo *cell, Loc old_loc)
 {
     Loc curr_loc = ctx->getBelLocation(cell->bel);
+    if (move_debug)
+        log_info("    update_move_costs %s: (%d, %d, %d) --> (%d, %d, %d)\n",
+                 ctx->nameOf(cell), old_loc.x, old_loc.y, old_loc.z, curr_loc.x, curr_loc.y, curr_loc.z);
     // Check net bounds
     for (const auto &port : cell->ports) {
         NetInfo *pn = port.second.net;
@@ -431,8 +434,15 @@ void RippleFPGAPlacer::revert_move(DetailMove &move)
         ripup_cell(m.cell);
     // Now place cells back in their original location
     for (auto m : move.moved)
-        if (m.was_previously_placed)
+        if (m.was_previously_placed) {
             place_cell(m.cell, m.old_root);
+        } else {
+            auto &c = cells.at(m.cell);
+            c.placed = false;
+            c.placed_x = c.old_root_loc.x;
+            c.placed_y = c.old_root_loc.y;
+            c.root_loc = c.old_root_loc;
+        }
 }
 
 } // namespace Ripple

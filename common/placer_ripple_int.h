@@ -354,6 +354,8 @@ struct RippleFPGAPlacer
         std::vector<DetailArcData> arcs;
     };
 
+    bool move_debug = false;
+
     struct DetailMove
     {
         std::vector<int> move_cells;

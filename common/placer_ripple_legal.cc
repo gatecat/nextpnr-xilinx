@@ -59,6 +59,16 @@ bool RippleFPGAPlacer::place_cell(int cell, Loc root, DetailMove *move_to_update
 {
     auto &c = cells.at(cell);
     NPNR_ASSERT(!c.placed);
+
+    if (move_to_update != nullptr) {
+        for (auto sc : c.base_cells) {
+            Loc a = clamp_location(sc.actual_loc(c.old_root_loc));
+            Loc b = get_cell_location(sc.ci);
+            NPNR_ASSERT(a.x == b.x);
+            NPNR_ASSERT(a.y == b.y);
+        }
+    }
+
     for (auto &sc : c.base_cells) {
         Loc l = sc.actual_loc(root);
         BelId bel = ctx->getBelByLocation(l);
@@ -332,7 +342,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         auto queue_entry = legaliser_queue.top();
         legaliser_queue.pop();
         int cell_idx = queue_entry.first;
-#if 0
+#if 1
         int orig_x = cells.at(cell_idx).placed_x;
         int orig_y = cells.at(cell_idx).placed_y;
 #endif
@@ -341,11 +351,12 @@ void RippleFPGAPlacer::do_legalisation(int stage)
         bool found_loc = detail_find_candidate_locs(commit_move.move_cells, commit_move.new_root_loc);
         if (!found_loc)
             log_error("failed to legalise cell %s\n", ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci));
+        move_debug = true;
         NPNR_ASSERT(find_move_conflicts(commit_move));
         NPNR_ASSERT(perform_move(commit_move));
         compute_move_costs(commit_move);
         finalise_move(commit_move);
-#if 0
+#if 1
         if (commit_move.wirelen_delta != 0)
             log_info("legalised cell %s from (%d, %d) to (%d, %d, %d), dHPWL=%d\n",
                      ctx->nameOf(cells.at(cell_idx).base_cells.at(0).ci), orig_x, orig_y, commit_move.new_root_loc.x,
@@ -353,6 +364,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
 #endif
         total_delta += commit_move.wirelen_delta;
         reset_move(commit_move);
+        move_debug = false;
         cells.at(cell_idx).locked = true;
     }
     log_info("legalisation total wirelen delta: %d, hpwl: %d\n", total_delta, total_hpwl());
