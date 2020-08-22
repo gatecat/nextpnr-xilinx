@@ -97,14 +97,15 @@ struct RippleCell
     float area = 0;
     float area_scale = 1;
     int chiplet = -1;
+    // The real valued placement from the lower bound solver
     double solver_x, solver_y;
-    int placed_x, placed_y;
     bool locked = false;
 
-    // For use during detail placement only
-    // root_loc will _not_ be set until legalisation starts;
+    // The exact position from legalisation, or the upper bound spreader
     Loc root_loc, old_root_loc;
-    bool placed = false;
+
+    // Once set the cells are all legalised to exact bels
+    bool legalised = false;
 };
 
 // An index allowing us to map a nextpnr cell into a possibly-packed RippleCell
@@ -319,8 +320,7 @@ struct RippleFPGAPlacer
     struct MovedCell
     {
         int cell;
-        Loc old_root;
-        bool was_previously_placed;
+        bool was_previously_legal;
     };
 
     // Data structures fast incremental bounding box updates
@@ -370,9 +370,6 @@ struct RippleFPGAPlacer
         // The list of nets and arcs that have changed bounds/delay as a result of the move
         std::vector<int> bounds_changed_nets_x, bounds_changed_nets_y;
         std::vector<std::pair<int, int>> cost_changed_arcs;
-
-        // The current kind of change that exists for a net/arc
-        std::vector<BoundChangeType> already_bounds_changed_x, already_bounds_changed_y;
 
         // The cost deltas
         int wirelen_delta;

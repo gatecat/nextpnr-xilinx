@@ -86,7 +86,7 @@ void RippleFPGAPlacer::place_initial()
         auto &cell = cells.at(i);
         bool placed = false;
         // IO etc may already have been placed by the constraints placer; skip these
-        if (cell.placed)
+        if (cell.legalised)
             continue;
         while (!placed) {
             if (!available_bels.count(cell.type) || available_bels.at(cell.type).empty())
@@ -97,8 +97,7 @@ void RippleFPGAPlacer::place_initial()
             Loc loc = ctx->getBelLocation(bel);
             cell.solver_x = loc.x;
             cell.solver_y = loc.y;
-            cell.placed_x = loc.x;
-            cell.placed_y = loc.y;
+            cell.root_loc = loc;
             if (has_connectivity(cell) && !d.iobuf_types.count(cell.type)) {
                 placed = true;
             } else {

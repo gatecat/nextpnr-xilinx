@@ -80,12 +80,7 @@ Loc RippleFPGAPlacer::move_get_cell_loc(DetailMove &move, int i)
     if (i == 0)
         return move.new_root_loc;
     auto &front_cell = cells.at(move.move_cells.at(0));
-    Loc base_loc;
-    if (front_cell.placed) {
-        base_loc = front_cell.root_loc;
-    } else {
-        base_loc = {front_cell.placed_x, front_cell.placed_y, 0};
-    }
+    Loc base_loc = front_cell.root_loc;
     Loc new_loc = cells.at(move.move_cells.at(i)).root_loc;
     new_loc.x += (move.new_root_loc.x - base_loc.x);
     new_loc.y += (move.new_root_loc.y - base_loc.y);
@@ -107,7 +102,7 @@ bool RippleFPGAPlacer::find_move_conflicts(DetailMove &move)
         // Don't allow conflicts during legalisation
         // Potentially, this could be fixed by actually ripping up the conflicting cells
         // and adding them back to the legaliser queue
-        if (!cell_conflicts.empty() && !cell_data.placed)
+        if (!cell_conflicts.empty() && !cell_data.legalised)
             return false;
         // Translate conflicting cell coordinates from cell-relative to absolute
         for (auto &conflict : cell_conflicts) {
@@ -380,12 +375,8 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
         auto &cell = cells.at(conflict.first);
         move.moved.emplace_back();
         move.moved.back().cell = conflict.first;
-        move.moved.back().old_root = cell.root_loc;
-        move.moved.back().was_previously_placed = cell.placed;
-        if (cell.placed)
-            cell.old_root_loc = cell.root_loc;
-        else
-            cell.old_root_loc = Loc(cell.placed_x, cell.placed_y, 0);
+        move.moved.back().was_previously_legal = cell.legalised;
+        cell.old_root_loc = cell.root_loc;
         ripup_cell(conflict.first);
     }
     std::vector<Loc> new_locs;
@@ -396,12 +387,8 @@ bool RippleFPGAPlacer::perform_move(DetailMove &move)
         new_locs.push_back(new_loc);
         move.moved.emplace_back();
         move.moved.back().cell = cell_idx;
-        move.moved.back().old_root = cell.root_loc;
-        move.moved.back().was_previously_placed = cell.placed;
-        if (cell.placed)
-            cell.old_root_loc = cell.root_loc;
-        else
-            cell.old_root_loc = Loc(cell.placed_x, cell.placed_y, 0);
+        move.moved.back().was_previously_legal = cell.legalised;
+        cell.old_root_loc = cell.root_loc;
         ripup_cell(cell_idx);
     }
     // Now place cells at their new locations
@@ -433,16 +420,15 @@ void RippleFPGAPlacer::revert_move(DetailMove &move)
     for (auto m : move.moved)
         ripup_cell(m.cell);
     // Now place cells back in their original location
-    for (auto m : move.moved)
-        if (m.was_previously_placed) {
-            place_cell(m.cell, m.old_root);
+    for (auto m : move.moved) {
+        auto &c = cells.at(m.cell);
+        if (m.was_previously_legal) {
+            place_cell(m.cell, c.old_root_loc);
         } else {
-            auto &c = cells.at(m.cell);
-            c.placed = false;
-            c.placed_x = c.old_root_loc.x;
-            c.placed_y = c.old_root_loc.y;
+            c.legalised = false;
             c.root_loc = c.old_root_loc;
         }
+    }
 }
 
 } // namespace Ripple

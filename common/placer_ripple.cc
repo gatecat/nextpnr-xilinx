@@ -118,10 +118,7 @@ Loc RippleFPGAPlacer::get_cell_location(const CellInfo *cell)
     auto &i = cell_index.at(cell->udata);
     auto &c = cells[i.cell];
     auto &sc = c.base_cells[i.subcell];
-    loc.x = c.placed_x + sc.offset_x;
-    loc.y = c.placed_y + sc.offset_y;
-    loc.z = 0;
-    return clamp_location(loc);
+    return clamp_location(sc.actual_loc(c.root_loc));
 }
 
 Loc RippleFPGAPlacer::clamp_location(Loc loc)
@@ -176,10 +173,10 @@ void RippleFPGAPlacer::merge_positions(RippleCell &a, RippleCell &b)
         p1 = (p1 * GetSize(a.base_cells) + p2 * GetSize(b.base_cells)) /
              (GetSize(a.base_cells) + GetSize(b.base_cells));
     };
-    do_merge(a.placed_x, b.placed_x);
-    do_merge(a.placed_y, b.placed_y);
-    a.solver_x = a.placed_x;
-    a.solver_y = a.placed_y;
+    do_merge(a.root_loc.x, b.root_loc.x);
+    do_merge(a.root_loc.y, b.root_loc.y);
+    a.solver_x = a.root_loc.x;
+    a.solver_y = a.root_loc.y;
 }
 
 void RippleFPGAPlacer::merge_cells(RippleCell &base, RippleCell &sub, int rel_x, int rel_y, int rel_z)

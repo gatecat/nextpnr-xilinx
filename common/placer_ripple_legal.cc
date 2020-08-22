@@ -58,7 +58,7 @@ namespace Ripple {
 bool RippleFPGAPlacer::place_cell(int cell, Loc root, DetailMove *move_to_update)
 {
     auto &c = cells.at(cell);
-    NPNR_ASSERT(!c.placed);
+    NPNR_ASSERT(!c.legalised);
 
     if (move_to_update != nullptr) {
         for (auto sc : c.base_cells) {
@@ -88,9 +88,7 @@ bool RippleFPGAPlacer::place_cell(int cell, Loc root, DetailMove *move_to_update
         return false;
     }
     c.root_loc = root;
-    c.placed_x = root.x;
-    c.placed_y = root.y;
-    c.placed = true;
+    c.legalised = true;
     return true;
 }
 
@@ -101,21 +99,17 @@ void RippleFPGAPlacer::ripup_cell(int cell)
         if (sc.ci->bel != BelId())
             ctx->unbindBel(sc.ci->bel);
     }
-    c.placed = false;
+    c.legalised = false;
 }
 
 bool RippleFPGAPlacer::check_placement(int cell)
 {
     auto &c = cells.at(cell);
-    NPNR_ASSERT(c.placed);
-    NPNR_ASSERT(c.root_loc.x == c.placed_x);
-    NPNR_ASSERT(c.root_loc.y == c.placed_y);
+    NPNR_ASSERT(c.legalised);
     for (auto &sc : c.base_cells) {
         if (!ctx->isBelLocationValid(sc.ci->bel))
             return false;
         Loc l = ctx->getBelLocation(sc.ci->bel);
-        NPNR_ASSERT(l.x == (c.placed_x + sc.offset_x));
-        NPNR_ASSERT(l.y == (c.placed_y + sc.offset_y));
         NPNR_ASSERT(l.z == (sc.abs_z ? sc.offset_z : (c.root_loc.z + sc.offset_z)));
         NPNR_ASSERT(l.x == get_cell_location(sc.ci).x);
         NPNR_ASSERT(l.y == get_cell_location(sc.ci).y);
@@ -178,8 +172,8 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
         int c_idx = move_cells.at(i);
         auto &cell = cells.at(c_idx);
         // Moving of multiple cells at once is only supported in refinement, not legalisation
-        NPNR_ASSERT(cell.placed);
-        NPNR_ASSERT(front_cell.placed);
+        NPNR_ASSERT(cell.legalised);
+        NPNR_ASSERT(front_cell.legalised);
         cell_offset.at(i).x = cell.root_loc.x - front_cell.root_loc.x;
         cell_offset.at(i).y = cell.root_loc.y - front_cell.root_loc.y;
         cell_offset.at(i).z = cell.root_loc.z - front_cell.root_loc.z;
@@ -208,13 +202,8 @@ bool RippleFPGAPlacer::detail_find_candidate_locs(const std::vector<int> &move_c
     // Center X and Y coordinates
     int cx, cy;
 
-    if (front_cell.placed) {
-        cx = front_cell.root_loc.x;
-        cy = front_cell.root_loc.y;
-    } else {
-        cx = front_cell.placed_x;
-        cy = front_cell.placed_y;
-    };
+    cx = front_cell.root_loc.x;
+    cy = front_cell.root_loc.y;
 
     cx = std::max(0, std::min(d.width - 1, cx));
     cy = std::max(0, std::min(d.height - 1, cy));
@@ -319,7 +308,7 @@ void RippleFPGAPlacer::do_legalisation(int stage)
     recompute_net_bounds();
     for (auto entry : cells.enumerate()) {
         auto &cell = entry.value;
-        if (cell.placed || cell.locked)
+        if (cell.legalised || cell.locked)
             continue;
         if (stage == 1) {
             // Hard IP
@@ -392,7 +381,7 @@ void RippleFPGAPlacer::undo_legalisation()
         auto &c = cell_entry.value;
         if (c.locked)
             continue;
-        if (!c.placed)
+        if (!c.legalised)
             continue;
         ripup_cell(cell_entry.index);
     }
