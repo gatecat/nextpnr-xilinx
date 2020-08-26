@@ -435,6 +435,8 @@ struct RippleFPGAPlacer
     void revert_move(DetailMove &move);
     void finalise_move(DetailMove &move);
 
+    Bounds find_optimal_region(int cell);
+
     // Helper functions for arch-provided packer
     void merge_positions(RippleCell &a, RippleCell &b);
     void merge_cells(RippleCell &base, RippleCell &sub, int rel_x, int rel_y, int rel_z);

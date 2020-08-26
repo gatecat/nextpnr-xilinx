@@ -347,6 +347,17 @@ template <typename T> class array2d
     T *data;
 };
 
+template <typename T> std::pair<T, T> median_two(std::vector<T> &values)
+{
+    std::pair<T, T> result;
+    NPNR_ASSERT(GetSize(values) % 2 == 0);
+    int m = GetSize(values) / 2;
+    std::nth_element(values.begin(), values.begin() + m, values.end());
+    result.second = values.at(m);
+    result.first = *std::max_element(values.begin(), values.begin() + m);
+    return result;
+}
+
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END

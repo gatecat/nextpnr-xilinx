@@ -431,6 +431,38 @@ void RippleFPGAPlacer::revert_move(DetailMove &move)
     }
 }
 
+Bounds RippleFPGAPlacer::find_optimal_region(int cell)
+{
+    // Optimal region for a cell is the median2 of its placed location and net bounding boxes
+    Bounds result;
+    std::vector<double> x, y;
+    auto &c = cells.at(cell);
+
+    for (auto &sc : c.base_cells) {
+        for (auto &p : sc.ci->ports) {
+            NetInfo *ni = p.second.net;
+            if (ni->users.empty() || ni->driver.cell == nullptr)
+                continue;
+            auto &bb = dt_nets.at(ni->udata).curr_bounds;
+            x.push_back(std::min(bb.x0, c.root_loc.x));
+            x.push_back(std::max(bb.x1, c.root_loc.x));
+            y.push_back(std::min(bb.y0, c.root_loc.y));
+            y.push_back(std::max(bb.y1, c.root_loc.y));
+        }
+    }
+
+    if (x.empty()) {
+        result.x0 = 0;
+        result.y0 = 0;
+        result.x1 = d.width - 1;
+        result.y1 = d.height - 1;
+    } else {
+        std::tie(result.x0, result.x1) = median_two(x);
+        std::tie(result.y0, result.y1) = median_two(y);
+    }
+    return result;
+}
+
 } // namespace Ripple
 
 NEXTPNR_NAMESPACE_END
