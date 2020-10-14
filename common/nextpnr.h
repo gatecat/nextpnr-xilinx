@@ -806,7 +806,10 @@ struct BaseCtx
 
     NetInfo *getNetByAlias(IdString alias) const
     {
-        return nets.count(alias) ? nets.at(alias).get() : nets.at(net_aliases.at(alias)).get();
+        return nets.count(alias) ? nets.at(alias).get()
+                                 : (net_aliases.count(alias) && nets.count(net_aliases.at(alias))
+                                            ? nets.at(net_aliases.at(alias)).get()
+                                            : nullptr);
     }
 
     void addConstraint(std::unique_ptr<TimingConstraint> constr);
