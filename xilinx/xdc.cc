@@ -54,10 +54,10 @@ void Arch::parseXdc(std::istream &in)
         };
         int brcount = 0;
         for (char c : str) {
-            if (c == '[' && group_brackets) {
+            if ((c == '[' || c == '{') && group_brackets) {
                 ++brcount;
             }
-            if (c == ']' && group_brackets) {
+            if ((c == ']' || c == '}') && group_brackets) {
                 --brcount;
                 buffer += c;
                 if (brcount == 0)
@@ -82,10 +82,12 @@ void Arch::parseXdc(std::istream &in)
             log_error("failed to parse target (on line %d)\n", lineno);
         str = str.substr(1, str.size() - 2);
         auto split = split_to_args(str, false);
-        if (split.size() < 2)
+        if (split.size() < 1)
             log_error("failed to parse target (on line %d)\n", lineno);
         if (split.front() != "get_ports")
             log_error("targets other than 'get_ports' are not supported (on line %d)\n", lineno);
+        if (split.size() < 2)
+            log_error("failed to parse target (on line %d)\n", lineno);
         IdString cellname = id(strip_quotes(split.at(1)));
         if (cells.count(cellname))
             tgt_cells.push_back(cells.at(cellname).get());
@@ -98,10 +100,12 @@ void Arch::parseXdc(std::istream &in)
             log_error("failed to parse target (on line %d)\n", lineno);
         str = str.substr(1, str.size() - 2);
         auto split = split_to_args(str, false);
-        if (split.size() < 2)
+        if (split.size() < 1)
             log_error("failed to parse target (on line %d)\n", lineno);
         if (split.front() != "get_ports" && split.front() != "get_nets")
             log_error("targets other than 'get_ports' or 'get_nets' are not supported (on line %d)\n", lineno);
+        if (split.size() < 2)
+            log_error("failed to parse target (on line %d)\n", lineno);
         IdString netname = id(split.at(1));
         NetInfo *maybe_net = getNetByAlias(netname);
         if (maybe_net != nullptr)
@@ -123,20 +127,38 @@ void Arch::parseXdc(std::istream &in)
             continue;
         std::string &cmd = arguments.front();
         if (cmd == "set_property") {
+            std::vector<std::pair<std::string, std::string>> arg_pairs;
             if (arguments.size() != 4)
                 log_error("expected four arguments to 'set_property' (on line %d)\n", lineno);
+            else if (arguments.at(1) == "-dict") {
+                std::vector<std::string> dict_args = split_to_args(strip_quotes(arguments.at(2)), false);
+                if ((dict_args.size() % 2) != 0)
+                    log_error("expected an even number of argument for dictionary (on line %d)\n", lineno);
+                arg_pairs.reserve(dict_args.size() / 2);
+                for (int cursor = 0; cursor + 1 < int(dict_args.size()); cursor += 2) {
+                    arg_pairs.emplace_back(std::move(dict_args.at(cursor)), std::move(dict_args.at(cursor + 1)));
+                }
+            } else
+                arg_pairs.emplace_back(std::move(arguments.at(1)), std::move(arguments.at(2)));
             if (arguments.at(1) == "INTERNAL_VREF")
                 continue;
+            if (arguments.at(3).size() > 2 && arguments.at(3) == "[current_design]") {
+                log_warning("[current_design] isn't supported, ignoring (on line %d)\n", lineno);
+                continue;
+            }
             std::vector<CellInfo *> dest = get_cells(arguments.at(3));
             for (auto c : dest)
-                c->attrs[id(arguments.at(1))] = std::string(arguments.at(2));
+                for (const auto &pair : arg_pairs)
+                    c->attrs[id(pair.first)] = std::string(pair.second);
         } else if (cmd == "create_clock") {
             double period = 0;
             bool got_period = false;
             int cursor = 1;
             for (cursor = 1; cursor < int(arguments.size()); cursor++) {
                 std::string opt = arguments.at(cursor);
-                if (opt == "-name" || opt == "-waveform")
+                if (opt == "-add")
+                    ;
+                else if (opt == "-name" || opt == "-waveform")
                     cursor++;
                 else if (opt == "-period") {
                     cursor++;
