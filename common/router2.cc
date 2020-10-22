@@ -942,8 +942,11 @@ struct Router2
         }
 
         // Skip routes where there is no routing (special cases)
-        if (!ad.routed)
+        if (!ad.routed) {
+            if ((src == dst) && ctx->getBoundWireNet(dst) != net)
+                ctx->bindWire(src, net, STRENGTH_WEAK);
             return true;
+        }
 
         WireId cursor = dst;
 
