@@ -693,7 +693,7 @@ struct FasmBackend
                     write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
             }
             if (!is_output)
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.IN_ONLY");
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
         }
         if (is_input && diff) {
             write_bit("SSTL135_SSTL15.IN_DIFF");
