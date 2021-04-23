@@ -1122,7 +1122,7 @@ struct FasmBackend
     void write_pll(CellInfo *ci)
     {
         push(get_tile_name(ci->bel.tile));
-        push("PLLE2");
+        push("PLLE2_ADV");
         write_bit("IN_USE");
         // FIXME: should be INV not ZINV (XRay error?)
         write_bit("ZINV_PWRDWN", bool_or_default(ci->params, ctx->id("IS_PWRDWN_INVERTED"), false));
