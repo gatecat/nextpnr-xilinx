@@ -221,7 +221,8 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
                         macro_ports += orig.first.str(ctx);
                         macro_ports += ',';
                         macro_ports += (orig.second.type == PORT_INOUT) ? "inout"
-                                                                        : (orig.second.type == PORT_OUT) ? "out" : "in";
+                                       : (orig.second.type == PORT_OUT) ? "out"
+                                                                        : "in";
                         macro_ports += ";";
                     }
                 }

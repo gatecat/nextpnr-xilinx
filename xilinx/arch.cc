@@ -993,6 +993,7 @@ bool Arch::route()
         cfg.bb_margin_x = 4;
         cfg.bb_margin_y = 4;
         cfg.backwards_max_iter = 200;
+        cfg.perf_profile = true;
         router2(getCtx(), cfg);
         result = true;
     } else {
