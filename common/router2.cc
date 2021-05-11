@@ -401,7 +401,7 @@ struct Router2
         // D or M -> M ff input
         // without careful reservation of C for C lut input and D for D lut input, there is fighting for D between FF
         // and LUT
-        if (iter_count > 2)
+        if (iter_count > 0)
             return false; // heuristic to assume we've hit general routing
         if (wire_data(wire).reserved_net != -1 && wire_data(wire).reserved_net != net->udata)
             return true; // reserved for another net
