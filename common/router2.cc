@@ -424,7 +424,7 @@ struct Router2
         WireId src = ctx->getNetinfoSourceWire(net);
         WireId sink = ctx->getNetinfoSinkWire(net, net->users.at(i));
         if (sink == WireId())
-            return;
+            return false;
         std::unordered_set<WireId> rsv;
         WireId cursor = sink;
         bool done = false;
@@ -572,7 +572,7 @@ struct Router2
                             WireId src = ctx->getPipSrcWire(p);
                             if (ctx->wireIntent(src) != (const_val ? ID_PSEUDO_VCC : ID_PSEUDO_GND))
                                 continue;
-                            if (is_wire_undriveable(src))
+                            if (is_wire_undriveable(src, net))
                                 continue;
                             cursor2 = wire_to_idx.at(src);
                             set_visited(t, cursor2, p, WireScore());
