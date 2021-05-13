@@ -221,6 +221,18 @@ void XilinxPacker::pack_ffs()
     ff_rules[ctx->id("FDSE")].set_attrs.emplace_back(ctx->id("X_FFSYNC"), "1");
     // ff_rules[ctx->id("FDSE")].param_xform[ctx->id("IS_S_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
+    ff_rules[ctx->id("FDCE_1")] = ff_rules[ctx->id("FDCE")];
+    ff_rules[ctx->id("FDCE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
+
+    ff_rules[ctx->id("FDPE_1")] = ff_rules[ctx->id("FDPE")];
+    ff_rules[ctx->id("FDPE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
+
+    ff_rules[ctx->id("FDRE_1")] = ff_rules[ctx->id("FDRE")];
+    ff_rules[ctx->id("FDRE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
+
+    ff_rules[ctx->id("FDSE_1")] = ff_rules[ctx->id("FDSE")];
+    ff_rules[ctx->id("FDSE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
+
     generic_xform(ff_rules, true);
 }
 
