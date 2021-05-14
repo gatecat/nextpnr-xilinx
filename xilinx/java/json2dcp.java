@@ -298,6 +298,15 @@ public class json2dcp {
                 String origType = nc.attrs.get("X_ORIG_TYPE");
                 Unisim unitype = Unisim.valueOf(origType);
 
+                if (unitype == Unisim.FDRE_1)
+                    unitype= Unisim.FDRE;
+                else if (unitype == Unisim.FDSE_1)
+                    unitype = Unisim.FDSE;
+                else if (unitype == Unisim.FDPE_1)
+                    unitype = Unisim.FDPE;
+                else if (unitype == Unisim.FDCE_1)
+                    unitype = Unisim.FDCE;
+
                 if (nc.name.contains("$subcell$")) {
                     nc.rwCell = create_cell_custom(des, nc);
                 } else {
