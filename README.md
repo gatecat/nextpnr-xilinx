@@ -41,12 +41,12 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
 ## Building the Arty example - XRay database
  - Run `pypy3 xilinx/python/bbaexport.py --device xc7a35tcsg324-1 --bba xilinx/xc7a35t.bba` (regular cpython works as well, but is a lot slower)
  - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
- - Set `XRAY_DIR` to the path where Project Xray has been cloned and built (you may also need to patch out the Vivado check for `utils/environment.sh` in Xray)
+ - Set `XRAY_DIR` to the path where Project Xray has been cloned and built (you may also need to patch out the Vivado check for `utils/environment.sh` in Xray by removing this line and everything beyond it: https://github.com/SymbiFlow/prjxray/blob/80726cb73ba5c156549d98a2055f1ee3eff94530/utils/environment.sh#L52)
  - Run `attosoc.sh` in `xilinx/examples/arty-a35`.
 
 ## Building the zcu104 example - RapidWright
  - Run `java -jar rapidwright_bbaexport.jar xczu7ev-ffvc1156-2-e xilinx/constids.inc xilinx/xczu7ev.bba`
- - Run `./bbasm xilinx/xczu7ev.bba xilinx/xczu7ev.bin`
+ - Run `./bbasm --l xilinx/xczu7ev.bba xilinx/xczu7ev.bin`
  - Run `blinky.sh` in `xilinx/examples/zcu104`.
 
 ## Creating chip database from RapidWright
@@ -56,7 +56,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
    - Replace `xczu2cg-sbva484-1-e` and the bba filename with the device you want to target. You can build multiple
      databases for multiple devices if desired (subject to the support caveats above)
 
- - Run `./bbasm xilinx/xczu2cg.bba xilinx/xczu2cg.bin`
+ - Run `./bbasm --l xilinx/xczu2cg.bba xilinx/xczu2cg.bin`
    - This converts the text database from above to a binary database that nextpnr can _mmap_
   - See [xilinx/examples](xilinx/examples) for example scripts that run the Yosys/nextpnr/RapidWright flow,
     then use Vivado to write a Verilog simulation netlist.
