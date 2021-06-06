@@ -40,7 +40,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
 
 ## Building the Arty example - XRay database
  - Run `pypy3 xilinx/python/bbaexport.py --device xc7a35tcsg324-1 --bba xilinx/xc7a35t.bba` (regular cpython works as well, but is a lot slower)
- - Run `./bbasm xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
+ - Run `./bbasm --l xilinx/xc7a35t.bba xilinx/xc7a35t.bin`
  - Set `XRAY_DIR` to the path where Project Xray has been cloned and built (you may also need to patch out the Vivado check for `utils/environment.sh` in Xray by removing this line and everything beyond it: https://github.com/SymbiFlow/prjxray/blob/80726cb73ba5c156549d98a2055f1ee3eff94530/utils/environment.sh#L52)
  - Run `attosoc.sh` in `xilinx/examples/arty-a35`.
 
