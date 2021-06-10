@@ -33,6 +33,7 @@
 #include <deque>
 #include <fstream>
 #include <queue>
+#include <shared_mutex>
 #include <thread>
 #include "log.h"
 #include "nextpnr.h"
@@ -213,18 +214,24 @@ struct Router2
         PackedArray<3> flat_data;
         // TODO: faster hash maps?
         dict<uint32_t, WireStatus> ext_data;
+        mutable std::shared_timed_mutex ext_data_mutex;
         WireStatus get(uint32_t wire_idx) const
         {
             uint8_t f = flat_data.get(wire_idx);
-            if (f == 0x7) // wire is in extended array
-                return ext_data.at(wire_idx);
-            else
+            if (f == 0x7) {
+                // wire is in extended array
+                std::shared_lock<std::shared_timed_mutex> guard(ext_data_mutex);
+                auto data = ext_data.at(wire_idx);
+                return data;
+            } else {
                 return WireStatus((f & 0x3), (f >> 2));
+            }
         }
         void set(uint32_t wire_idx, const WireStatus &st)
         {
             // Conditions to use extended data
             if (st.curr_cong > 2 || st.hist_cong > 1 || st.reserved != IdString()) {
+                std::unique_lock<std::shared_timed_mutex> guard(ext_data_mutex);
                 ext_data[wire_idx] = st;
                 flat_data.set(wire_idx, 0x7);
             } else {
@@ -234,17 +241,19 @@ struct Router2
     };
 
     WireStatusStore wires;
-    PackedArray<1> wire_visited;
 
     void setup_flat_wire_index()
     {
         int offset = 0;
         for (int i = 0; i < ctx->chip_info->num_tiles; i++) {
+            // Round up to nearest multiple of wire store size so each tile is in its own uint64_t chunk - avoiding
+            // cross-thread RMW issues
+            uint32_t chunk_size = wires.flat_data.vals_per_chunk;
+            offset = ((offset + (chunk_size - 1)) / chunk_size) * chunk_size;
             tile_wire_offset.push_back(offset);
             offset += ctx->chip_info->tile_types[ctx->chip_info->tile_insts[i].type].num_wires;
         }
         wires.flat_data.resize(offset);
-        wire_visited.resize(offset);
     }
 
     void setup_wires()
@@ -311,8 +320,6 @@ struct Router2
 
         // Backwards routing
         std::queue<WireId> backwards_queue;
-
-        std::vector<int> dirty_wires;
 
         dict<uint32_t, PipId> wire2pip;
 
@@ -556,24 +563,10 @@ struct Router2
         } while (did_something);
     }
 
-    void reset_wires(ThreadContext &t)
-    {
-        for (auto w : t.dirty_wires) {
-            wire_visited.set(w, 0);
-        }
-        t.dirty_wires.clear();
-        t.wire2pip.clear();
-    }
+    void reset_wires(ThreadContext &t) { t.wire2pip.clear(); }
 
-    void set_visited(ThreadContext &t, uint32_t wire, PipId pip)
-    {
-        uint8_t st = wire_visited.get(wire);
-        if (st == 0)
-            t.dirty_wires.push_back(wire);
-        wire_visited.set(wire, 1);
-        t.wire2pip[wire] = pip;
-    }
-    bool was_visited(uint32_t wire) { return wire_visited.get(wire) == 1; }
+    void set_visited(ThreadContext &t, uint32_t wire, PipId pip) { t.wire2pip[wire] = pip; }
+    bool was_visited(ThreadContext &t, uint32_t wire) { return t.wire2pip.count(wire); }
 
 #ifdef ARCH_XILINX
     // Special-case constant ground/vcc routing for Xilinx devices
@@ -683,7 +676,7 @@ struct Router2
                         continue; // don't allow multiple pips driving a wire with a net
                     WireId next_wire = ctx->getPipSrcWire(uh);
                     int next = flat_wire_index(next_wire);
-                    if (was_visited(next))
+                    if (was_visited(t, next))
                         continue; // skip wires that have already been visited
                     auto wd = wires.get(next);
                     if (wd.reserved != IdString() && wd.reserved != net->name)
@@ -698,11 +691,11 @@ struct Router2
                     ++backwards_iter;
             }
             int dst_wire_idx = flat_wire_index(dst_wire);
-            if (was_visited(src_wire_idx)) {
+            if (was_visited(t, src_wire_idx)) {
                 ROUTE_LOG_DBG("   Routed (backwards): ");
                 int cursor_fwd = src_wire_idx;
                 bind_pip_internal(nd, i, src_wire_idx, PipId());
-                while (was_visited(cursor_fwd)) {
+                while (was_visited(t, cursor_fwd)) {
                     PipId p = t.wire2pip.at(cursor_fwd);
                     cursor_fwd = flat_wire_index(ctx->getPipDstWire(p));
                     bind_pip_internal(nd, i, cursor_fwd, p);
@@ -810,7 +803,7 @@ struct Router2
                     continue; // don't allow multiple pips driving a wire with a net
                 WireId next_wire = ctx->getPipSrcWire(uh);
                 int next = flat_wire_index(next_wire);
-                if (was_visited(next))
+                if (was_visited(t, next))
                     continue; // skip wires that have already been visited
                 auto wd = wires.get(next);
                 if (wd.reserved != -1 && wd.reserved != net->udata)
@@ -826,11 +819,11 @@ struct Router2
                 ++backwards_iter;
         }
         // Check if backwards routing succeeded in reaching source
-        if (was_visited(src_wire_idx)) {
+        if (was_visited(t, src_wire_idx)) {
             ROUTE_LOG_DBG("   Routed (backwards): ");
             int cursor_fwd = src_wire_idx;
             bind_pip_internal(nd, i, src_wire_idx, PipId());
-            while (was_visited(cursor_fwd)) {
+            while (was_visited(t, cursor_fwd)) {
                 PipId p = t.wire2pip.at(cursor_fwd);
                 cursor_fwd = flat_wire_index(ctx->getPipDstWire(p));
                 bind_pip_internal(nd, i, cursor_fwd, p);
@@ -901,7 +894,7 @@ struct Router2
                 // Evaluate score of next wire
                 WireId next = ctx->getPipDstWire(dh);
                 int next_idx = flat_wire_index(next);
-                if (was_visited(next_idx))
+                if (was_visited(t, next_idx))
                     continue;
 #if 1
                 if (debug_arc)
@@ -930,10 +923,10 @@ struct Router2
                 }
             }
         }
-        if (was_visited(dst_wire_idx)) {
+        if (was_visited(t, dst_wire_idx)) {
             ROUTE_LOG_DBG("   Routed (explored %d wires): ", explored);
             int cursor_bwd = dst_wire_idx;
-            while (was_visited(cursor_bwd)) {
+            while (was_visited(t, cursor_bwd)) {
                 PipId p = t.wire2pip.at(cursor_bwd);
                 bind_pip_internal(nd, i, cursor_bwd, p);
                 if (ctx->debug) {
