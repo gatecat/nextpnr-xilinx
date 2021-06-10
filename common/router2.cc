@@ -689,7 +689,7 @@ struct Router2
                     if (wd.reserved != IdString() && wd.reserved != net->name)
                         continue;
                     if (wd.curr_cong > (allowed_cong + 1) ||
-                        (allowed_cong == 0 && wd.curr_cong == 1 && !nd.wires.count(cursor)))
+                        (allowed_cong == 0 && wd.curr_cong == 1 && !nd.wires.count(next)))
                         continue; // never allow congestion in backwards routing
                     t.backwards_queue.push(next_wire);
                     set_visited(t, next, uh);
