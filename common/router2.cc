@@ -66,6 +66,8 @@ struct Router2
         int total_route_us = 0;
         float max_crit = 0;
         int fail_count = 0;
+
+        dict<uint32_t, std::pair<PipId, int>> wires;
     };
 
     struct WireScore
@@ -88,8 +90,6 @@ struct Router2
         bool unavailable = false;
         // This wire has to be used for this net
         int reserved_net = -1;
-        // The notional location of the wire, to guarantee thread safety
-        int16_t x = 0, y = 0;
         // Visit data
         struct
         {
@@ -212,39 +212,88 @@ struct Router2
         }
     }
 
-    std::vector<PerWireData> flat_wires;
+
+
+    template <uint8_t bits> struct PackedArray
+    {
+        using Tchunk = uint64_t;
+        using Tvalue = uint8_t;
+        static constexpr Tchunk vals_per_chunk = (64 / bits);
+        static constexpr Tchunk mask = ((1 << bits) - 1);
+
+        PackedArray() = default;
+        PackedArray(size_t size) { resize(size); };
+        Tvalue get(size_t index) const
+        {
+            Tchunk ch = chunks.at(index / vals_per_chunk);
+            return (ch >> ((index % vals_per_chunk) * bits)) & mask;
+        }
+        void set(size_t index, Tvalue value)
+        {
+            Tchunk &ch = chunks.at(index / vals_per_chunk);
+            size_t bit_offset = (index % vals_per_chunk) * bits;
+            ch &= ~(mask << (bit_offset));
+            ch |= ((value & mask) << bit_offset);
+        }
+        void resize(size_t new_size) { chunks.resize((new_size + vals_per_chunk - 1) / vals_per_chunk); }
+        std::vector<Tchunk> chunks;
+    };
+
+    struct WireStatus
+    {
+        WireStatus() = default;
+        WireStatus(int curr_cong, int hist_cong, IdString reserved = {})
+                : curr_cong(curr_cong), hist_cong(hist_cong), reserved(reserved){};
+        int curr_cong;
+        int hist_cong;
+        IdString reserved;
+    };
+
+    struct WireStatusStore
+    {
+        PackedArray<3> flat_data;
+        // TODO: faster hash maps?
+        dict<uint32_t, WireStatus> ext_data;
+        WireStatus get(uint32_t wire_idx) const
+        {
+            uint8_t f = flat_data.get(wire_idx);
+            if (f == 0x7) // wire is in extended array
+                return ext_data.at(wire_idx);
+            else
+                return WireStatus((f & 0x3), (f >> 2));
+        }
+        void set(uint32_t wire_idx, const WireStatus &st)
+        {
+            // Conditions to use extended data
+            if (st.curr_cong > 2 || st.hist_cong > 1 || st.reserved != IdString()) {
+                ext_data[wire_idx] = st;
+                flat_data.set(wire_idx, 0x7);
+            } else {
+                flat_data.set(wire_idx, (st.hist_cong << 2) | st.curr_cong);
+            }
+        }
+    };
+
+
+    WireStatusStore wires;
+    PackedArray<1> wire_visited;
 
     PerWireData &wire_data(WireId w) { return flat_wires[flat_wire_index(w)]; }
 
     void setup_wires()
     {
         setup_flat_wire_index();
-        // Set up per-wire structures, so that MT parts don't have to do any memory allocation
-        // This is possibly quite wasteful and not cache-optimal; further consideration necessary
-        for (auto wire : ctx->getWires()) {
-            PerWireData &pwd = flat_wires.at(flat_wire_index(wire));
-            pwd.w = wire;
-            NetInfo *bound = ctx->getBoundWireNet(wire);
-            if (bound != nullptr) {
-                pwd.bound_nets[bound->udata] = std::make_pair(1, bound->wires.at(wire).pip);
-                if (bound->wires.at(wire).strength > STRENGTH_STRONG)
-                    pwd.unavailable = true;
-            }
 
-            ArcBounds wire_loc = ctx->getRouteBoundingBox(wire, wire);
-            pwd.x = (wire_loc.x0 + wire_loc.x1) / 2;
-            pwd.y = (wire_loc.y0 + wire_loc.y1) / 2;
-        }
     }
 
     struct QueuedWire
     {
 
-        explicit QueuedWire(int wire = -1, PipId pip = PipId(), Loc loc = Loc(), WireScore score = WireScore{},
+        explicit QueuedWire(WireId wire = WireId(), PipId pip = PipId(), Loc loc = Loc(), WireScore score = WireScore{},
                             int randtag = 0)
                 : wire(wire), pip(pip), loc(loc), score(score), randtag(randtag){};
 
-        int wire;
+        WireId wire;
         PipId pip;
         Loc loc;
         WireScore score;
@@ -279,9 +328,11 @@ struct Router2
         pool<WireId> processed_sinks;
 
         // Backwards routing
-        std::queue<int> backwards_queue;
+        std::queue<WireId> backwards_queue;
 
         std::vector<int> dirty_wires;
+
+        dict<uint32_t, PipId> wire_uphill;
 
         // Thread bounding box
         ArcBounds bb;
@@ -315,54 +366,68 @@ struct Router2
             log(__VA_ARGS__);                                                                                          \
     } while (0)
 
-    void bind_pip_internal(NetInfo *net, size_t user, int wire, PipId pip)
+    void bind_pip_internal(PerNetData &net, size_t user, uint32_t wire, PipId pip)
     {
-        auto &b = flat_wires.at(wire).bound_nets[net->udata];
-        ++b.first;
-        if (b.first == 1) {
-            b.second = pip;
+        auto found = net.wires.find(wire);
+        if (found == net.wires.end()) {
+            // Not yet used for any arcs of this net, add to list
+            net.wires.emplace(wire, std::make_pair(pip, 1));
+            // Increase bound count of wire by 1
+            WireStatus st = wires.get(wire);
+            ++st.curr_cong;
+            wires.set(wire, st);
         } else {
-            NPNR_ASSERT(b.second == pip);
+            // Already used for at least one other arc of this net
+            // Don't allow two uphill PIPs for the same net and wire
+            NPNR_ASSERT(found->second.first == pip);
+            // Increase the count of bound arcs
+            ++found->second.second;
         }
     }
 
-    void unbind_pip_internal(NetInfo *net, size_t user, WireId wire)
+    void unbind_pip_internal(PerNetData &net, size_t user, uint32_t wire)
     {
-        auto &b = wire_data(wire).bound_nets.at(net->udata);
-        --b.first;
-        if (b.first == 0) {
-            wire_data(wire).bound_nets.erase(net->udata);
+        auto &b = net.wires.at(wire);
+        --b.second;
+        if (b.second == 0) {
+            // No remaining arcs of this net bound to this wire
+            WireStatus st = wires.get(wire);
+            --st.curr_cong;
+            wires.set(wire, st);
+            net.wires.erase(wire);
         }
     }
 
     void ripup_arc(NetInfo *net, size_t user)
     {
-        auto &ad = nets.at(net->udata).arcs.at(user);
+        auto &nd = nets.at(net->udata);
+        auto &ad = nd.arcs.at(user);
         if (!ad.routed)
             return;
-        WireId src = nets.at(net->udata).src_wire;
+        WireId src = nd.src_wire;
         WireId cursor = ad.sink_wire;
         while (cursor != src) {
-            auto &wd = wire_data(cursor);
-            PipId pip = wd.bound_nets.at(net->udata).second;
-            unbind_pip_internal(net, user, cursor);
+            uint32_t cursor_idx = flat_wire_index(cursor)
+            PipId pip = nd.wires.at(cursor_idx).first;
+            unbind_pip_internal(nd, user, cursor);
             cursor = ctx->getPipSrcWire(pip);
         }
         ad.routed = false;
     }
 
-    float score_wire_for_arc(NetInfo *net, size_t user, WireId wire, PipId pip)
+    float score_wire_for_arc(NetInfo *net, size_t user, WireId wire, uint32_t wire_idx, PipId pip)
     {
-        auto &wd = wire_data(wire);
+        auto wd = wires.get(wire_idx);
         auto &nd = nets.at(net->udata);
         float base_cost = ctx->getDelayNS(ctx->getPipDelay(pip).maxDelay() + ctx->getWireDelay(wire).maxDelay() +
                                           ctx->getDelayEpsilon());
         float present_cost = present_wire_cost(wd, net->udata);
-        float hist_cost = wd.hist_cong_cost;
+        float hist_cost = wd.hist_cong_cost * hist_cong_weight;
         float bias_cost = 0;
         int source_uses = 0;
-        if (wd.bound_nets.count(net->udata))
-            source_uses = wd.bound_nets.at(net->udata).first;
+        auto fnd_wire = nd.wires.find(wire_idx);
+        if (fnd_wire != nd.wires.end())
+            source_uses = fnd_wire->second.second;
         if (timing_driven) {
             float max_bound_crit = 0;
             for (auto &bound : wd.bound_nets)
@@ -380,29 +445,32 @@ struct Router2
         return base_cost * hist_cost * present_cost / (1 + source_uses) + bias_cost;
     }
 
-    float get_togo_cost(NetInfo *net, size_t user, int wire, WireId sink)
+    float get_togo_cost(NetInfo *net, size_t user, WireId wire, int wire_idx, WireId sink)
     {
-        auto &wd = flat_wires[wire];
         int source_uses = 0;
-        if (wd.bound_nets.count(net->udata))
-            source_uses = wd.bound_nets.at(net->udata).first;
+        auto fnd_wire = nd.wires.find(wire_idx);
+        if (fnd_wire != nd.wires.end())
+            source_uses = fnd_wire->second.second;
         // FIXME: timing/wirelength balance?
-        return (ctx->getDelayNS(ctx->estimateDelay(wd.w, sink)) / (1 + source_uses)) + cfg.ipin_cost_adder;
+        return (ctx->getDelayNS(ctx->estimateDelay(wire, sink)) / (1 + source_uses)) + cfg.ipin_cost_adder;
     }
 
     bool check_arc_routing(NetInfo *net, size_t usr)
     {
-        auto &ad = nets.at(net->udata).arcs.at(usr);
-        WireId src_wire = nets.at(net->udata).src_wire;
+        auto &nd = nets.at(net->udata);
+        auto &ad = nd.arcs.at(usr);
+        WireId src_wire = nd.src_wire;
         WireId cursor = ad.sink_wire;
-        while (wire_data(cursor).bound_nets.count(net->udata)) {
-            auto &wd = wire_data(cursor);
-            if (wd.bound_nets.size() != 1)
+        uint32_t cursor_idx = flat_wire_index(cursor);
+        while (nd.wires.count(cursor_idx)) {
+            auto wd = wires.get(cursor_idx);
+            if (wd.curr_cong != 1)
                 return false;
-            auto &uh = wd.bound_nets.at(net->udata).second;
+            auto &uh = nd.wires.at(cursor_idx).first;
             if (uh == PipId())
                 break;
             cursor = ctx->getPipSrcWire(uh);
+            cursor_idx = flat_wire_index(cursor);
         }
         return (cursor == src_wire);
     }
@@ -419,7 +487,8 @@ struct Router2
         // and LUT
         if (iter_count > 0)
             return false; // heuristic to assume we've hit general routing
-        if (wire_data(wire).reserved_net != -1 && wire_data(wire).reserved_net != net->udata)
+        auto wd = wires.get(flat_wire_index(wire));
+        if (wd.reserved != IdString() && wire_data(wire).IdString() != net->name)
             return true; // reserved for another net
         for (auto bp : ctx->getWireBelPins(wire))
             if ((net->driver.cell == nullptr || bp.bel == net->driver.cell->bel) &&
@@ -447,11 +516,15 @@ struct Router2
         if (ctx->debug)
             log("resevering wires for arc %d of net %s\n", int(i), ctx->nameOf(net));
         while (!done) {
-            auto &wd = wire_data(cursor);
+            uint32_t cursor_idx = flat_wire_index(cursor);
+            auto wd = wires.get(cursor_idx);
             if (ctx->debug)
                 log("      %s\n", ctx->nameOfWire(cursor));
-            did_something |= (wd.reserved_net != net->udata);
-            wd.reserved_net = net->udata;
+            if (wd.reserved != net->name) {
+                did_something = true;
+                wd.reserved = net->name;
+                wires.set(cursor_idx, wd);
+            }
             if (cursor == src)
                 break;
             WireId next_cursor;
@@ -491,23 +564,19 @@ struct Router2
     void reset_wires(ThreadContext &t)
     {
         for (auto w : t.dirty_wires) {
-            flat_wires[w].visit.visited = false;
-            flat_wires[w].visit.dirty = false;
-            flat_wires[w].visit.pip = PipId();
-            flat_wires[w].visit.score = WireScore();
+            wire_visited.set(w, 0);
         }
         t.dirty_wires.clear();
+        t.wire_uphill.clear();
     }
 
-    void set_visited(ThreadContext &t, int wire, PipId pip, WireScore score)
+    void set_visited(ThreadContext &t, int wire, PipId pip)
     {
-        auto &v = flat_wires.at(wire).visit;
-        if (!v.dirty)
+        uint8_t st = wire_visited.get(wire);
+        if (st == 0)
             t.dirty_wires.push_back(wire);
-        v.dirty = true;
-        v.visited = true;
-        v.pip = pip;
-        v.score = score;
+        wire_visited.set(wire, 1);
+        t.wire_uphill[wire] = pip;
     }
     bool was_visited(int wire) { return flat_wires.at(wire).visit.visited; }
 
@@ -534,41 +603,42 @@ struct Router2
                 std::queue<int> new_queue;
                 t.backwards_queue.swap(new_queue);
             }
-            t.backwards_queue.push(flat_wire_index(dst_wire));
+            t.backwards_queue.push(dst_wire);
             reset_wires(t);
             while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
-                int cursor = t.backwards_queue.front();
+                WireId cursor_wire = t.backwards_queue.front();
+                uint32_t cursor = flat_wire_index(cursor_wire);
                 t.backwards_queue.pop();
-                auto &cwd = flat_wires[cursor];
+                auto cwd = wires.get(cursor);
                 PipId cpip;
-                if (cwd.bound_nets.count(net->udata)) {
+                if (nd.wires.count(cursor)) {
                     // If we can tack onto existing routing; try that
                     // Only do this if the existing routing is uncontented; however
+                    WireId cursor2_wire = cursor_wire;
                     int cursor2 = cursor;
                     bool bwd_merge_fail = false;
-                    while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
-                        if (int(flat_wires.at(cursor2).bound_nets.size()) > (allowed_cong + 1)) {
-                            bwd_merge_fail = true;
-                            break;
-                        }
-                        PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
+                    while (nd.wires.count(cursor2)) {
+                        PipId p = nd.wires.at(cursor2).first;
                         if (p == PipId())
                             break;
-                        cursor2 = flat_wire_index(ctx->getPipSrcWire(p));
+                        cursor2_wire = ctx->getPipSrcWire(p);
+                        cursor2 = flat_wire_index(cursor2_wire);
                     }
                     if (!bwd_merge_fail && cursor2 == src_wire_idx) {
                         // Found a path to merge to existing routing; backwards
                         cursor2 = cursor;
-                        while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
+                        cursor2_wire = cursor_wire;
+                        while (nd.wires.count(cursor2)) {
                             PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
                             if (p == PipId())
                                 break;
-                            cursor2 = flat_wire_index(ctx->getPipSrcWire(p));
-                            set_visited(t, cursor2, p, WireScore());
+                            cursor2_wire = ctx->getPipSrcWire(p);
+                            cursor2 = flat_wire_index(cursor2);
+                            set_visited(t, cursor2, p);
                         }
                         break;
                     }
-                    cpip = cwd.bound_nets.at(net->udata).second;
+                    cpip = nd.wires.at(cursor).first;
                 }
 #if 0
                 log("   explore %s\n", ctx->nameOfWire(cwd.w));
