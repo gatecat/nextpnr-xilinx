@@ -428,7 +428,7 @@ struct Router2
             present_cost = 1.0f + other_sources * curr_cong_weight;
         }
 
-        float hist_cost = wd.hist_cong * hist_cong_weight;
+        float hist_cost = 1.0f + wd.hist_cong * hist_cong_weight;
         float bias_cost = 0;
 
         if (pip != PipId()) {
