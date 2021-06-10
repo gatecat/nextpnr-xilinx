@@ -78,6 +78,7 @@ struct BelId
     {
         return tile < other.tile || (tile == other.tile && index < other.index);
     }
+    unsigned int hash() const { return mkhash(tile, index); }
 };
 
 struct WireId
@@ -93,6 +94,7 @@ struct WireId
     {
         return tile < other.tile || (tile == other.tile && index < other.index);
     }
+    unsigned int hash() const { return mkhash(tile, index); }
 };
 
 struct PipId
@@ -107,6 +109,7 @@ struct PipId
     {
         return tile < other.tile || (tile == other.tile && index < other.index);
     }
+    unsigned int hash() const { return mkhash(tile, index); }
 };
 
 struct GroupId

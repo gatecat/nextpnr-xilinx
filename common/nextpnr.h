@@ -97,6 +97,8 @@ inline void assert_fail_impl_str(std::string message, const char *expr_str, cons
 #define NPNR_ASSERT_FALSE(msg) (assert_fail_impl(msg, "false", __FILE__, __LINE__))
 #define NPNR_ASSERT_FALSE_STR(msg) (assert_fail_impl_str(msg, "false", __FILE__, __LINE__))
 
+#include "hashlib.h"
+
 struct BaseCtx;
 struct Context;
 

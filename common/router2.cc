@@ -193,7 +193,7 @@ struct Router2
         }
     }
 
-    std::unordered_map<WireId, int> wire_to_idx;
+    dict<WireId, int> wire_to_idx;
     std::vector<PerWireData> flat_wires;
 
     PerWireData &wire_data(WireId w) { return flat_wires[wire_to_idx.at(w)]; }
@@ -260,7 +260,7 @@ struct Router2
 
         std::priority_queue<QueuedWire, std::vector<QueuedWire>, QueuedWire::Greater> queue;
         // Special case where one net has multiple logical arcs to the same physical sink
-        std::unordered_set<WireId> processed_sinks;
+        pool<WireId> processed_sinks;
 
         // Backwards routing
         std::queue<int> backwards_queue;
@@ -425,7 +425,7 @@ struct Router2
         WireId sink = ctx->getNetinfoSinkWire(net, net->users.at(i));
         if (sink == WireId())
             return false;
-        std::unordered_set<WireId> rsv;
+        pool<WireId> rsv;
         WireId cursor = sink;
         bool done = false;
         if (ctx->debug)
@@ -687,9 +687,9 @@ struct Router2
         // This could also be used to speed up forwards routing by a hybrid
         // bidirectional approach
         int backwards_iter = 0;
-        int backwards_limit =
-                ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter :
-                (net->users.size() > 40 ? 20 * cfg.backwards_max_iter : cfg.backwards_max_iter);
+        int backwards_limit = ctx->getBelGlobalBuf(net->driver.cell->bel)
+                                      ? cfg.global_backwards_max_iter
+                                      : (net->users.size() > 40 ? 20 * cfg.backwards_max_iter : cfg.backwards_max_iter);
         t.backwards_queue.push(wire_to_idx.at(dst_wire));
         while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
             int cursor = t.backwards_queue.front();
@@ -1284,7 +1284,7 @@ struct Router2
                 route_net(tcs.at(N), fail, false);
     }
 
-//#define ROUTER2_STATISTICS
+    //#define ROUTER2_STATISTICS
 
     void dump_statistics()
     {

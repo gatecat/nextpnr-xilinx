@@ -675,10 +675,10 @@ struct Arch : BaseCtx
     mutable std::unordered_map<std::string, int> tile_by_name;
     mutable std::unordered_map<std::string, std::pair<int, int>> site_by_name;
 
-    std::unordered_map<WireId, NetInfo *> wire_to_net;
-    std::unordered_map<PipId, NetInfo *> pip_to_net;
-    std::unordered_map<WireId, std::pair<int, int>> driving_pip_loc;
-    std::unordered_map<WireId, NetInfo *> reserved_wires;
+    dict<WireId, NetInfo *> wire_to_net;
+    dict<PipId, NetInfo *> pip_to_net;
+    dict<WireId, std::pair<int, int>> driving_pip_loc;
+    dict<WireId, NetInfo *> reserved_wires;
 
     struct LogicTileStatus
     {
@@ -1136,7 +1136,7 @@ struct Arch : BaseCtx
         refreshUiWire(dst);
     }
 
-    std::unordered_map<int, std::unordered_set<int>> blacklist_pips;
+    dict<int, pool<int>> blacklist_pips;
     void setup_pip_blacklist();
 
     bool usp_pip_hard_unavail(PipId pip) const
