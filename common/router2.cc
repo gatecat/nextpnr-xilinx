@@ -688,7 +688,8 @@ struct Router2
         // bidirectional approach
         int backwards_iter = 0;
         int backwards_limit =
-                ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter : cfg.backwards_max_iter;
+                ctx->getBelGlobalBuf(net->driver.cell->bel) ? cfg.global_backwards_max_iter :
+                (net->users.size() > 40 ? 20 * cfg.backwards_max_iter : cfg.backwards_max_iter);
         t.backwards_queue.push(wire_to_idx.at(dst_wire));
         while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
             int cursor = t.backwards_queue.front();
@@ -701,10 +702,6 @@ struct Router2
                 int cursor2 = cursor;
                 bool bwd_merge_fail = false;
                 while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
-                    if (flat_wires.at(cursor2).bound_nets.size() > 1) {
-                        bwd_merge_fail = true;
-                        break;
-                    }
                     PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
                     if (p == PipId())
                         break;
@@ -782,7 +779,7 @@ struct Router2
         t.queue.push(QueuedWire(src_wire_idx, PipId(), Loc(), base_score));
         set_visited(t, src_wire_idx, PipId(), base_score);
 
-        int toexplore = 25000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
+        int toexplore = 250000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
         int iter = 0;
         int explored = 1;
         bool debug_arc = /*usr.cell->type.str(ctx).find("RAMB") != std::string::npos && (usr.port ==
@@ -983,8 +980,8 @@ struct Router2
         for (int n : failed_nets) {
             auto &net_data = nets.at(n);
             ++net_data.fail_count;
-            if ((net_data.fail_count % 3) == 0) {
-                // Every three times a net fails to route, expand the bounding box to increase the search space
+            if ((net_data.fail_count % 10) == 0) {
+                // Every ten times a net fails to route, expand the bounding box to increase the search space
                 net_data.bb.x0 = std::max(net_data.bb.x0 - 1, 0);
                 net_data.bb.y0 = std::max(net_data.bb.y0 - 1, 0);
                 net_data.bb.x1 = std::min(net_data.bb.x1 + 1, ctx->getGridDimX());
@@ -1389,7 +1386,7 @@ struct Router2
                      total_overuse, overused_wires > 0 ? "NA" : std::to_string(arch_fail).c_str());
             ++iter;
             if (curr_cong_weight < 1e9)
-                curr_cong_weight *= cfg.curr_cong_mult;
+                curr_cong_weight += cfg.curr_cong_mult;
         } while (!failed_nets.empty());
         if (cfg.perf_profile) {
             std::vector<std::pair<int, IdString>> nets_by_runtime;
