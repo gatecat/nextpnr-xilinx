@@ -93,9 +93,9 @@ struct Router2
         // Visit data
         struct
         {
-            bool dirty = false, visited = false;
-            PipId pip;
-            WireScore score;
+            bool dirty = false, visited_fwd = false, visited_bwd = false;
+            PipId pip_fwd, pip_bwd;
+            WireScore score_fwd, score_bwd;
         } visit;
     };
 
@@ -263,7 +263,7 @@ struct Router2
         pool<WireId> processed_sinks;
 
         // Backwards routing
-        std::queue<int> backwards_queue;
+        std::priority_queue<QueuedWire, std::vector<QueuedWire>, QueuedWire::Greater> backwards_queue;
 
         std::vector<int> dirty_wires;
 
@@ -364,14 +364,15 @@ struct Router2
         return base_cost * hist_cost * present_cost / (1 + source_uses) + bias_cost;
     }
 
-    float get_togo_cost(NetInfo *net, size_t user, int wire, WireId sink)
+    float get_togo_cost(NetInfo *net, size_t user, int wire, WireId dest, bool bwd = false)
     {
         auto &wd = flat_wires[wire];
         int source_uses = 0;
         if (wd.bound_nets.count(net->udata))
             source_uses = wd.bound_nets.at(net->udata).first;
         // FIXME: timing/wirelength balance?
-        return (ctx->getDelayNS(ctx->estimateDelay(wd.w, sink)) / (1 + source_uses)) + cfg.ipin_cost_adder;
+        return (ctx->getDelayNS(ctx->estimateDelay(bwd ? dest : wd.w, bwd ? wd.w : dest)) / (1 + source_uses)) +
+               cfg.ipin_cost_adder;
     }
 
     bool check_arc_routing(NetInfo *net, size_t usr)
@@ -475,25 +476,41 @@ struct Router2
     void reset_wires(ThreadContext &t)
     {
         for (auto w : t.dirty_wires) {
-            flat_wires[w].visit.visited = false;
+            flat_wires[w].visit.visited_fwd = false;
+            flat_wires[w].visit.visited_bwd = false;
             flat_wires[w].visit.dirty = false;
-            flat_wires[w].visit.pip = PipId();
-            flat_wires[w].visit.score = WireScore();
+            flat_wires[w].visit.pip_fwd = PipId();
+            flat_wires[w].visit.pip_bwd = PipId();
+            flat_wires[w].visit.score_fwd = WireScore();
+            flat_wires[w].visit.score_bwd = WireScore();
         }
         t.dirty_wires.clear();
     }
 
-    void set_visited(ThreadContext &t, int wire, PipId pip, WireScore score)
+    void set_visited_fwd(ThreadContext &t, int wire, PipId pip, WireScore score)
     {
         auto &v = flat_wires.at(wire).visit;
         if (!v.dirty)
             t.dirty_wires.push_back(wire);
         v.dirty = true;
-        v.visited = true;
-        v.pip = pip;
-        v.score = score;
+        v.visited_fwd = true;
+        v.pip_fwd = pip;
+        v.score_fwd = score;
     }
-    bool was_visited(int wire) { return flat_wires.at(wire).visit.visited; }
+
+    void set_visited_bwd(ThreadContext &t, int wire, PipId pip, WireScore score)
+    {
+        auto &v = flat_wires.at(wire).visit;
+        if (!v.dirty)
+            t.dirty_wires.push_back(wire);
+        v.dirty = true;
+        v.visited_bwd = true;
+        v.pip_bwd = pip;
+        v.score_bwd = score;
+    }
+
+    bool was_visited_fwd(int wire) { return flat_wires.at(wire).visit.visited_fwd; }
+    bool was_visited_bwd(int wire) { return flat_wires.at(wire).visit.visited_bwd; }
 
 #ifdef ARCH_XILINX
     // Special-case constant ground/vcc routing for Xilinx devices
@@ -514,15 +531,13 @@ struct Router2
 
         for (int allowed_cong = 0; allowed_cong < 10; allowed_cong++) {
             backwards_iter = 0;
-            if (!t.backwards_queue.empty()) {
-                std::queue<int> new_queue;
-                t.backwards_queue.swap(new_queue);
-            }
-            t.backwards_queue.push(wire_to_idx.at(dst_wire));
+            std::queue<int> route_queue;
+
+            route_queue.push(wire_to_idx.at(dst_wire));
             reset_wires(t);
-            while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
-                int cursor = t.backwards_queue.front();
-                t.backwards_queue.pop();
+            while (!route_queue.empty() && backwards_iter < backwards_limit) {
+                int cursor = route_queue.front();
+                route_queue.pop();
                 auto &cwd = flat_wires[cursor];
                 PipId cpip;
                 if (cwd.bound_nets.count(net->udata)) {
@@ -548,7 +563,7 @@ struct Router2
                             if (p == PipId())
                                 break;
                             cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
-                            set_visited(t, cursor2, p, WireScore());
+                            set_visited_bwd(t, cursor2, p, WireScore());
                         }
                         break;
                     }
@@ -575,7 +590,7 @@ struct Router2
                             if (is_wire_undriveable(src, net))
                                 continue;
                             cursor2 = wire_to_idx.at(src);
-                            set_visited(t, cursor2, p, WireScore());
+                            set_visited_bwd(t, cursor2, p, WireScore());
                             found = true;
                             break;
                         }
@@ -601,7 +616,7 @@ struct Router2
                     if (cpip != PipId() && cpip != uh)
                         continue; // don't allow multiple pips driving a wire with a net
                     int next = wire_to_idx.at(ctx->getPipSrcWire(uh));
-                    if (was_visited(next))
+                    if (was_visited_bwd(next))
                         continue; // skip wires that have already been visited
                     auto &wd = flat_wires[next];
                     if (wd.unavailable)
@@ -611,21 +626,21 @@ struct Router2
                     if (int(wd.bound_nets.size()) > (allowed_cong + 1) ||
                         (allowed_cong == 0 && wd.bound_nets.size() == 1 && !wd.bound_nets.count(net->udata)))
                         continue; // never allow congestion in backwards routing
-                    t.backwards_queue.push(next);
-                    set_visited(t, next, uh, WireScore());
+                    route_queue.push(next);
+                    set_visited_bwd(t, next, uh, WireScore());
                 }
                 if (did_something)
                     ++backwards_iter;
             }
             int dst_wire_idx = wire_to_idx.at(dst_wire);
-            if (was_visited(src_wire_idx)) {
+            if (was_visited_bwd(src_wire_idx)) {
                 ROUTE_LOG_DBG("   Routed (backwards): ");
                 int cursor_fwd = src_wire_idx;
                 bind_pip_internal(net, i, src_wire_idx, PipId());
-                while (was_visited(cursor_fwd)) {
+                while (was_visited_bwd(cursor_fwd)) {
                     auto &v = flat_wires.at(cursor_fwd).visit;
-                    cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip));
-                    bind_pip_internal(net, i, cursor_fwd, v.pip);
+                    cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip_bwd));
+                    bind_pip_internal(net, i, cursor_fwd, v.pip_bwd);
                     if (ctx->debug) {
                         auto &wd = flat_wires.at(cursor_fwd);
                         ROUTE_LOG_DBG("      wire: %s (curr %d hist %f)\n", ctx->nameOfWire(wd.w),
@@ -678,208 +693,178 @@ struct Router2
             t.queue.swap(new_queue);
         }
         if (!t.backwards_queue.empty()) {
-            std::queue<int> new_queue;
+            std::priority_queue<QueuedWire, std::vector<QueuedWire>, QueuedWire::Greater> new_queue;
             t.backwards_queue.swap(new_queue);
         }
-        // First try strongly iteration-limited routing backwards BFS
-        // this will deal with certain nets faster than forward A*
-        // and comes at a minimal performance cost for the others
-        // This could also be used to speed up forwards routing by a hybrid
-        // bidirectional approach
-        int backwards_iter = 0;
-        int backwards_limit = ctx->getBelGlobalBuf(net->driver.cell->bel)
-                                      ? cfg.global_backwards_max_iter
-                                      : (net->users.size() > 40 ? 20 * cfg.backwards_max_iter : cfg.backwards_max_iter);
-        t.backwards_queue.push(wire_to_idx.at(dst_wire));
-        while (!t.backwards_queue.empty() && backwards_iter < backwards_limit) {
-            int cursor = t.backwards_queue.front();
-            t.backwards_queue.pop();
-            auto &cwd = flat_wires[cursor];
-            PipId cpip;
-            if (cwd.bound_nets.count(net->udata)) {
-                // If we can tack onto existing routing; try that
-                // Only do this if the existing routing is uncontented; however
-                int cursor2 = cursor;
-                bool bwd_merge_fail = false;
-                while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
-                    PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
-                    if (p == PipId())
-                        break;
-                    cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
-                }
-                if (!bwd_merge_fail && cursor2 == src_wire_idx) {
-                    // Found a path to merge to existing routing; backwards
-                    cursor2 = cursor;
-                    while (flat_wires.at(cursor2).bound_nets.count(net->udata)) {
-                        PipId p = flat_wires.at(cursor2).bound_nets.at(net->udata).second;
-                        if (p == PipId())
-                            break;
-                        cursor2 = wire_to_idx.at(ctx->getPipSrcWire(p));
-                        set_visited(t, cursor2, p, WireScore());
-                    }
+
+        reset_wires(t);
+
+        auto seed_queue_fwd = [&](int wire_idx, float wire_cost = 0) {
+            WireScore base_score;
+            base_score.cost = wire_cost;
+            base_score.delay = 0;
+            base_score.togo_cost = get_togo_cost(net, i, wire_idx, dst_wire, false);
+            t.queue.push(QueuedWire(wire_idx, PipId(), Loc(), base_score));
+            set_visited_fwd(t, wire_idx, PipId(), base_score);
+        };
+
+        // Seed forwards with the source wire
+        seed_queue_fwd(src_wire_idx);
+
+        auto seed_queue_bwd = [&](int wire_idx) {
+            WireScore base_score;
+            base_score.cost = 0;
+            base_score.delay = 0;
+            base_score.togo_cost = get_togo_cost(net, i, wire_idx, src_wire, true);
+            t.backwards_queue.push(QueuedWire(wire_idx, PipId(), Loc(), base_score));
+            set_visited_bwd(t, wire_idx, PipId(), base_score);
+        };
+
+        // Seed backwards with the dest wire
+        seed_queue_bwd(dst_wire_idx);
+
+        // Once we meet in the middle, set this to the meeting point
+        int midpoint_wire_idx = -1;
+
+        int explored = 0, iter = 0;
+        int toexplore = is_bb ? (25000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0))) : 1000000000;
+        while (!(t.queue.empty() && t.backwards_queue.empty()) && iter < toexplore) {
+            ++iter;
+            if (!t.queue.empty()) {
+                // Explore forwards
+                auto curr = t.queue.top();
+                auto &d = flat_wires.at(curr.wire);
+                t.queue.pop();
+                // Meet in the middle
+                if (d.visit.visited_bwd) {
+                    midpoint_wire_idx = curr.wire;
                     break;
                 }
-                cpip = cwd.bound_nets.at(net->udata).second;
-            }
-            bool did_something = false;
-            for (auto uh : ctx->getPipsUphill(flat_wires[cursor].w)) {
-                did_something = true;
-                if (!ctx->checkPipAvail(uh) && ctx->getBoundPipNet(uh) != net)
-                    continue;
-                if (cpip != PipId() && cpip != uh)
-                    continue; // don't allow multiple pips driving a wire with a net
-                int next = wire_to_idx.at(ctx->getPipSrcWire(uh));
-                if (was_visited(next))
-                    continue; // skip wires that have already been visited
-                auto &wd = flat_wires[next];
-                if (wd.unavailable)
-                    continue;
-                if (wd.reserved_net != -1 && wd.reserved_net != net->udata)
-                    continue;
-                if (wd.bound_nets.size() > 1 || (wd.bound_nets.size() == 1 && !wd.bound_nets.count(net->udata)))
-                    continue; // never allow congestion in backwards routing
-                if (!thread_test_wire(t, wd))
-                    continue; // thread safety issue
-                t.backwards_queue.push(next);
-                set_visited(t, next, uh, WireScore());
-            }
-            if (did_something)
-                ++backwards_iter;
-        }
-        // Check if backwards routing succeeded in reaching source
-        if (was_visited(src_wire_idx)) {
-            ROUTE_LOG_DBG("   Routed (backwards): ");
-            int cursor_fwd = src_wire_idx;
-            bind_pip_internal(net, i, src_wire_idx, PipId());
-            while (was_visited(cursor_fwd)) {
-                auto &v = flat_wires.at(cursor_fwd).visit;
-                cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip));
-                bind_pip_internal(net, i, cursor_fwd, v.pip);
-                if (ctx->debug) {
-                    auto &wd = flat_wires.at(cursor_fwd);
-                    ROUTE_LOG_DBG("      wire: %s (curr %d hist %f)\n", ctx->nameOfWire(wd.w),
-                                  int(wd.bound_nets.size()) - 1, wd.hist_cong_cost);
-                }
-            }
-            NPNR_ASSERT(cursor_fwd == dst_wire_idx);
-            ad.routed = true;
-            t.processed_sinks.insert(dst_wire);
-            reset_wires(t);
-            return ARC_SUCCESS;
-        }
-
-        // Normal forwards A* routing
-        reset_wires(t);
-        WireScore base_score;
-        base_score.cost = 0;
-        base_score.delay = ctx->getWireDelay(src_wire).maxDelay();
-        base_score.togo_cost = get_togo_cost(net, i, src_wire_idx, dst_wire);
-
-        // Add source wire to queue
-        t.queue.push(QueuedWire(src_wire_idx, PipId(), Loc(), base_score));
-        set_visited(t, src_wire_idx, PipId(), base_score);
-
-        int toexplore = 250000 * std::max(1, (ad.bb.x1 - ad.bb.x0) + (ad.bb.y1 - ad.bb.y0));
-        int iter = 0;
-        int explored = 1;
-        bool debug_arc = /*usr.cell->type.str(ctx).find("RAMB") != std::string::npos && (usr.port ==
-                            ctx->id("ADDRATIEHIGH0") || usr.port == ctx->id("ADDRARDADDRL0"))*/
-                false;
-
-        // When running without a bounding box, the toexplore limit should be
-        // suspended until a solution is reached.  Once a solution is found,
-        // the toexplore limit should be used again to prevent requiring the
-        // router to drain the routing queue.
-        //
-        // Note that is it important that the must_drain_queue be set to true
-        // when running without a bb to ensure that a routing failure is
-        // because there is not route, rather than just because the toexplore
-        // heuristic is incorrect.
-        bool must_drain_queue = !is_bb;
-        while (!t.queue.empty() && (must_drain_queue || iter < toexplore)) {
-            auto curr = t.queue.top();
-            auto &d = flat_wires.at(curr.wire);
-            t.queue.pop();
-            ++iter;
-#if 0
-            ROUTE_LOG_DBG("current wire %s\n", ctx->nameOfWire(curr.wire));
-#endif
-            // Explore all pips downhill of cursor
-            for (auto dh : ctx->getPipsDownhill(d.w)) {
-                // Skip pips outside of box in bounding-box mode
-#if 0
-                ROUTE_LOG_DBG("trying pip %s\n", ctx->nameOfPip(dh));
-#endif
-#if 0
-                int wire_intent = ctx->wireIntent(curr.wire);
-                if (is_bb && !hit_test_pip(ad.bb, ctx->getPipLocation(dh)) && wire_intent != ID_PSEUDO_GND && wire_intent != ID_PSEUDO_VCC)
-                    continue;
-#else
-                if (is_bb && !hit_test_pip(nd.bb, ctx->getPipLocation(dh)))
-                    continue;
-                if (!ctx->checkPipAvail(dh) && ctx->getBoundPipNet(dh) != net)
-                    continue;
-#endif
-                // Evaluate score of next wire
-                WireId next = ctx->getPipDstWire(dh);
-                int next_idx = wire_to_idx.at(next);
-                if (was_visited(next_idx))
-                    continue;
-#if 1
-                if (debug_arc)
-                    ROUTE_LOG_DBG("   src wire %s\n", ctx->nameOfWire(next));
-#endif
-                auto &nwd = flat_wires.at(next_idx);
-                if (nwd.unavailable)
-                    continue;
-                if (nwd.reserved_net != -1 && nwd.reserved_net != net->udata)
-                    continue;
-                if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != dh)
-                    continue;
-                if (!thread_test_wire(t, nwd))
-                    continue; // thread safety issue
-                WireScore next_score;
-                next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, dh);
-                next_score.delay =
-                        curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
-                next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, next_idx, dst_wire);
-                const auto &v = nwd.visit;
-                if (!v.visited || (v.score.total() > next_score.total())) {
+                // Explore all pips downhill of cursor
+                for (auto dh : ctx->getPipsDownhill(d.w)) {
+                    // Skip pips outside of box in bounding-box mode
+                    if (is_bb && !hit_test_pip(nd.bb, ctx->getPipLocation(dh)))
+                        continue;
+                    // Skip pips that are permanently unavailable
+                    if (!ctx->checkPipAvail(dh) && ctx->getBoundPipNet(dh) != net)
+                        continue;
+                    WireId next = ctx->getPipDstWire(dh);
+                    int next_idx = wire_to_idx.at(next);
+                    // Skip already visited wires
+                    if (was_visited_fwd(next_idx))
+                        continue;
                     ++explored;
-#if 0
-                    ROUTE_LOG_DBG("exploring wire %s cost %f togo %f\n", ctx->nameOfWire(next), next_score.cost,
-                                  next_score.togo_cost);
-#endif
-                    // Add wire to queue if it meets criteria
+                    // Check data for next wire
+                    auto &nwd = flat_wires.at(next_idx);
+                    if (nwd.unavailable)
+                        continue;
+                    // Reserved, but for another net...
+                    if (nwd.reserved_net != -1 && nwd.reserved_net != net->udata)
+                        continue;
+                    // Bound to this net, but with a different driving PIP
+                    if (nwd.bound_nets.count(net->udata) && nwd.bound_nets.at(net->udata).second != dh)
+                        continue;
+                    if (!thread_test_wire(t, nwd))
+                        continue; // thread safety issue
+                    // All checks passed, mark as visited and add to the queue
+                    WireScore next_score;
+                    next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, dh);
+                    next_score.delay =
+                            curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
+                    next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, next_idx, dst_wire, false);
                     t.queue.push(QueuedWire(next_idx, dh, ctx->getPipLocation(dh), next_score, t.rng.rng()));
-                    set_visited(t, next_idx, dh, next_score);
-                    if (next == dst_wire) {
-                        toexplore = std::min(toexplore, iter + 5);
-                        must_drain_queue = false;
-                    }
+                    set_visited_fwd(t, next_idx, dh, next_score);
+                }
+            }
+            if (!t.backwards_queue.empty()) {
+                // Explore forwards
+                auto curr = t.backwards_queue.top();
+                auto &d = flat_wires.at(curr.wire);
+                t.backwards_queue.pop();
+                // Meet in the middle
+                if (d.visit.visited_fwd) {
+                    midpoint_wire_idx = curr.wire;
+                    break;
+                }
+                // Check if there's existing routing
+                PipId curr_pip = PipId();
+                if (d.bound_nets.count(net->udata))
+                    curr_pip = d.bound_nets.at(net->udata).second;
+                // Explore all pips uphill of cursor
+                for (auto uh : ctx->getPipsUphill(d.w)) {
+                    // Existing routing, only follow the existing path
+                    if (curr_pip != PipId() && curr_pip != uh)
+                        continue;
+                    // Skip pips that are permanently unavailable
+                    if (!ctx->checkPipAvail(uh) && ctx->getBoundPipNet(uh) != net)
+                        continue;
+                    WireId next = ctx->getPipSrcWire(uh);
+                    int next_idx = wire_to_idx.at(next);
+                    // Skip already visited wires
+                    if (was_visited_bwd(next_idx))
+                        continue;
+                    ++explored;
+                    // Check data for next wire
+                    auto &nwd = flat_wires.at(next_idx);
+                    if (nwd.unavailable)
+                        continue;
+                    // Reserved, but for another net...
+                    if (nwd.reserved_net != -1 && nwd.reserved_net != net->udata)
+                        continue;
+                    if (!thread_test_wire(t, nwd))
+                        continue; // thread safety issue
+                    // All checks passed, mark as visited and add to the queue
+                    WireScore next_score;
+                    next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, uh);
+                    next_score.delay =
+                            curr.score.delay + ctx->getPipDelay(uh).maxDelay() + ctx->getWireDelay(next).maxDelay();
+                    next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, next_idx, src_wire, true);
+                    t.backwards_queue.push(QueuedWire(next_idx, uh, ctx->getPipLocation(uh), next_score, t.rng.rng()));
+                    set_visited_bwd(t, next_idx, uh, next_score);
                 }
             }
         }
-        if (was_visited(dst_wire_idx)) {
+
+        if (midpoint_wire_idx != -1) {
             ROUTE_LOG_DBG("   Routed (explored %d wires): ", explored);
-            int cursor_bwd = dst_wire_idx;
-            while (was_visited(cursor_bwd)) {
+            int cursor_bwd = midpoint_wire_idx;
+            while (was_visited_fwd(cursor_bwd)) {
                 auto &v = flat_wires.at(cursor_bwd).visit;
-                bind_pip_internal(net, i, cursor_bwd, v.pip);
+                bind_pip_internal(net, i, cursor_bwd, v.pip_fwd);
                 if (ctx->debug) {
                     auto &wd = flat_wires.at(cursor_bwd);
-                    ROUTE_LOG_DBG("      wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
+                    ROUTE_LOG_DBG("      fwd wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
                                   int(wd.bound_nets.size()) - 1, wd.hist_cong_cost,
                                   wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
                 }
-                if (v.pip == PipId()) {
+                if (v.pip_fwd == PipId()) {
                     NPNR_ASSERT(cursor_bwd == src_wire_idx);
                     break;
                 }
-                ROUTE_LOG_DBG("         pip: %s (%d, %d)\n", ctx->nameOfPip(v.pip), ctx->getPipLocation(v.pip).x,
-                              ctx->getPipLocation(v.pip).y);
-                cursor_bwd = wire_to_idx.at(ctx->getPipSrcWire(v.pip));
+                ROUTE_LOG_DBG("         fwd pip: %s (%d, %d)\n", ctx->nameOfPip(v.pip_fwd),
+                              ctx->getPipLocation(v.pip_fwd).x, ctx->getPipLocation(v.pip_fwd).y);
+                cursor_bwd = wire_to_idx.at(ctx->getPipSrcWire(v.pip_fwd));
             }
+
+            int cursor_fwd = midpoint_wire_idx;
+            while (was_visited_bwd(cursor_fwd)) {
+                auto &v = flat_wires.at(cursor_fwd).visit;
+                if (ctx->debug) {
+                    auto &wd = flat_wires.at(cursor_fwd);
+                    ROUTE_LOG_DBG("      bwd wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
+                                  int(wd.bound_nets.size()) - 1, wd.hist_cong_cost,
+                                  wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
+                }
+                if (v.pip_bwd == PipId()) {
+                    break;
+                }
+                ROUTE_LOG_DBG("         bwd pip: %s (%d, %d)\n", ctx->nameOfPip(v.pip_bwd),
+                              ctx->getPipLocation(v.pip_bwd).x, ctx->getPipLocation(v.pip_bwd).y);
+                cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip_bwd));
+                bind_pip_internal(net, i, cursor_fwd, v.pip_bwd);
+            }
+            NPNR_ASSERT(cursor_fwd == dst_wire_idx);
+
             t.processed_sinks.insert(dst_wire);
             ad.routed = true;
             reset_wires(t);
