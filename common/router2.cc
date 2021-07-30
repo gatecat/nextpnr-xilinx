@@ -271,6 +271,9 @@ struct Router2
         ArcBounds bb;
 
         DeterministicRNG rng;
+
+        // Used to add existing routing to the heap
+        dict<int, float> wire_costs;
     };
 
     bool thread_test_wire(ThreadContext &t, PerWireData &w)
@@ -711,6 +714,14 @@ struct Router2
         // Seed forwards with the source wire
         seed_queue_fwd(src_wire_idx);
 
+        // Also seed with nearby routing
+        auto &dst_data = flat_wires.at(dst_wire_idx);
+        for (auto &ext_cost : t.wire_costs) {
+            auto &wd = flat_wires.at(ext_cost.first);
+            if (std::abs(wd.x - dst_data.x) <= cfg.bb_margin_x && std::abs(wd.y - dst_data.y) <= cfg.bb_margin_y)
+                seed_queue_fwd(ext_cost.first, ext_cost.second);
+        }
+
         auto seed_queue_bwd = [&](int wire_idx) {
             WireScore base_score;
             base_score.cost = 0;
@@ -830,6 +841,9 @@ struct Router2
             int cursor_bwd = midpoint_wire_idx;
             while (was_visited_fwd(cursor_bwd)) {
                 auto &v = flat_wires.at(cursor_bwd).visit;
+                t.wire_costs[cursor_bwd] = v.score_fwd.cost;
+                if (v.pip_fwd == PipId() && cursor_bwd != src_wire_idx)
+                    break;
                 bind_pip_internal(net, i, cursor_bwd, v.pip_fwd);
                 if (ctx->debug) {
                     auto &wd = flat_wires.at(cursor_bwd);
@@ -838,7 +852,6 @@ struct Router2
                                   wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
                 }
                 if (v.pip_fwd == PipId()) {
-                    NPNR_ASSERT(cursor_bwd == src_wire_idx);
                     break;
                 }
                 ROUTE_LOG_DBG("         fwd pip: %s (%d, %d)\n", ctx->nameOfPip(v.pip_fwd),
@@ -846,9 +859,30 @@ struct Router2
                 cursor_bwd = wire_to_idx.at(ctx->getPipSrcWire(v.pip_fwd));
             }
 
+            while (true) {
+                // Tack onto existing routing
+                auto &wd = flat_wires.at(cursor_bwd);
+                if (!wd.bound_nets.count(net->udata))
+                    break;
+                ROUTE_LOG_DBG("      ext wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
+                              int(wd.bound_nets.size()) - 1, wd.hist_cong_cost,
+                              wd.bound_nets.count(net->udata) ? wd.bound_nets.at(net->udata).first : 0);
+                PipId p = wd.bound_nets.at(net->udata).second;
+                bind_pip_internal(net, i, cursor_bwd, p);
+                if (p == PipId())
+                    break;
+                cursor_bwd = wire_to_idx.at(ctx->getPipSrcWire(p));
+            }
+
+            NPNR_ASSERT(cursor_bwd == src_wire_idx);
+
+            // For reconstructing equivalent forward scores for post-midpoint routing
+            float base_cost = flat_wires.at(midpoint_wire_idx).visit.score_fwd.cost;
+
             int cursor_fwd = midpoint_wire_idx;
             while (was_visited_bwd(cursor_fwd)) {
                 auto &v = flat_wires.at(cursor_fwd).visit;
+                t.wire_costs[cursor_fwd] = base_cost;
                 if (ctx->debug) {
                     auto &wd = flat_wires.at(cursor_fwd);
                     ROUTE_LOG_DBG("      bwd wire: %s (curr %d hist %f share %d)\n", ctx->nameOfWire(wd.w),
@@ -862,6 +896,7 @@ struct Router2
                               ctx->getPipLocation(v.pip_bwd).x, ctx->getPipLocation(v.pip_bwd).y);
                 cursor_fwd = wire_to_idx.at(ctx->getPipDstWire(v.pip_bwd));
                 bind_pip_internal(net, i, cursor_fwd, v.pip_bwd);
+                base_cost += score_wire_for_arc(net, i, flat_wires.at(cursor_fwd).w, v.pip_bwd);
             }
             NPNR_ASSERT(cursor_fwd == dst_wire_idx);
 
@@ -895,6 +930,7 @@ struct Router2
         bool have_failures = false;
         t.processed_sinks.clear();
         t.route_arcs.clear();
+        t.wire_costs.clear();
         for (size_t i = 0; i < net->users.size(); i++) {
             // Ripup failed arcs to start with
             // Check if arc is already legally routed
