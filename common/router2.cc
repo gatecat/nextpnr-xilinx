@@ -711,15 +711,27 @@ struct Router2
             set_visited_fwd(t, wire_idx, PipId(), base_score);
         };
 
-        // Seed forwards with the source wire
-        seed_queue_fwd(src_wire_idx);
+        if (t.queue.size() < 8) {
+            // Seed forwards with the source wire, if less than 8 existing wires added
+            seed_queue_fwd(src_wire_idx);
+        } else {
+            // Otherwise, mark as visited but nothing else
+            WireScore base_score;
+            base_score.cost = 0;
+            base_score.delay = 0;
+            base_score.togo_cost = get_togo_cost(net, i, src_wire_idx, dst_wire, false);
+            set_visited_fwd(t, src_wire_idx, PipId(), base_score);
+        }
+
 
         // Also seed with nearby routing
         auto &dst_data = flat_wires.at(dst_wire_idx);
         for (auto &ext_cost : t.wire_costs) {
             auto &wd = flat_wires.at(ext_cost.first);
-            if (std::abs(wd.x - dst_data.x) <= cfg.bb_margin_x && std::abs(wd.y - dst_data.y) <= cfg.bb_margin_y)
-                seed_queue_fwd(ext_cost.first, ext_cost.second);
+            if (std::abs(wd.x - dst_data.x) <= cfg.bb_margin_x && std::abs(wd.y - dst_data.y) <= cfg.bb_margin_y) {
+                ROUTE_LOG_DBG("   seeding with %s cost=%f\n", ctx->nameOfWire(wd.w), ext_cost.second);
+                seed_queue_fwd(ext_cost.first, 0);
+            }
         }
 
         auto seed_queue_bwd = [&](int wire_idx) {
@@ -756,13 +768,13 @@ struct Router2
                     // Skip pips outside of box in bounding-box mode
                     if (is_bb && !hit_test_pip(nd.bb, ctx->getPipLocation(dh)))
                         continue;
-                    // Skip pips that are permanently unavailable
-                    if (!ctx->checkPipAvail(dh) && ctx->getBoundPipNet(dh) != net)
-                        continue;
                     WireId next = ctx->getPipDstWire(dh);
                     int next_idx = wire_to_idx.at(next);
                     // Skip already visited wires
                     if (was_visited_fwd(next_idx))
+                        continue;
+                    // Skip pips that are permanently unavailable
+                    if (!ctx->checkPipAvail(dh) && ctx->getBoundPipNet(dh) != net)
                         continue;
                     ++explored;
                     // Check data for next wire
@@ -806,13 +818,16 @@ struct Router2
                     // Existing routing, only follow the existing path
                     if (curr_pip != PipId() && curr_pip != uh)
                         continue;
-                    // Skip pips that are permanently unavailable
-                    if (!ctx->checkPipAvail(uh) && ctx->getBoundPipNet(uh) != net)
-                        continue;
                     WireId next = ctx->getPipSrcWire(uh);
                     int next_idx = wire_to_idx.at(next);
                     // Skip already visited wires
                     if (was_visited_bwd(next_idx))
+                        continue;
+                    // Skip pips outside of box in bounding-box mode
+                    if (is_bb && !hit_test_pip(nd.bb, ctx->getPipLocation(uh)))
+                        continue;
+                    // Skip pips that are permanently unavailable
+                    if (!ctx->checkPipAvail(uh) && ctx->getBoundPipNet(uh) != net)
                         continue;
                     ++explored;
                     // Check data for next wire
@@ -1001,8 +1016,8 @@ struct Router2
         for (int n : failed_nets) {
             auto &net_data = nets.at(n);
             ++net_data.fail_count;
-            if ((net_data.fail_count % 10) == 0) {
-                // Every ten times a net fails to route, expand the bounding box to increase the search space
+            if ((net_data.fail_count % 3) == 0) {
+                // Every 3 times a net fails to route, expand the bounding box to increase the search space
                 net_data.bb.x0 = std::max(net_data.bb.x0 - 1, 0);
                 net_data.bb.y0 = std::max(net_data.bb.y0 - 1, 0);
                 net_data.bb.x1 = std::min(net_data.bb.x1 + 1, ctx->getGridDimX());
