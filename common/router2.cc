@@ -1106,7 +1106,8 @@ struct Router2
                     if (already_updated.count(w.first)) {
                         ++total_overuse;
                     } else {
-                        wd.hist_cong += (wd.curr_cong - 1);
+                        if (curr_cong_weight > 0)
+                            wd.hist_cong += (wd.curr_cong - 1);
                         wires.set(w.first, wd);
                         already_updated.insert(w.first);
                         ++overused_wires;
@@ -1451,8 +1452,10 @@ struct Router2
             log_info("    iter=%d wires=%d overused=%d overuse=%d archfail=%s\n", iter, total_wire_use, overused_wires,
                      total_overuse, overused_wires > 0 ? "NA" : std::to_string(arch_fail).c_str());
             ++iter;
-            if (curr_cong_weight < 1e9)
-                curr_cong_weight += cfg.curr_cong_mult;
+            if (curr_cong_weight == 0)
+                curr_cong_weight = cfg.init_curr_cong_weight;
+            else if (curr_cong_weight < 1e16)
+                curr_cong_weight *= cfg.curr_cong_mult;
         } while (!failed_nets.empty());
         if (cfg.perf_profile) {
             std::vector<std::pair<int, IdString>> nets_by_runtime;
