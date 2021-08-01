@@ -364,6 +364,7 @@ struct Router2
 
         // Used to add existing routing to the heap
         dict<WireId, float> wire_costs;
+        dict<std::pair<int, int>, pool<WireId>> wire_by_loc;
     };
 
     std::pair<int, int> get_wire_loc(WireId w)
@@ -786,7 +787,13 @@ struct Router2
             WireId wire = ctx->getPipDstWire(pip);
             uint32_t wire_idx = flat_wire_index(wire);
             base_cost += score_wire_for_arc(net, i, wire, wire_idx, pip);
-            t.wire_costs[wire] = base_cost;
+            if (!t.wire_costs.count(wire)) {
+                t.wire_costs[wire] = base_cost;
+                for (auto dh : ctx->getPipsDownhill(wire)) {
+                    Loc dh_loc = ctx->getPipLocation(dh);
+                    t.wire_by_loc[std::make_pair(dh_loc.x, dh_loc.y)].insert(wire);
+                }      
+            }
         }
     }
 
@@ -858,27 +865,28 @@ struct Router2
 
             if (mode == 1) {
                 route_box = nd.bb;
+                for (auto &cost_pair : t.wire_costs)
+                    seed_queue_fwd(cost_pair.first, cost_pair.second);
             } else {
                 route_box.x0 = dst_loc.first - cfg.bb_margin_x;
                 route_box.y0 = dst_loc.second - cfg.bb_margin_y;
                 route_box.x1 = dst_loc.first + cfg.bb_margin_x;
                 route_box.y1 = dst_loc.second + cfg.bb_margin_y;
-            }
-
-            for (auto &cost_pair : t.wire_costs) {
-                WireId w = cost_pair.first;
-                auto w_loc = get_wire_loc(w);
-                if (mode == 1 || (std::abs(w_loc.first - dst_loc.first) <= cfg.bb_margin_x &&
-                    std::abs(w_loc.second - dst_loc.second) <= cfg.bb_margin_y)) {
-                    ROUTE_LOG_DBG("   seeding with %s %f\n", ctx->nameOfWire(w), cost_pair.second);
-                    seed_queue_fwd(w, cost_pair.second);
-                    if (mode == 0) {
-                        route_box.x0 = std::min(route_box.x0, w_loc.first - cfg.bb_margin_x / 2);
-                        route_box.y0 = std::min(route_box.y0, w_loc.second - cfg.bb_margin_y / 2);
-                        route_box.x1 = std::max(route_box.x1, w_loc.first + cfg.bb_margin_x / 2);
-                        route_box.y1 = std::max(route_box.y1, w_loc.second + cfg.bb_margin_y / 2);
+                for (int dy = -cfg.bb_margin_y; dy <= cfg.bb_margin_y; dy++)
+                    for (int dx = -cfg.bb_margin_x; dx <= cfg.bb_margin_x; dx++) {
+                        auto fnd = t.wire_by_loc.find(std::make_pair(dst_loc.first + dx, dst_loc.second + dy));
+                        if (fnd == t.wire_by_loc.end())
+                            continue;
+                        for (WireId wire : fnd->second) {
+                            float cost = t.wire_costs.at(wire);
+                            ROUTE_LOG_DBG("   seeding with %s %f\n", ctx->nameOfWire(wire), cost);
+                            seed_queue_fwd(wire, cost);
+                            route_box.x0 = std::min(route_box.x0, fnd->first.first - cfg.bb_margin_x / 2);
+                            route_box.y0 = std::min(route_box.y0, fnd->first.second - cfg.bb_margin_y / 2);
+                            route_box.x1 = std::max(route_box.x1, fnd->first.first + cfg.bb_margin_x / 2);
+                            route_box.y1 = std::max(route_box.y1, fnd->first.second + cfg.bb_margin_y / 2);
+                        }
                     }
-                }
             }
 
             if (mode == 0 && t.queue.empty())
@@ -1099,6 +1107,7 @@ struct Router2
         t.processed_sinks.clear();
         t.route_arcs.clear();
         t.wire_costs.clear();
+        t.wire_by_loc.clear();
         for (size_t i = 0; i < net->users.size(); i++) {
             // Ripup failed arcs to start with
             // Check if arc is already legally routed
