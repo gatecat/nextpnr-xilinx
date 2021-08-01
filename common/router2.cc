@@ -768,7 +768,7 @@ struct Router2
     }
 #endif
 
-    void update_sink_costs(ThreadContext &t, NetInfo *net, size_t i) {
+    void update_sink_costs(ThreadContext &t, NetInfo *net, size_t i, bool is_mt) {
         std::vector<PipId> path;
         auto &nd = nets.at(net->udata);
         auto &ad = nd.arcs.at(i);
@@ -787,6 +787,8 @@ struct Router2
             WireId wire = ctx->getPipDstWire(pip);
             uint32_t wire_idx = flat_wire_index(wire);
             base_cost += score_wire_for_arc(net, i, wire, wire_idx, pip);
+            ROUTE_LOG_DBG("   bt %s acc %f fwd %f bwd %f\n", ctx->nameOfWire(wire), base_cost, get_togo_cost(net, i, wire, wire_idx, ad.sink_wire, false),
+                get_togo_cost(net, i, wire, wire_idx, nd.src_wire, true));
             if (!t.wire_costs.count(wire)) {
                 t.wire_costs[wire] = base_cost;
                 for (auto dh : ctx->getPipsDownhill(wire)) {
@@ -866,7 +868,7 @@ struct Router2
             if (mode == 1) {
                 route_box = nd.bb;
                 for (auto &cost_pair : t.wire_costs)
-                    seed_queue_fwd(cost_pair.first, cost_pair.second);
+                    seed_queue_fwd(cost_pair.first, 0);
             } else {
                 route_box.x0 = dst_loc.first - cfg.bb_margin_x;
                 route_box.y0 = dst_loc.second - cfg.bb_margin_y;
@@ -880,7 +882,7 @@ struct Router2
                         for (WireId wire : fnd->second) {
                             float cost = t.wire_costs.at(wire);
                             ROUTE_LOG_DBG("   seeding with %s %f\n", ctx->nameOfWire(wire), cost);
-                            seed_queue_fwd(wire, cost);
+                            seed_queue_fwd(wire, 0);
                             route_box.x0 = std::min(route_box.x0, fnd->first.first - cfg.bb_margin_x / 2);
                             route_box.y0 = std::min(route_box.y0, fnd->first.second - cfg.bb_margin_y / 2);
                             route_box.x1 = std::max(route_box.x1, fnd->first.first + cfg.bb_margin_x / 2);
@@ -960,6 +962,7 @@ struct Router2
                         set_visited_fwd(t, next_idx, dh);
                     }
                 }
+#if 0
                 if (!t.backwards_queue.empty()) {
                     // Explore forwards
                     auto curr = t.backwards_queue.top();
@@ -1009,6 +1012,7 @@ struct Router2
                         set_visited_bwd(t, next_idx, uh);
                     }
                 }
+#endif
             }
 
             ROUTE_LOG_DBG("mode %d explored %d\n", mode, explored);
@@ -1075,7 +1079,7 @@ struct Router2
             }
             NPNR_ASSERT(cursor_fwd == dst_wire_idx);
 
-            update_sink_costs(t, net, i);
+            update_sink_costs(t, net, i, is_mt);
             t.processed_sinks.insert(dst_wire);
             ad.routed = true;
             reset_wires(t);
@@ -1112,7 +1116,7 @@ struct Router2
             // Ripup failed arcs to start with
             // Check if arc is already legally routed
             if (check_arc_routing(net, i)) {
-                update_sink_costs(t, net, i);
+                update_sink_costs(t, net, i, true);
                 continue;
             }
             auto &usr = net->users.at(i);
