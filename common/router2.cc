@@ -469,7 +469,7 @@ struct Router2
         int other_sources = wd.curr_cong;
         auto fnd_wire = nd.wires.find(wire_idx);
         if (fnd_wire != nd.wires.end()) {
-            //source_uses = fnd_wire->second.second;
+            source_uses = fnd_wire->second.second;
             other_sources -= 1;
         }
         float present_cost = 1.0f;
@@ -494,10 +494,10 @@ struct Router2
         int source_uses = 0;
         auto &nd = nets.at(net->udata);
         auto fnd_wire = nd.wires.find(wire_idx);
-#if 0
+
         if (fnd_wire != nd.wires.end())
             source_uses = fnd_wire->second.second;
-#endif
+
         // FIXME: timing/wirelength balance?
         return (ctx->getDelayNS(ctx->estimateDelay(bwd ? src_sink : wire, bwd ? wire : src_sink)) / (1 + source_uses)) +
                cfg.ipin_cost_adder;
@@ -865,15 +865,8 @@ struct Router2
             // Also seed with nearby routing
             auto dst_loc = get_wire_loc(dst_wire);
 
-            if (mode == 1) {
-                route_box = nd.bb;
-                for (auto &cost_pair : t.wire_costs)
-                    seed_queue_fwd(cost_pair.first, 0);
-            } else {
-                route_box.x0 = dst_loc.first - cfg.bb_margin_x;
-                route_box.y0 = dst_loc.second - cfg.bb_margin_y;
-                route_box.x1 = dst_loc.first + cfg.bb_margin_x;
-                route_box.y1 = dst_loc.second + cfg.bb_margin_y;
+            if (mode == 0) {
+                route_box = ctx->getRouteBoundingBox(dst_wire, dst_wire);
                 for (int dy = -cfg.bb_margin_y; dy <= cfg.bb_margin_y; dy++)
                     for (int dx = -cfg.bb_margin_x; dx <= cfg.bb_margin_x; dx++) {
                         auto fnd = t.wire_by_loc.find(std::make_pair(dst_loc.first + dx, dst_loc.second + dy));
@@ -883,20 +876,23 @@ struct Router2
                             float cost = t.wire_costs.at(wire);
                             ROUTE_LOG_DBG("   seeding with %s %f\n", ctx->nameOfWire(wire), cost);
                             seed_queue_fwd(wire, 0);
-                            route_box.x0 = std::min(route_box.x0, fnd->first.first - cfg.bb_margin_x / 2);
-                            route_box.y0 = std::min(route_box.y0, fnd->first.second - cfg.bb_margin_y / 2);
-                            route_box.x1 = std::max(route_box.x1, fnd->first.first + cfg.bb_margin_x / 2);
-                            route_box.y1 = std::max(route_box.y1, fnd->first.second + cfg.bb_margin_y / 2);
+                            route_box.x0 = std::min(route_box.x0, fnd->first.first - cfg.bb_margin_x);
+                            route_box.y0 = std::min(route_box.y0, fnd->first.second - cfg.bb_margin_y);
+                            route_box.x1 = std::max(route_box.x1, fnd->first.first + cfg.bb_margin_x);
+                            route_box.y1 = std::max(route_box.y1, fnd->first.second + cfg.bb_margin_y);
                         }
                     }
             }
+            route_box = nd.bb;
 
-            if (mode == 0 && t.queue.empty())
+            if (mode == 0 && t.queue.size() < 4)
                 continue;
 
             if (mode == 1) {
                 // Seed forwards with the source wire, if less than 8 existing wires added
                 seed_queue_fwd(src_wire);
+            } else {
+                set_visited_fwd(t, src_wire_idx, PipId());
             }
 
 
@@ -962,7 +958,7 @@ struct Router2
                         set_visited_fwd(t, next_idx, dh);
                     }
                 }
-#if 0
+
                 if (!t.backwards_queue.empty()) {
                     // Explore forwards
                     auto curr = t.backwards_queue.top();
@@ -1012,7 +1008,7 @@ struct Router2
                         set_visited_bwd(t, next_idx, uh);
                     }
                 }
-#endif
+
             }
 
             ROUTE_LOG_DBG("mode %d explored %d\n", mode, explored);
@@ -1529,7 +1525,7 @@ struct Router2
             if (curr_cong_weight == 0)
                 curr_cong_weight = cfg.init_curr_cong_weight;
             else if (curr_cong_weight < 1e50)
-                curr_cong_weight *= cfg.curr_cong_mult;
+                curr_cong_weight += cfg.curr_cong_mult;
         } while (!failed_nets.empty());
         if (cfg.perf_profile) {
             std::vector<std::pair<int, IdString>> nets_by_runtime;
@@ -1572,7 +1568,7 @@ Router2Cfg::Router2Cfg(Context *ctx)
     init_curr_cong_weight = ctx->setting<float>("router2/initCurrCongWeight", 0.5f);
     hist_cong_weight = ctx->setting<float>("router2/histCongWeight", 1.0f);
     curr_cong_mult = ctx->setting<float>("router2/currCongWeightMult", 2.0f);
-    estimate_weight = ctx->setting<float>("router2/estimateWeight", 1.75f);
+    estimate_weight = ctx->setting<float>("router2/estimateWeight", 0.8f);
     perf_profile = ctx->setting<float>("router2/perfProfile", false);
 }
 
