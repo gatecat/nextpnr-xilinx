@@ -1623,6 +1623,8 @@ struct Arch : BaseCtx
     }
     // -------------------------------------------------
     void writeFasm(const std::string &filename);
+
+    void findLookahead();
 };
 
 NEXTPNR_NAMESPACE_END

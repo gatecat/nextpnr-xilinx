@@ -50,6 +50,7 @@ po::options_description UspCommandHandler::getArchOptions()
     specific.add_options()("chipdb", po::value<std::string>(), "name of chip database binary");
     specific.add_options()("xdc", po::value<std::vector<std::string>>(), "XDC-style constraints file");
     specific.add_options()("fasm", po::value<std::string>(), "fasm bitstream file to write");
+    specific.add_options()("compute-lookahead", "");
 
     return specific;
 }
@@ -82,6 +83,9 @@ void UspCommandHandler::customAfterLoad(Context *ctx)
                 log_error("failed to open XDC file '%s'\n", filename.c_str());
             ctx->parseXdc(in);
         }
+    }
+    if (vm.count("compute-lookahead")) {
+        ctx->findLookahead();   
     }
 }
 
