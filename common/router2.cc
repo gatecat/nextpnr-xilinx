@@ -479,13 +479,13 @@ struct Router2
 
         float hist_cost = 1.0f + wd.hist_cong * hist_cong_weight;
         float bias_cost = 0;
-/*
-        if (pip != PipId()) {
-            Loc pl = ctx->getPipLocation(pip);
-            bias_cost = cfg.bias_cost_factor * (base_cost / int(net->users.size())) *
-                        ((std::abs(pl.x - nd.cx) + std::abs(pl.y - nd.cy)) / float(nd.hpwl));
-        }
-*/
+        /*
+                if (pip != PipId()) {
+                    Loc pl = ctx->getPipLocation(pip);
+                    bias_cost = cfg.bias_cost_factor * (base_cost / int(net->users.size())) *
+                                ((std::abs(pl.x - nd.cx) + std::abs(pl.y - nd.cy)) / float(nd.hpwl));
+                }
+        */
         return base_cost * hist_cost * present_cost / (1 + source_uses) + bias_cost;
     }
 
@@ -768,7 +768,8 @@ struct Router2
     }
 #endif
 
-    void update_sink_costs(ThreadContext &t, NetInfo *net, size_t i, bool is_mt) {
+    void update_sink_costs(ThreadContext &t, NetInfo *net, size_t i, bool is_mt)
+    {
         std::vector<PipId> path;
         auto &nd = nets.at(net->udata);
         auto &ad = nd.arcs.at(i);
@@ -787,14 +788,15 @@ struct Router2
             WireId wire = ctx->getPipDstWire(pip);
             uint32_t wire_idx = flat_wire_index(wire);
             base_cost += score_wire_for_arc(net, i, wire, wire_idx, pip);
-            ROUTE_LOG_DBG("   bt %s acc %f fwd %f bwd %f\n", ctx->nameOfWire(wire), base_cost, get_togo_cost(net, i, wire, wire_idx, ad.sink_wire, false),
-                get_togo_cost(net, i, wire, wire_idx, nd.src_wire, true));
+            ROUTE_LOG_DBG("   bt %s acc %f fwd %f bwd %f\n", ctx->nameOfWire(wire), base_cost,
+                          get_togo_cost(net, i, wire, wire_idx, ad.sink_wire, false),
+                          get_togo_cost(net, i, wire, wire_idx, nd.src_wire, true));
             if (!t.wire_costs.count(wire)) {
                 t.wire_costs[wire] = base_cost;
                 for (auto dh : ctx->getPipsDownhill(wire)) {
                     Loc dh_loc = ctx->getPipLocation(dh);
                     t.wire_by_loc[std::make_pair(dh_loc.x, dh_loc.y)].insert(wire);
-                }      
+                }
             }
         }
     }
@@ -895,7 +897,6 @@ struct Router2
                 set_visited_fwd(t, src_wire_idx, PipId());
             }
 
-
             auto seed_queue_bwd = [&](WireId wire) {
                 WireScore base_score;
                 base_score.cost = 0;
@@ -953,7 +954,8 @@ struct Router2
                         next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, next_idx, dh);
                         next_score.delay =
                                 curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
-                        next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, dst_wire, false);
+                        next_score.togo_cost =
+                                cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, dst_wire, false);
                         t.queue.push(QueuedWire(next, dh, ctx->getPipLocation(dh), next_score, t.rng.rng()));
                         set_visited_fwd(t, next_idx, dh);
                     }
@@ -1003,12 +1005,12 @@ struct Router2
                         next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, next_idx, uh);
                         next_score.delay =
                                 curr.score.delay + ctx->getPipDelay(uh).maxDelay() + ctx->getWireDelay(next).maxDelay();
-                        next_score.togo_cost = cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, src_wire, true);
+                        next_score.togo_cost =
+                                cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, src_wire, true);
                         t.backwards_queue.push(QueuedWire(next, uh, ctx->getPipLocation(uh), next_score, t.rng.rng()));
                         set_visited_bwd(t, next_idx, uh);
                     }
                 }
-
             }
 
             ROUTE_LOG_DBG("mode %d explored %d\n", mode, explored);

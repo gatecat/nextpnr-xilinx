@@ -85,7 +85,7 @@ void UspCommandHandler::customAfterLoad(Context *ctx)
         }
     }
     if (vm.count("compute-lookahead")) {
-        ctx->findLookahead();   
+        ctx->findLookahead();
     }
 }
 
