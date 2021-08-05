@@ -4,6 +4,7 @@ package dev.fpga.rapidwright;
 import com.xilinx.rapidwright.design.Design;
 import com.xilinx.rapidwright.design.SiteInst;
 import com.xilinx.rapidwright.device.PartNameTools;
+import com.xilinx.rapidwright.device.IOBankType;
 import com.xilinx.rapidwright.device.*;
 import com.xilinx.rapidwright.edif.*;
 import com.xilinx.rapidwright.util.Utils;
@@ -764,6 +765,9 @@ public class bbaexport {
     public static ArrayList<NextpnrTileInst> tileInsts = new ArrayList<>();
     public static HashMap<Integer, NextpnrTileInst> tileToTileInst = new HashMap<>();
 
+    public static boolean is_live_wire(Wire w) {
+        return (w.getBackwardPIPs().size() == 0 && w.getForwardPIPs().size() == 0 && w.getSitePin() == null);
+    }
 
     public static void main(String[] args) throws IOException {
 
@@ -1002,49 +1006,56 @@ public class bbaexport {
                 Tile t = d.getTile(row, col);
                 ++curr;
                 System.out.println("Processing nodes in tile " + curr + "/" + total);
-                for (PIP p : t.getPIPs()) {
-                    Node[] nodes = {p.getStartNode(), p.getEndNode()};
-                    // FIXME: best way to discover nodes in tile?
-                    for (Node n : nodes) {
-                        long flatIndex = (long)(n.getTile().getRow() * d.getColumns() + n.getTile().getColumn()) << 32 | n.getWire();
-                        if (seenNodes.contains(flatIndex))
-                            continue;
-                        seenNodes.add(flatIndex);
+                for (int i = 0; i < t.getWireCount(); i++) {
+                    Wire tw = new Wire(t, i);
+                    if (!is_live_wire(tw))
+                        continue;
+                    Node n = tw.getNode();
+                    if (n == null)
+                        continue;
+                    long flatIndex = (long)(n.getTile().getRow() * d.getColumns() + n.getTile().getColumn()) << 32 | n.getWire();
+                    if (seenNodes.contains(flatIndex))
+                        continue;
+                    seenNodes.add(flatIndex);
+                    String wn = n.getWireName();
+                    //System.out.println(t.getName() + " " + n.getWireName());
+                    if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R
+                         && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) &&
+                            n.isTiedToGnd()) {
+                        gndNodes.add(n);
+                        continue;
+                    }
+                    if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R) && n.isTiedToVcc()) {
+                        vccNodes.add(n);
+                        continue;
+                    }
+                    int live_wire_count = 0;
+                    for (Wire w : n.getAllWiresInNode())
+                        if (is_live_wire(w))
+                            ++live_wire_count;
+                    if (live_wire_count > 1) {
+                        //nn.tilewires = new NextpnrTileWireRef[n.getAllWiresInNode().length];
+                        bba.printf("label n%d_tw\n", nodeWireCount.size());
+                        // Add interconnect tiles first for better delay estimates in nextpnr
+                        for (int j = 0; j < 2; j++) {
+                            for (Wire w : n.getAllWiresInNode()) {
+                                if (intTileTypes.contains(w.getTile().getTileTypeEnum()) != (j == 0))
+                                    continue;
+                                if (!is_live_wire(w))
+                                    continue;
+                                int tileIndex = w.getTile().getRow() * d.getColumns() + w.getTile().getColumn();
+                                //nn.tilewires[i] = new NextpnrTileWireRef(tileToTileInst.get(tileIndex).index, w.getWireIndex());
 
-                        String wn = n.getWireName();
-                        //System.out.println(t.getName() + " " + n.getWireName());
-                        if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R
-                             && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) &&
-                                n.isTiedToGnd()) {
-                            gndNodes.add(n);
-                            continue;
-                        }
-                        if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R) && n.isTiedToVcc()) {
-                            vccNodes.add(n);
-                            continue;
-                        }
-                        if (n.getAllWiresInNode().length > 1) {
-                            //nn.tilewires = new NextpnrTileWireRef[n.getAllWiresInNode().length];
-                            bba.printf("label n%d_tw\n", nodeWireCount.size());
-                            // Add interconnect tiles first for better delay estimates in nextpnr
-                            for (int j = 0; j < 2; j++) {
-                                for (Wire w : n.getAllWiresInNode()) {
-                                    if (intTileTypes.contains(w.getTile().getTileTypeEnum()) != (j == 0))
-                                        continue;
-                                    int tileIndex = w.getTile().getRow() * d.getColumns() + w.getTile().getColumn();
-                                    //nn.tilewires[i] = new NextpnrTileWireRef(tileToTileInst.get(tileIndex).index, w.getWireIndex());
+                                bba.printf("u32 %d\n", tileToTileInst.get(tileIndex).index); //tile inst index
+                                bba.printf("u32 %d\n", w.getWireIndex());
 
-                                    bba.printf("u32 %d\n", tileToTileInst.get(tileIndex).index); //tile inst index
-                                    bba.printf("u32 %d\n", w.getWireIndex());
+                                tileToTileInst.get(tileIndex).tilewire_to_node[w.getWireIndex()] = nodeWireCount.size();
 
-                                    tileToTileInst.get(tileIndex).tilewire_to_node[w.getWireIndex()] = nodeWireCount.size();
-
-                                }
                             }
-                            Wire nw = new Wire(n.getTile(), n.getWire());
-                            nodeIntent.add(makeConstId(nw.getIntentCode().toString()));
-                            nodeWireCount.add(n.getAllWiresInNode().length);
                         }
+                        Wire nw = new Wire(n.getTile(), n.getWire());
+                        nodeIntent.add(makeConstId(nw.getIntentCode().toString()));
+                        nodeWireCount.add(live_wire_count);
                     }
                 }
             }
