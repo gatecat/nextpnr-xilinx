@@ -192,7 +192,7 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
             tmp.index = bel_wires[i].wire_index;
             log_info("%s\n", getWireName(tmp).c_str(this));
 #endif
-            return canonicalWireId(chip_info, bel.tile, bel_wires[i].wire_index);
+            return normalise_wire(bel.tile, bel_wires[i].wire_index);
         }
 
     return ret;
@@ -291,11 +291,12 @@ PipId Arch::getPipByName(IdString name) const
         auto &tile_info = chip_info->tile_types[chip_info->tile_insts[tile].type];
 
         auto spn = split_identifier_name_dot(sp.second);
-        int fromwire = std::stoi(spn.first), towire = std::stoi(spn.second);
+        IdString fromwire = id(spn.first), towire = id(spn.second);
 
         for (int i = 0; i < tile_info.num_pips; i++) {
-            if (tile_info.pip_data[i].site == -1 && tile_info.pip_data[i].src_index == fromwire &&
-                tile_info.pip_data[i].dst_index == towire) {
+            if (tile_info.pip_data[i].site == -1 &&
+                tile_info.wire_data[tile_info.pip_data[i].src_index].name == fromwire.index &&
+                tile_info.wire_data[tile_info.pip_data[i].dst_index].name == towire.index) {
                 ret.tile = tile;
                 ret.index = i;
                 break;
@@ -319,8 +320,8 @@ IdString Arch::getPipName(PipId pip) const
                   IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this));
     } else {
         return id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
-                  std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
-                  std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
+                  IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this) + "." +
+                  IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].dst_index].name).str(this));
     }
 }
 
@@ -439,8 +440,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     int src_intent = wireIntent(src), dst_intent = wireIntent(dst);
     // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
     //    return 500;
-    int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
-    int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
+    int dst_tile = dst.tile;
+    int src_tile = src.tile;
 
     if (sink_locs.count(dst)) {
         dst_x = sink_locs.at(dst).x;
@@ -462,46 +463,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
         dst_y = dst_tile / chip_info->width;
     }
 
-    if (src.tile == -1) {
-        if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC) {
-            if (gnd_glbl == IdString()) {
-                gnd_glbl = id("PSEUDO_GND_WIRE_GLBL");
-                gnd_row = id("PSEUDO_GND_WIRE_ROW");
-                vcc_glbl = id("PSEUDO_VCC_WIRE_GLBL");
-                vcc_row = id("PSEUDO_VCC_WIRE_ROW");
-            }
-            if (debug)
-                log_info("%s %d %d\n", IdString(wireInfo(src).name).c_str(this), wireInfo(src).name, gnd_glbl.index);
-            if (wireInfo(src).name == gnd_glbl.index || wireInfo(src).name == vcc_glbl.index)
-                return 15000;
-
-            src_x = src_tile % chip_info->width;
-            src_y = src_tile / chip_info->width;
-            if (wireInfo(src).name == gnd_row.index || wireInfo(src).name == vcc_row.index)
-                src_x = chip_info->width / 2;
-        } else {
-            auto &src_n = chip_info->nodes[src.index];
-            src_x = -1;
-            src_y = -1;
-            for (int i = 0; i < std::min(200, src_n.num_tile_wires); i++) {
-                // Approximate the nearest location to dest
-                int ti = src_n.tile_wires[i].tile;
-                auto &tw = chip_info->tile_types[chip_info->tile_insts[ti].type].wire_data[src_n.tile_wires[i].index];
-                if (tw.num_downhill == 0 && src_intent != ID_NODE_PINFEED)
-                    continue;
-                int tix = ti % chip_info->width, tiy = ti / chip_info->width;
-                if (src_x == -1 || std::abs(tix - dst_x) < std::abs(src_x - dst_x))
-                    src_x = tix;
-                if (src_y == -1 || std::abs(tiy - dst_y) < std::abs(src_y - dst_y))
-                    src_y = tiy;
-            }
-            if (src_x == -1) {
-                src_x = chip_info->nodes[src.index].tile_wires[0].tile % chip_info->width;
-                src_y = chip_info->nodes[src.index].tile_wires[0].tile / chip_info->width;
-            }
-        }
-
-    } else if (src.tile != -1 && chip_info->tile_insts[src.tile].num_sites > 0) {
+    if (src.tile != -1 && chip_info->tile_insts[src.tile].num_sites > 0) {
         auto &site = chip_info->tile_insts[src.tile].site_insts[wireInfo(src).site != -1 ? wireInfo(src).site : 0];
         if (site.inter_x != -1) {
             src_x = site.inter_x;
@@ -514,8 +476,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
         src_x = src_tile % chip_info->width;
         src_y = src_tile / chip_info->width;
     }
-    if (debug)
-        log_info("    src (%d, %d) dst (%d, %d)\n", src_x, src_y, dst_x, dst_y);
+
     /*
         delay_t base = 150 * std::min(std::abs(dst_x - src_x), 30) + 40 * std::max(std::abs(dst_x - src_x) - 30, 0)
                 +  150 * std::min(std::abs(dst_y - src_y), 10) + 60 * std::max(std::abs(dst_y - src_y)  - 10, 0)
@@ -547,8 +508,8 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
 
 ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
 {
-    int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
-    int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
+    int dst_tile = dst.tile;
+    int src_tile = src.tile;
 
     int x0, x1, y0, y1;
     x0 = src_tile % chip_info->width;
@@ -897,7 +858,7 @@ void Arch::findSourceSinkLocations()
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
                         intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
                         intent != ID_PINFEED && intent != ID_INPUT) {
-                        int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
+                        int tile = cursor.tile;
                         sink_locs[sink] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
                             log_info("%s <---- %s\n", nameOfWire(sink), nameOfWire(cursor));
@@ -947,7 +908,7 @@ void Arch::findSourceSinkLocations()
                     if (intent != ID_NODE_PINFEED && intent != ID_PSEUDO_VCC && intent != ID_PSEUDO_GND &&
                         intent != ID_INTENT_DEFAULT && intent != ID_NODE_DEDICATED && intent != ID_NODE_OPTDELAY &&
                         intent != ID_NODE_OUTPUT && intent != ID_NODE_INT_INTERFACE) {
-                        int tile = cursor.tile == -1 ? chip_info->nodes[cursor.index].tile_wires[0].tile : cursor.tile;
+                        int tile = cursor.tile;
                         source_locs[source] = Loc(tile % chip_info->width, tile / chip_info->width, 0);
                         if (getCtx()->debug) {
                             log_info("%s ----> %s\n", nameOfWire(source), nameOfWire(cursor));
@@ -1277,7 +1238,7 @@ int Arch::getHclkForIoi(int ioi)
     for (int i = 0; i < td.num_wires; i++) {
         std::string name = IdString(td.wire_data[i].name).str(this);
         if (name == "IOI_IOCLK0" || name == "IOI_SING_IOCLK0") {
-            ioclk0 = canonicalWireId(chip_info, ioi, i);
+            ioclk0 = normalise_wire(ioi, i);
             break;
         }
     }

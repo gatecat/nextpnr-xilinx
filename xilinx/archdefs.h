@@ -88,6 +88,9 @@ struct WireId
     // Tile wires: tile != -1; index = wire index in tile
     int32_t index = -1;
 
+    WireId() = default;
+    WireId(int32_t tile, int32_t index) : tile(tile), index(index){};
+
     bool operator==(const WireId &other) const { return tile == other.tile && index == other.index; }
     bool operator!=(const WireId &other) const { return tile != other.tile || index != other.index; }
     bool operator<(const WireId &other) const

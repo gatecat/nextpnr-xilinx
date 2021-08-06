@@ -134,7 +134,7 @@ struct LookaheadFinder
         denorm.tile = mid_tile;
         for (int i = 0; i < ctx->locInfo(denorm).num_wires; i++) {
             denorm.index = i;
-            WireId w = canonicalWireId(ctx->chip_info, denorm.tile, denorm.index);
+            WireId w = ctx->normalise_wire(denorm.tile, denorm.index);
             // TODO: try different intents
             if (ctx->wireIntent(w) != ID_NODE_CLE_OUTPUT)
                 continue;
@@ -172,7 +172,7 @@ struct LookaheadFinder
                 int lowest_score = 9999999;
                 for (int i = 0; i < ctx->locInfo(denorm).num_wires; i++) {
                     denorm.index = i;
-                    WireId w = canonicalWireId(ctx->chip_info, denorm.tile, denorm.index);
+                    WireId w = ctx->normalise_wire(denorm.tile, denorm.index);
                     if (ctx->wireIntent(w) != ID_NODE_PINFEED || !visit_cost.count(w))
                         continue;
                     lowest_score = std::min(lowest_score, visit_cost.at(w));

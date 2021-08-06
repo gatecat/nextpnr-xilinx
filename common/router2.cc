@@ -129,15 +129,7 @@ struct Router2
 
     std::vector<int> tile_wire_offset;
 
-    uint32_t flat_wire_index(WireId w)
-    {
-        if (w.tile == -1) {
-            auto &root = ctx->chip_info->nodes[w.index].tile_wires[0];
-            return tile_wire_offset.at(root.tile) + root.index;
-        } else {
-            return tile_wire_offset.at(w.tile) + w.index;
-        }
-    }
+    uint32_t flat_wire_index(WireId w) { return tile_wire_offset.at(w.tile) + w.index; }
 
     void setup_nets()
     {
@@ -369,15 +361,8 @@ struct Router2
 
     std::pair<int, int> get_wire_loc(WireId w)
     {
-        int x = 0, y = 0;
-        if (w.tile == -1) {
-            auto &root = ctx->chip_info->nodes[w.index].tile_wires[0];
-            x = (root.tile % ctx->chip_info->width);
-            y = (root.tile / ctx->chip_info->width);
-        } else {
-            x = (w.tile % ctx->chip_info->width);
-            y = (w.tile / ctx->chip_info->width);
-        }
+        int x = (w.tile % ctx->chip_info->width);
+        int y = (w.tile / ctx->chip_info->width);
         return std::make_pair(x, y);
     }
 

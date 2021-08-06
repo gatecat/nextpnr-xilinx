@@ -17,6 +17,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.*;
 
+
+import java.security.NoSuchAlgorithmException;
+import java.security.MessageDigest;
+
 public class bbaexport {
 
     static boolean xc7_flag = false;
@@ -237,6 +241,8 @@ public class bbaexport {
         return index;
     }
 
+    public static HashMap<TileTypeEnum, DedupTileFlatWires> flat_tiles = new HashMap();
+
     static class NextpnrTileType {
         public int index;
         public int type;
@@ -247,6 +253,8 @@ public class bbaexport {
         public int tile_wire_count = 0; // excluding site wires
         public int row_gnd_wire_index, row_vcc_wire_index, global_gnd_wire_index, global_vcc_wire_index;
         public HashMap<String, Integer> siteWiresToWireIndex;
+
+        private DedupTileFlatWires wire_lookup;
 
         private int siteWireToWire(Site s, String wire) {
             String key = s.getSiteTypeEnum().toString() + s.getSiteIndexInTile() + "/" + wire;
@@ -335,7 +343,7 @@ public class bbaexport {
         private NextpnrPip addSiteIOPIP(Device d, Site s, SiteInst si, BELPin bp) {
             NextpnrPip np;
             String sitePinName = bp.getConnectedSitePinName();
-            if (bp.isOutput() || bp.isBidir()) {
+            if (bp.isInput() || bp.isBidir()) {
                 if (si.getSiteTypeEnum() == SiteTypeEnum.IPAD && sitePinName.equals("O"))
                     return null;
                 String sitePin = si.getPrimarySitePinName(sitePinName);
@@ -343,9 +351,9 @@ public class bbaexport {
                     sitePin = sitePinName;
                 //System.out.println(s.getName() + " " + sitePinName + " " + si.getPrimarySitePinName(sitePinName) + " " + sitePin + " " + si.getSiteTypeEnum() + " " + s.getTileWireNameFromPinName(sitePin));
                 if (s.getSiteTypeEnum() == SiteTypeEnum.SLICEL && sitePinName.equals("A_O")) {
-                    addPseudoPIP(row_gnd_wire_index, s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)), NextpnrPipType.CONST_DRIVER);
+                    addPseudoPIP(row_gnd_wire_index, wire_lookup.get(s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin))), NextpnrPipType.CONST_DRIVER);
                 }
-                np = new NextpnrPip(pips.size(), siteWireToWire(s, bp.getSiteWireName()), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)),
+                np = new NextpnrPip(pips.size(), siteWireToWire(s, bp.getSiteWireName()), wire_lookup.get(s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin))),
                         0, NextpnrPipType.SITE_EXIT);
             } else {
                 if (((s.getSiteTypeEnum() == SiteTypeEnum.SLICEL || s.getSiteTypeEnum() == SiteTypeEnum.SLICEM))) {
@@ -358,7 +366,7 @@ public class bbaexport {
                         for (int j = 1; j <= 6; j++) {
                             if ((i == 6) != (j == 6))
                                 continue; // don't allow permutation of input 6
-                            NextpnrPip pp = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(pn.substring(0, 1) + j)), siteWireToWire(s, bp.getSiteWireName()),
+                            NextpnrPip pp = new NextpnrPip(pips.size(), wire_lookup.get(s.getTile().getWireIndex(s.getTileWireNameFromPinName(pn.substring(0, 1) + j))), siteWireToWire(s, bp.getSiteWireName()),
                                     0, NextpnrPipType.LUT_PERMUTATION);
                             // extra data: eigth[3:0]; from[3:0]; to[3:0]
                             pp.extra_data = ("ABCDEFGH".indexOf(pn.substring(0,1)) << 8) | ((j - 1) << 4) | (i - 1);
@@ -386,7 +394,7 @@ public class bbaexport {
                 if (s.getSiteTypeEnum() == si.getSiteTypeEnum())
                     sitePin = sitePinName;
                 //System.out.println(s.getName() + " " + sitePinName + " " + si.getPrimarySitePinName(sitePinName) + " " + sitePin + " " + si.getSiteTypeEnum() + " " + s.getTileWireNameFromPinName(sitePin));
-                np = new NextpnrPip(pips.size(), s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin)), siteWireToWire(s, bp.getSiteWireName()),
+                np = new NextpnrPip(pips.size(), wire_lookup.get(s.getTile().getWireIndex(s.getTileWireNameFromPinName(sitePin))), siteWireToWire(s, bp.getSiteWireName()),
                         0, NextpnrPipType.SITE_ENTRANCE);
 
             }
@@ -403,13 +411,17 @@ public class bbaexport {
             // delay regardless of location. It is to guide the nextpnr router rather than give sign-off quality
             // STA.
             TimingGroup tg = new TimingGroup(m);
-            tg.add(p.getStartNode(), p.getStartWire().getIntentCode());
-            tg.add(p);
-            tg.add(p.getEndNode(), p.getEndWire().getIntentCode());
-            var delay = m.calcDelay(tg);
-            int tmg_cls = get_pip_timing_class((int)(delay));
+            int delay = 0;
+            if (p.getStartNode() != null && p.getEndNode() != null) {
+                tg.add(p.getStartNode(), p.getStartWire().getIntentCode());
+                tg.add(p);
+                tg.add(p.getEndNode(), p.getEndWire().getIntentCode());
+                delay = (int)m.calcDelay(tg);
+            }
+            int tmg_cls = get_pip_timing_class(delay);
 
-            NextpnrPip np = new NextpnrPip(pips.size(), reverse ?  p.getEndWireIndex() : p.getStartWireIndex(), reverse ?  p.getStartWireIndex() : p.getEndWireIndex(), tmg_cls, NextpnrPipType.TILE_ROUTING);
+            NextpnrPip np = new NextpnrPip(pips.size(), wire_lookup.get(reverse ?  p.getEndWireIndex() : p.getStartWireIndex()),
+                wire_lookup.get(reverse ?  p.getStartWireIndex() : p.getEndWireIndex()), tmg_cls, NextpnrPipType.TILE_ROUTING);
             wires.get(np.from).pips_dh.add(np.index);
             wires.get(np.to).pips_uh.add(np.index);
             pips.add(np);
@@ -447,11 +459,15 @@ public class bbaexport {
             wires = new ArrayList<>();
             pips = new ArrayList<>();
             siteWiresToWireIndex = new HashMap<>();
+            wire_lookup = flat_tiles.get(t.getTileTypeEnum());
 
-            for (String wn : t.getWireNames()) {
-                int index = wires.size();
-                Wire w = new Wire(t, wn);
-                wires.add(new NextpnrWire(wn, index, makeConstId(w.getIntentCode().toString())));
+            for (int i = 0; i < wire_lookup.wire_to_flat.length; i++) {
+                int index = wire_lookup.wire_to_flat[i];
+                if (index == -1)
+                    continue;
+                assert(index == wires.size());
+                Wire w = new Wire(t, i);
+                wires.add(new NextpnrWire(w.getWireName(), index, makeConstId(w.getIntentCode().toString())));
             }
 
             // Add a special wires
@@ -480,10 +496,12 @@ public class bbaexport {
                     for (BEL b : si.getBELs()) {
                         addBel(si, variant, b);
                         for (BELPin bp : b.getPins()) {
-                            String sitePin = bp.getConnectedSitePinName();
-                            if (sitePin != null && !sitePins.contains(bp)) {
-                                sitePins.add(bp);
-                                addSiteIOPIP(d, s, si, bp);
+                            if (b.getBELClass() == BELClass.PORT) {
+                                String sitePin = bp.getConnectedSitePinName();
+                                if (sitePin != null && !sitePins.contains(bp)) {
+                                    sitePins.add(bp);
+                                    addSiteIOPIP(d, s, si, bp);
+                                }
                             }
                             sitePips.addAll(bp.getSitePIPs());
                         }
@@ -540,8 +558,7 @@ public class bbaexport {
         public int index;
         public String name;
         public int type;
-
-        public Integer[] tilewire_to_node;
+        public int shape;
 
         public ArrayList<NextpnrSiteInst> sites;
     }
@@ -765,11 +782,246 @@ public class bbaexport {
     public static ArrayList<NextpnrTileInst> tileInsts = new ArrayList<>();
     public static HashMap<Integer, NextpnrTileInst> tileToTileInst = new HashMap<>();
 
-    public static boolean is_live_wire(Wire w) {
-        return (w.getBackwardPIPs().size() == 0 && w.getForwardPIPs().size() == 0 && w.getSitePin() == null);
+    public static boolean is_dead_wire(Wire w) {
+        return w.getBackwardPIPs().size() == 0 && w.getForwardPIPs().size() == 0 && w.getSitePin() == null;
     }
 
-    public static void main(String[] args) throws IOException {
+    public static class DedupTileFlatWires {
+        // This squishes out wires with no associated pips or site pins from a tile
+        public int [] wire_to_flat;
+        public int active_count;
+        public DedupTileFlatWires(Tile t) {
+            int flat_idx = 0;
+            wire_to_flat = new int[t.getWireCount()];
+            for (int i = 0; i < t.getWireCount(); i++) {
+                Wire w = new Wire(t, i);
+                if (is_dead_wire(w)) {
+                    wire_to_flat[i] = -1;
+                } else {
+                    wire_to_flat[i] = flat_idx;
+                    ++flat_idx;
+                }
+            }
+            active_count = flat_idx;
+        }
+        int get(int w) {
+            return wire_to_flat[w];
+        }
+        int size() {
+            return active_count;
+        }
+    }
+
+    private static ArrayList<Wire> row_vcc = new ArrayList();
+    private static ArrayList<Wire> row_gnd = new ArrayList();
+
+    public static boolean is_vcc(Node n) {
+        if (!n.isTiedToVcc())
+            return false;
+        Tile t = n.getTile();
+        return (t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R);
+    }
+
+    public static boolean is_gnd(Node n) {
+        if (!n.isTiedToGnd())
+            return false;
+        Tile t = n.getTile();
+        return (t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R
+                         && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R);
+    }
+
+    public static class NodeShape {
+        public int [][] node_wires;
+        // From a Xilinx node
+        public NodeShape(Tile base, Node n) {
+            Wire [] nw = n.getAllWiresInNode();
+            int live_wire_count = 0;
+            for (Wire w : nw) 
+                if (!is_dead_wire(w))
+                    ++live_wire_count;
+            node_wires = new int[live_wire_count][3];
+            int j = 0;
+            for (Wire w : nw) {
+                if (is_dead_wire(w))
+                    continue;
+                Tile tw = w.getTile();
+                node_wires[j][0] = tw.getColumn() - base.getColumn();
+                node_wires[j][1] = tw.getRow() - base.getRow();
+                node_wires[j][2] = flat_tiles.get(tw.getTileTypeEnum()).get(w.getWireIndex());
+                ++j;
+            }
+        }
+        // For row/global constants
+        public NodeShape(Device d, int row, boolean is_vcc, boolean is_global) {
+            int wire_count;
+            if (is_global)
+                wire_count = d.getRows();
+            else
+                wire_count = d.getColumns() + (is_vcc ? row_vcc.size() : row_gnd.size());
+            node_wires = new int[wire_count][3];
+            for (int i = 0; i < (is_global ? d.getRows() : d.getColumns()); i++) {
+                node_wires[i][0] = (is_global ? 0 : i);
+                node_wires[i][1] = (is_global ? i : 0);
+                node_wires[i][2] = flat_tiles.get(d.getTile(is_global ? i : row, is_global ? 0 : i).getTileTypeEnum()).size() +
+                    (is_global ? 2 : 0) + (is_vcc ? 1 : 0);
+            }
+            if (!is_global) {
+                int j = d.getColumns();
+                for (Wire w : (is_vcc ? row_vcc : row_gnd)) {
+                    Tile tw = w.getTile();
+                    node_wires[j][0] = tw.getColumn();
+                    node_wires[j][1] = tw.getRow() - row;
+                    node_wires[j][2] = flat_tiles.get(tw.getTileTypeEnum()).get(w.getWireIndex());
+                    ++j;
+                }
+            }
+        }
+
+        public String hash() throws NoSuchAlgorithmException {
+            MessageDigest md = MessageDigest.getInstance("md5");
+            byte[] tempbuf = {0, 0, 0, 0};
+            java.util.function.Consumer<Integer> add_int = (Integer x) -> {
+                tempbuf[0] = (byte)(x >> 24);
+                tempbuf[1] = (byte)(x >> 16);
+                tempbuf[2] = (byte)(x >> 8);
+                tempbuf[3] = (byte)(x >> 0);
+                md.update(tempbuf);
+            };
+            add_int.accept(node_wires.length);
+            for (int [] w : node_wires) {
+                add_int.accept(w[0]);
+                add_int.accept(w[1]);
+                add_int.accept(w[2]);
+            }
+            byte[] digest = md.digest();
+            return Base64.getEncoder().encodeToString(digest);
+        }
+    }
+
+    private static final int MODE_TILE_WIRE = 0x7000;
+    private static final int MODE_IS_ROOT = 0x7001;
+    private static final int MODE_ROW_CONST = 0x7002;
+    private static final int MODE_GLB_CONST = 0x7003;
+
+    private static ArrayList<NodeShape> node_shapes = new ArrayList<>();
+    private static HashMap<String, Integer> node_shapes_by_hash = new HashMap();
+
+    public static int node_shape_idx(NodeShape shape) throws NoSuchAlgorithmException {
+        String hash = shape.hash();
+        if (node_shapes_by_hash.containsKey(hash))
+            return node_shapes_by_hash.get(hash);
+        int idx = node_shapes.size();
+        node_shapes_by_hash.put(hash, idx);
+        node_shapes.add(shape);
+        return idx;
+    }
+
+    public static Wire get_node_root(Node n) {
+        if (n == null)
+            return null;
+        // We define the root of a node to be the first live wire in it, because we might have pruned the real root
+        // TODO: determine the real value of pruning against consistent matching of Vivado wire names
+        // and the general cost of doing this
+        for (Wire w : n.getAllWiresInNode()) {
+            if (!is_dead_wire(w))
+                return w;
+        }
+        return null;
+    }
+
+    public static class DedupTileInst {
+        public int [][] wire_to_node;
+        public int [][][] node_wires;
+        public String hash_value = null;
+
+        public DedupTileInst(Device d, Tile t) throws NoSuchAlgorithmException {
+            DedupTileFlatWires fw = flat_tiles.get(t.getTileTypeEnum());
+            wire_to_node = new int[fw.size() + 4][3];
+            int const_tile_offset = flat_tiles.get(d.getTile(t.getRow(), 0).getTileTypeEnum()).size();
+            // Xilinx wires
+            for (int wi = 0; wi < t.getWireCount(); wi++) {
+                int i = fw.get(wi);
+                if (i == -1)
+                    continue;
+                Wire w = new Wire(t, wi);
+                Node n = w.getNode();
+                Wire root = get_node_root(n);
+
+                if (n == null) {
+                    wire_to_node[i][0] = MODE_TILE_WIRE;
+                    wire_to_node[i][1] = 0;
+                    wire_to_node[i][2] = 0;
+                } else if (is_gnd(n)) {
+                    wire_to_node[i][0] = MODE_ROW_CONST;
+                    wire_to_node[i][1] = 0;
+                    wire_to_node[i][2] = const_tile_offset + 0;
+                    row_gnd.add(w);
+                } else if (is_vcc(n)) {
+                    wire_to_node[i][0] = MODE_ROW_CONST;
+                    wire_to_node[i][1] = 0;
+                    wire_to_node[i][2] = const_tile_offset + 1;
+                    row_vcc.add(w);
+                } else if (w.equals(root)) {
+                    // Is a root
+                    wire_to_node[i][0] = MODE_IS_ROOT;
+                    wire_to_node[i][1] = node_shape_idx(new NodeShape(t, n));
+                    wire_to_node[i][2] = 0;
+                } else {
+                    Tile tn = root.getTile();
+                    wire_to_node[i][0] = tn.getColumn() - t.getColumn();
+                    wire_to_node[i][1] = tn.getRow() - t.getRow();
+                    wire_to_node[i][2] = flat_tiles.get(tn.getTileTypeEnum()).get(root.getWireIndex());
+                }
+            }
+            // Synthetic constant nodes
+            for (int j = 0; j < 4; j++) {
+                int i = j + fw.size();
+                if ((t.getColumn() == 0) && ((j < 2) || (t.getRow() == 0))) {
+                    // Root of row or global const
+                    wire_to_node[i][0] = MODE_IS_ROOT;
+                    wire_to_node[i][1] = node_shape_idx(new NodeShape(d, t.getRow(), (j == 1) || (j == 3), (j >= 2)));
+                    wire_to_node[i][2] = 0;
+                } else if ((j < 2) || (t.getColumn() == 0)) {
+                    // Back reference to row/global origin
+                    int offset = (j < 2) ? const_tile_offset : flat_tiles.get(d.getTile(0, 0).getTileTypeEnum()).size();
+                    wire_to_node[i][0] = (j < 2) ? MODE_ROW_CONST : MODE_GLB_CONST;
+                    wire_to_node[i][1] = 0;
+                    wire_to_node[i][2] = offset + j;
+                } else {
+                    // Not part of a node (global ground wire in a column other than zero)
+                    wire_to_node[i][0] = MODE_TILE_WIRE;
+                    wire_to_node[i][1] = 0;
+                    wire_to_node[i][2] = 0;
+                }
+            }
+        }
+
+
+        public String hash() throws NoSuchAlgorithmException {
+            if (hash_value == null) {
+                MessageDigest md = MessageDigest.getInstance("md5");
+                byte[] tempbuf = {0, 0, 0, 0};
+                java.util.function.Consumer<Integer> add_int = (Integer x) -> {
+                    tempbuf[0] = (byte) (x >> 24);
+                    tempbuf[1] = (byte) (x >> 16);
+                    tempbuf[2] = (byte) (x >> 8);
+                    tempbuf[3] = (byte) (x >> 0);
+                    md.update(tempbuf);
+                };
+                add_int.accept(wire_to_node.length);
+                for (int[] entry : wire_to_node) {
+                    add_int.accept(entry[0]); // dx/mode
+                    add_int.accept(entry[1]); // dy/shape index
+                    add_int.accept(entry[2]); // wire index
+                }
+                byte[] digest = md.digest();
+                hash_value = Base64.getEncoder().encodeToString(digest);
+            }
+            return hash_value;
+        }
+    }
+
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
 
         if (args.length < 3) {
             System.err.println("Usage: bbaexport <device> <constids.inc> <output.bba>");
@@ -809,6 +1061,8 @@ public class bbaexport {
         for (Tile t : d.getAllTiles()) {
             if (seenTileTypes.contains(t.getTileTypeEnum()))
                 continue;
+            DedupTileFlatWires fw = new DedupTileFlatWires(t);
+            flat_tiles.put(t.getTileTypeEnum(), fw);
             seenTileTypes.add(t.getTileTypeEnum());
             tileTypeIndices.put(t.getTileTypeEnum(), tileTypes.size());
 
@@ -816,7 +1070,7 @@ public class bbaexport {
             ntt.index = tileTypes.size();
             ntt.importTile(d, des, tmg, t);
             tileTypes.add(ntt);
-            System.out.println("Processed tile type " + t.getTileTypeEnum().name());
+            System.err.println("Processed tile type " + t.getTileTypeEnum().name());
         }
 
         // Tile entries
@@ -867,7 +1121,7 @@ public class bbaexport {
                     try {
                         intert = s.getIntTile();
                     } catch(java.lang.ArrayIndexOutOfBoundsException e) {
-
+                    } catch(java.lang.NullPointerException e) {
                     }
                     if (intert != null) {
                         nsi.inter_x = intert.getColumn();
@@ -878,8 +1132,6 @@ public class bbaexport {
                     }
                     nti.sites.add(nsi);
                 }
-                nti.tilewire_to_node = new Integer[t.getWireCount() + 4]; // +1 accounts for vcc/ground pseudo-wires
-                Arrays.fill(nti.tilewire_to_node, -1);
                 tileInsts.add(nti);
                 tileToTileInst.put(t.getRow() * d.getColumns() + t.getColumn(), nti);
             }
@@ -995,121 +1247,29 @@ public class bbaexport {
         }
 
         // Nodes
-        HashSet<TileTypeEnum> intTileTypes = Utils.getIntTileTypes();
-        HashSet<Long> seenNodes = new HashSet<>();
-        int curr = 0, total = d.getAllTiles().size();
-        ArrayList<Integer> nodeWireCount = new ArrayList<>(), nodeIntent = new ArrayList<>();
-
+        ArrayList<DedupTileInst> tile_shapes = new ArrayList();
+        HashMap<String, Integer> tile_shape_idx = new HashMap();
         for (int row = 0; row < d.getRows(); row++) {
-            HashSet<Node> gndNodes = new HashSet<>(), vccNodes = new HashSet<>();
-            for (int col = 0; col < d.getColumns(); col++) {
+            // Process columns backwards so we've collected all constants at the point of generating the row-const node
+            row_gnd.clear();
+            row_vcc.clear();
+            for (int col = d.getColumns() - 1; col >= 0; col--) {
                 Tile t = d.getTile(row, col);
-                ++curr;
-                System.out.println("Processing nodes in tile " + curr + "/" + total);
-                for (int i = 0; i < t.getWireCount(); i++) {
-                    Wire tw = new Wire(t, i);
-                    if (!is_live_wire(tw))
-                        continue;
-                    Node n = tw.getNode();
-                    if (n == null)
-                        continue;
-                    long flatIndex = (long)(n.getTile().getRow() * d.getColumns() + n.getTile().getColumn()) << 32 | n.getWire();
-                    if (seenNodes.contains(flatIndex))
-                        continue;
-                    seenNodes.add(flatIndex);
-                    String wn = n.getWireName();
-                    //System.out.println(t.getName() + " " + n.getWireName());
-                    if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R
-                         && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_L && t.getTileTypeEnum() != TileTypeEnum.RCLK_INT_R) &&
-                            n.isTiedToGnd()) {
-                        gndNodes.add(n);
-                        continue;
-                    }
-                    if ((t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_L && t.getTileTypeEnum() != TileTypeEnum.BRAM_INT_INTERFACE_R) && n.isTiedToVcc()) {
-                        vccNodes.add(n);
-                        continue;
-                    }
-                    int live_wire_count = 0;
-                    for (Wire w : n.getAllWiresInNode())
-                        if (is_live_wire(w))
-                            ++live_wire_count;
-                    if (live_wire_count > 1) {
-                        //nn.tilewires = new NextpnrTileWireRef[n.getAllWiresInNode().length];
-                        bba.printf("label n%d_tw\n", nodeWireCount.size());
-                        // Add interconnect tiles first for better delay estimates in nextpnr
-                        for (int j = 0; j < 2; j++) {
-                            for (Wire w : n.getAllWiresInNode()) {
-                                if (intTileTypes.contains(w.getTile().getTileTypeEnum()) != (j == 0))
-                                    continue;
-                                if (!is_live_wire(w))
-                                    continue;
-                                int tileIndex = w.getTile().getRow() * d.getColumns() + w.getTile().getColumn();
-                                //nn.tilewires[i] = new NextpnrTileWireRef(tileToTileInst.get(tileIndex).index, w.getWireIndex());
-
-                                bba.printf("u32 %d\n", tileToTileInst.get(tileIndex).index); //tile inst index
-                                bba.printf("u32 %d\n", w.getWireIndex());
-
-                                tileToTileInst.get(tileIndex).tilewire_to_node[w.getWireIndex()] = nodeWireCount.size();
-
-                            }
-                        }
-                        Wire nw = new Wire(n.getTile(), n.getWire());
-                        nodeIntent.add(makeConstId(nw.getIntentCode().toString()));
-                        nodeWireCount.add(live_wire_count);
-                    }
+                NextpnrTileInst nti = tileToTileInst.get(row * d.getColumns() + col);
+                DedupTileInst dti = new DedupTileInst(d, t);
+                String hash = dti.hash();
+                if (tile_shape_idx.containsKey(hash)) {
+                    nti.shape = tile_shape_idx.get(hash);
+                } else {
+                    nti.shape = tile_shapes.size();
+                    tile_shape_idx.put(hash, nti.shape);
+                    tile_shapes.add(dti);
                 }
             }
-            // Connect up row and column ground nodes
-            for (int i = 0; i < 2; i++) {
-                bba.printf("label n%d_tw\n", nodeWireCount.size());
-                int wireCount = 0;
-                for (Node n : (i == 1) ? vccNodes : gndNodes) {
-                    for (Wire w : n.getAllWiresInNode()) {
-                        int tileIndex = w.getTile().getRow() * d.getColumns() + w.getTile().getColumn();
-                        bba.printf("u32 %d\n", tileToTileInst.get(tileIndex).index);
-                        bba.printf("u32 %d\n", w.getWireIndex());
-                        tileToTileInst.get(tileIndex).tilewire_to_node[w.getWireIndex()] = nodeWireCount.size();
-                        wireCount++;
-                    }
-                }
-
-                for (int col = 0; col < d.getColumns(); col++) {
-                    Tile t = d.getTile(row, col);
-                    int tileIndex = t.getRow() * d.getColumns() + t.getColumn();
-                    bba.printf("u32 %d\n", tileToTileInst.get(tileIndex).index);
-                    int wireIndex = (i == 1) ? tileTypes.get(tileToTileInst.get(tileIndex).type).row_vcc_wire_index : tileTypes.get(tileToTileInst.get(tileIndex).type).row_gnd_wire_index;
-                    bba.printf("u32 %d\n", wireIndex);
-                    tileToTileInst.get(tileIndex).tilewire_to_node[wireIndex] = nodeWireCount.size();
-                    wireCount++;
-                }
-
-                nodeWireCount.add(wireCount);
-                nodeIntent.add(makeConstId(i == 1 ? "PSEUDO_VCC" : "PSEUDO_GND"));
-            }
-        }
-        // Create the global Vcc and Ground nodes
-        for (int i = 0; i < 2; i++) {
-            bba.printf("label n%d_tw\n", nodeWireCount.size());
-            int wireCount = 0;
-            for (int row = 0; row < d.getRows(); row++) {
-                Tile t = d.getTile(row, 0);
-                int tileIndex = t.getRow() * d.getColumns() + t.getColumn();
-                bba.printf("u32 %d\n", tileToTileInst.get(tileIndex).index);
-                int wireIndex = (i == 1) ? tileTypes.get(tileToTileInst.get(tileIndex).type).global_vcc_wire_index : tileTypes.get(tileToTileInst.get(tileIndex).type).global_gnd_wire_index;
-                bba.printf("u32 %d\n", wireIndex);
-                tileToTileInst.get(tileIndex).tilewire_to_node[wireIndex] = nodeWireCount.size();
-                wireCount++;
-            }
-
-            nodeWireCount.add(wireCount);
-            nodeIntent.add(makeConstId(i == 1 ? "PSEUDO_VCC" : "PSEUDO_GND"));
+            System.err.printf("processed row %d/%d\n", (row+1), d.getRows());
         }
 
         for (NextpnrTileInst ti : tileInsts) {
-            // Tilewire -> node mappings
-            bba.printf("label ti%d_wire_to_node\n", ti.index);
-            for (int w2n : ti.tilewire_to_node)
-                bba.printf("u32 %d\n", w2n);
             bba.printf("label ti%d_sites\n", ti.index);
             for (NextpnrSiteInst si : ti.sites) {
                 bba.printf("str |%s|\n", si.name);
@@ -1125,19 +1285,53 @@ public class bbaexport {
         bba.printf("label tile_insts\n");
         for (NextpnrTileInst ti : tileInsts) {
             bba.printf("str |%s|\n", ti.name); //tile name
+            bba.printf("u32 %d\n", ti.shape); // index into tile_shapes
             bba.printf("u32 %d\n", ti.type); //tile type index into tiletype_data
-            bba.printf("u32 %d\n", ti.tilewire_to_node.length); //length of tilewire_to_node
-            bba.printf("ref ti%d_wire_to_node\n", ti.index); //ref to tilewire_to_node
             bba.printf("u32 %d\n", ti.sites.size());
             bba.printf("ref ti%d_sites\n", ti.index); //ref to list of site names
         }
 
-        bba.printf("label nodes\n");
-        for (int i = 0; i < nodeWireCount.size(); i++) {
-            bba.printf("u32 %d\n", nodeWireCount.get(i)); //number of tilewires in node
-            bba.printf("u32 %d\n", nodeIntent.get(i)); //node intent constid
-            bba.printf("ref n%d_tw\n", i); //ref to list of tilewires
+        for (int i = 0; i < node_shapes.size(); i++) {
+            bba.printf("label ns%d_tw\n", i);
+            NodeShape ns = node_shapes.get(i);
+            for (int j = 0; j < ns.node_wires.length; j++) {
+                for (int k = 0; k < 3; k++)
+                    bba.printf("u16 %d\n", ns.node_wires[j][k]);
+            }
+            bba.println("align");
         }
+
+        bba.printf("label node_shapes\n");
+        for (int i = 0; i < node_shapes.size(); i++) {
+            bba.printf("ref ns%d_tw\n", i); //ref to list of tilewires
+            bba.printf("u32 %d\n", node_shapes.get(i).node_wires.length); // number of tilewires in node
+        }
+
+        for (int i = 0; i < tile_shapes.size(); i++) {
+            bba.printf("label ts%d_w2n\n", i);
+            DedupTileInst dti = tile_shapes.get(i);
+            for (int j = 0; j < dti.wire_to_node.length; j++) {
+                int dx_mode = dti.wire_to_node[j][0];
+                if (dx_mode == MODE_IS_ROOT) {
+                    // second field is 32 bits
+                    bba.printf("u16 %d\n", dx_mode);
+                    bba.printf("u16 %d\n", (dti.wire_to_node[j][1] & 0xFFFF));
+                    bba.printf("u16 %d\n", ((dti.wire_to_node[j][1] >> 16) & 0xFFFF));
+                } else {
+                    bba.printf("u16 %d\n", dx_mode);
+                    bba.printf("u16 %d\n", dti.wire_to_node[j][1]);
+                    bba.printf("u16 %d\n", dti.wire_to_node[j][2]);
+                }
+            }
+            bba.println("align");
+        }
+
+        bba.printf("label tile_shapes\n");
+        for (int i = 0; i < tile_shapes.size(); i++) {
+            bba.printf("ref ts%d_w2n\n", i); //ref to wire to node mapping
+            bba.printf("u32 %d\n", tile_shapes.get(i).wire_to_node.length); // number of tilewires in tile
+        }
+
         // FIXME: Placeholder timing data
         bba.println("label tile_cell_timing");
         // Nothing here yet
@@ -1169,10 +1363,12 @@ public class bbaexport {
         bba.printf("u32 %d\n", d.getRows()); //height
         bba.printf("u32 %d\n", tileInsts.size()); //number of tiles
         bba.printf("u32 %d\n", tileTypes.size()); //number of tiletypes
-        bba.printf("u32 %d\n", nodeWireCount.size()); //number of nodes
         bba.println("ref tiletype_data"); // reference to tiletype data
         bba.println("ref tile_insts"); // reference to tile instances
-        bba.println("ref nodes"); // reference to node data
+        bba.println("ref node_shapes"); // reference to node shape data
+        bba.printf("u32 %d\n", node_shapes.size()); // length of node shape data
+        bba.println("ref tile_shapes"); // reference to tile shape data
+        bba.printf("u32 %d\n", tile_shapes.size()); // length of tile shape data
         bba.println("ref extra_constids"); // reference to bel data
         bba.printf("u32 %d\n", 1); // number of speed grades
         bba.println("ref timing"); // reference to bel data

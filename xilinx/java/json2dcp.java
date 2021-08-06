@@ -469,8 +469,9 @@ public class json2dcp {
                     String tile = sp[0];
                     String[] wires = sp[1].split("\\.");
                     Tile t = des.getDevice().getTile(tile);
-                    int src = Integer.parseInt(wires[0]), dst = Integer.parseInt(wires[1]);
-                    if (src < t.getWireCount() && dst < t.getWireCount())
+                    Integer src = t.getWireIndex(wires[0]), dst = t.getWireIndex(wires[1]);
+
+                    if (src != null && dst != null)
                         n.addPIP(t.getPIP(src, dst));
                 }
 
