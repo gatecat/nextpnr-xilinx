@@ -477,17 +477,47 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
         src_y = src_tile / chip_info->width;
     }
 
-    /*
-        delay_t base = 150 * std::min(std::abs(dst_x - src_x), 30) + 40 * std::max(std::abs(dst_x - src_x) - 30, 0)
-                +  150 * std::min(std::abs(dst_y - src_y), 10) + 60 * std::max(std::abs(dst_y - src_y)  - 10, 0)
-                + 500;
-        auto &srci = wireInfo(src);*/
-    /*
-    if (srci.intent == ID_NODE_HLONG || srci.intent == ID_NODE_VLONG)
-        base -= 180;
-    if (srci.intent == ID_NODE_HQUAD || srci.intent == ID_NODE_VQUAD || srci.intent == ID_NODE_DOUBLE)
-        base -= 120;
-    */
+
+    {
+        auto src_twr = getTileWireRange(src);
+        if (src_twr.b.node_shape != -1 && (src_twr.e.cursor - src_twr.b.cursor) < 50) {
+            // Guesstimate nearest to dst
+            int best_dist = std::numeric_limits<int>::max();
+            for (auto w : src_twr) {
+                if (locInfo(w).wire_data[w.index].num_downhill > 0) {
+                    int w_x = w.tile % chip_info->width, w_y = w.tile / chip_info->width;
+                    int dist = std::abs(w_x - dst_x) + std::abs(w_y - dst_y);
+                    if (dist < best_dist) {
+                        src_x = w_x;
+                        src_y = w_y;
+                        best_dist = dist;
+                    }
+                }
+            }
+
+        }
+    }
+
+    {
+        auto dst_twr = getTileWireRange(dst);
+        if (dst_twr.b.node_shape != -1 && (dst_twr.e.cursor - dst_twr.b.cursor) < 50) {
+            // Guesstimate nearest to src
+            int best_dist = std::numeric_limits<int>::max();
+            for (auto w : dst_twr) {
+                if (locInfo(w).wire_data[w.index].num_uphill > 0) {
+                    int w_x = w.tile % chip_info->width, w_y = w.tile / chip_info->width;
+                    int dist = std::abs(w_x - src_x) + std::abs(w_y - src_y);
+                    if (dist < best_dist) {
+                        dst_x = w_x;
+                        dst_y = w_y;
+                        best_dist = dist;
+                    }
+                }
+            }
+
+        }
+    }
+
     delay_t base = 30 * std::min(std::abs(dst_x - src_x), 18) + 10 * std::max(std::abs(dst_x - src_x) - 18, 0) +
                    60 * std::min(std::abs(dst_y - src_y), 6) + 20 * std::max(std::abs(dst_y - src_y) - 6, 0) + 300;
 
