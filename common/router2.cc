@@ -303,6 +303,70 @@ struct Router2
         }
     }
 
+
+    dict<int, int> int_rows, int_cols;
+    std::vector<int> nearest_int_row, nearest_int_col;
+
+    void init_int()
+    {
+        for (int y = 0; y < ctx->chip_info->height; y++) {
+            bool has_int = false;
+            for (int x = 0; x < ctx->chip_info->width; x++) {
+                int t = y * ctx->chip_info->width + x;
+                IdString tt(ctx->chip_info->tile_types[ctx->chip_info->tile_insts[t].type].type);
+                if (tt == ctx->id("INT")) {
+                    has_int = true;
+                    break;
+                }
+            }
+            if (has_int) {
+                int idx = int_rows.size();
+                int_rows[y] = idx;
+            }
+        }
+        for (int x = 0; x < ctx->chip_info->width; x++) {
+            bool has_int = false;
+            for (int y = 0; y < ctx->chip_info->height; y++) {
+                int t = y * ctx->chip_info->width + x;
+                IdString tt(ctx->chip_info->tile_types[ctx->chip_info->tile_insts[t].type].type);
+                if (tt == ctx->id("INT")) {
+                    has_int = true;
+                    break;
+                }
+            }
+            if (has_int) {
+                int idx = int_cols.size();
+                int_cols[x] = idx;
+            }
+        }
+        nearest_int_row.resize(ctx->chip_info->height);
+        nearest_int_col.resize(ctx->chip_info->width);
+        for (int y = 0; y < ctx->chip_info->height; y++) {
+            for (int dy = 0; dy < ctx->chip_info->height; dy++) {
+                if (int_rows.count(y + dy)) {
+                    nearest_int_row.at(y) = int_rows.at(y + dy);
+                    break;
+                }
+                if (int_rows.count(y - dy)) {
+                    nearest_int_row.at(y) = int_rows.at(y - dy);
+                    break;
+                }
+            }
+        }
+        for (int x = 0; x < ctx->chip_info->width; x++) {
+            for (int dx = 0; dx < ctx->chip_info->width; dx++) {
+                if (int_cols.count(x + dx)) {
+                    nearest_int_col.at(x) = int_cols.at(x + dx);
+                    break;
+                }
+                if (int_cols.count(x - dx)) {
+                    nearest_int_col.at(x) = int_cols.at(x - dx);
+                    break;
+                }
+            }
+        }
+    }
+
     struct QueuedWire
     {
 
@@ -364,6 +428,50 @@ struct Router2
         int x = (w.tile % ctx->chip_info->width);
         int y = (w.tile / ctx->chip_info->width);
         return std::make_pair(x, y);
+    }
+
+    std::pair<int, int> lookahead_wire_loc(WireId w)
+    {
+        auto found_snl = ctx->sink_locs.find(w);
+        if (found_snl != ctx->sink_locs.end())
+            return std::make_pair(found_snl->second.x, found_snl->second.y);
+        auto found_srl = ctx->source_locs.find(w);
+        if (found_srl != ctx->source_locs.end())
+            return std::make_pair(found_srl->second.x, found_srl->second.y);
+        return get_wire_loc(w);
+    }
+
+    std::pair<int, int> int_wire_loc(const std::pair<int, int> &l) {
+        return std::make_pair(nearest_int_col.at(l.first), nearest_int_row.at(l.second));
+    }
+
+    float predict_cost(const std::pair<int, int> &from, const std::pair<int, int> &to) {
+        // TODO: intent aware predictions
+        int dx = std::abs(from.first - to.first);
+        int dy = std::abs(from.second - to.second);
+        return dx + dy + 2;
+    }
+
+    int compute_cost(WireId wire)
+    {
+        int32_t intent = ctx->wireIntent(wire);
+        switch (intent) {
+        case ID_NODE_HLONG:
+        case ID_NODE_VLONG:
+            return 12;
+        case ID_NODE_HQUAD:
+        case ID_NODE_VQUAD:
+            return 4;
+        case ID_NODE_DOUBLE:
+        case ID_NODE_PINBOUNCE:
+            return 2;
+        case ID_NODE_GLOBAL_LEAF:
+        case ID_NODE_GLOBAL_HDISTR:
+        case ID_NODE_GLOBAL_VDISTR:
+            return 300;
+        default:
+            return 1;
+        };
     }
 
     bool thread_test_wire(ThreadContext &t, WireId w)
@@ -447,8 +555,7 @@ struct Router2
     {
         auto wd = wires.get(wire_idx);
         auto &nd = nets.at(net->udata);
-        float base_cost = ctx->getDelayNS(ctx->getPipDelay(pip).maxDelay() + ctx->getWireDelay(wire).maxDelay() +
-                                          ctx->getDelayEpsilon());
+        float base_cost = compute_cost(wire);
 
         int source_uses = 0;
         int other_sources = wd.curr_cong;
@@ -474,7 +581,7 @@ struct Router2
         return base_cost * hist_cost * present_cost / (1 + source_uses) + bias_cost;
     }
 
-    float get_togo_cost(NetInfo *net, size_t user, WireId wire, int wire_idx, WireId src_sink, bool bwd)
+    float get_togo_cost(NetInfo *net, size_t user, WireId wire, int wire_idx, const std::pair<int, int> &src_sink_iloc, bool bwd)
     {
         int source_uses = 0;
         auto &nd = nets.at(net->udata);
@@ -483,8 +590,10 @@ struct Router2
         if (fnd_wire != nd.wires.end())
             source_uses = fnd_wire->second.second;
 
+        auto int_loc = int_wire_loc(get_wire_loc(wire));
+
         // FIXME: timing/wirelength balance?
-        return (ctx->getDelayNS(ctx->estimateDelay(bwd ? src_sink : wire, bwd ? wire : src_sink)) / (1 + source_uses)) +
+        return (predict_cost(bwd ? src_sink_iloc : int_loc, bwd ? int_loc : src_sink_iloc) / (1 + source_uses)) +
                cfg.ipin_cost_adder;
     }
 
@@ -773,9 +882,6 @@ struct Router2
             WireId wire = ctx->getPipDstWire(pip);
             uint32_t wire_idx = flat_wire_index(wire);
             base_cost += score_wire_for_arc(net, i, wire, wire_idx, pip);
-            ROUTE_LOG_DBG("   bt %s acc %f fwd %f bwd %f\n", ctx->nameOfWire(wire), base_cost,
-                          get_togo_cost(net, i, wire, wire_idx, ad.sink_wire, false),
-                          get_togo_cost(net, i, wire, wire_idx, nd.src_wire, true));
             if (!t.wire_costs.count(wire)) {
                 t.wire_costs[wire] = base_cost;
                 for (auto dh : ctx->getPipsDownhill(wire)) {
@@ -803,6 +909,10 @@ struct Router2
                         ctx->nameOf(usr.cell));
         int src_wire_idx = flat_wire_index(src_wire);
         int dst_wire_idx = flat_wire_index(dst_wire);
+
+        auto src_int_loc = int_wire_loc(lookahead_wire_loc(src_wire));
+        auto dst_int_loc = int_wire_loc(lookahead_wire_loc(dst_wire));
+
         // Check if arc was already done _in this iteration_
         if (t.processed_sinks.count(dst_wire))
             return ARC_SUCCESS;
@@ -842,7 +952,7 @@ struct Router2
                 WireScore base_score;
                 base_score.cost = wire_cost;
                 base_score.delay = 0;
-                base_score.togo_cost = get_togo_cost(net, i, wire, flat_wire_index(wire), dst_wire, false);
+                base_score.togo_cost = get_togo_cost(net, i, wire, flat_wire_index(wire), dst_int_loc, false);
                 t.queue.push(QueuedWire(wire, PipId(), Loc(), base_score));
                 set_visited_fwd(t, flat_wire_index(wire), PipId());
             };
@@ -886,7 +996,7 @@ struct Router2
                 WireScore base_score;
                 base_score.cost = 0;
                 base_score.delay = 0;
-                base_score.togo_cost = get_togo_cost(net, i, wire, flat_wire_index(wire), src_wire, true);
+                base_score.togo_cost = get_togo_cost(net, i, wire, flat_wire_index(wire), src_int_loc, true);
                 t.backwards_queue.push(QueuedWire(wire, PipId(), Loc(), base_score));
                 set_visited_bwd(t, flat_wire_index(wire), PipId());
             };
@@ -940,7 +1050,7 @@ struct Router2
                         next_score.delay =
                                 curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
                         next_score.togo_cost =
-                                cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, dst_wire, false);
+                                cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, dst_int_loc, false);
                         t.queue.push(QueuedWire(next, dh, ctx->getPipLocation(dh), next_score, t.rng.rng()));
                         set_visited_fwd(t, next_idx, dh);
                     }
@@ -991,7 +1101,7 @@ struct Router2
                         next_score.delay =
                                 curr.score.delay + ctx->getPipDelay(uh).maxDelay() + ctx->getWireDelay(next).maxDelay();
                         next_score.togo_cost =
-                                cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, src_wire, true);
+                                cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, src_int_loc, true);
                         t.backwards_queue.push(QueuedWire(next, uh, ctx->getPipLocation(uh), next_score, t.rng.rng()));
                         set_visited_bwd(t, next_idx, uh);
                     }
@@ -1447,6 +1557,7 @@ struct Router2
         auto rstart = std::chrono::high_resolution_clock::now();
         setup_nets();
         setup_wires();
+        init_int();
         find_all_reserved_wires();
         partition_nets();
         curr_cong_weight = cfg.init_curr_cong_weight;
