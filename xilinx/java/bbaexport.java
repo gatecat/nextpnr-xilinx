@@ -645,12 +645,12 @@ public class bbaexport {
         } else if (t.getTileTypeEnum() == TileTypeEnum.DSP) {
             boolean is_upper_site = false;
             for (Site s2 : t.getSites()) {
-                if (s2.getInstanceX() < s.getInstanceX()) {
+                if (s2.getInstanceY() < s.getInstanceY()) {
                     is_upper_site = true;
                     break;
                 }
             }
-            int zs = is_upper_site ? (1 << 4) : 0;
+            int zs = is_upper_site ? (1 << 5) : 0;
             switch (b.getBELType()) {
                 case "DSP_PREADD_DATA":
                     return zs | 0;
@@ -668,6 +668,8 @@ public class bbaexport {
                     return zs | 6;
                 case "DSP_OUTPUT":
                     return zs | 7;
+                default:
+                    return -1;
             }
         } else if (t.getTileTypeEnum() == TileTypeEnum.BRAM_L || t.getTileTypeEnum() == TileTypeEnum.BRAM_R) {
             boolean is_top18 = false;
