@@ -235,18 +235,18 @@ struct Router2
         IdString reserved;
     };
 
+    mutable std::shared_timed_mutex wire_status_mutex;
+
     struct WireStatusStore
     {
         PackedArray<3> flat_data;
         // TODO: faster hash maps?
         dict<uint32_t, WireStatus> ext_data;
-        mutable std::shared_timed_mutex ext_data_mutex;
         WireStatus get(uint32_t wire_idx) const
         {
             uint8_t f = flat_data.get(wire_idx);
             if (f == 0x7) {
                 // wire is in extended array
-                std::shared_lock<std::shared_timed_mutex> guard(ext_data_mutex);
                 auto data = ext_data.at(wire_idx);
                 return data;
             } else {
@@ -257,7 +257,6 @@ struct Router2
         {
             // Conditions to use extended data
             if (st.curr_cong > 2 || st.hist_cong > 1 || st.reserved != IdString()) {
-                std::unique_lock<std::shared_timed_mutex> guard(ext_data_mutex);
                 ext_data[wire_idx] = st;
                 flat_data.set(wire_idx, 0x7);
             } else {
@@ -398,6 +397,7 @@ struct Router2
     {
         auto found = net.wires.find(wire);
         if (found == net.wires.end()) {
+            std::unique_lock<std::shared_timed_mutex> guard(wire_status_mutex);
             // Not yet used for any arcs of this net, add to list
             net.wires.emplace(wire, std::make_pair(pip, 1));
             // Increase bound count of wire by 1
@@ -418,6 +418,7 @@ struct Router2
         auto &b = net.wires.at(wire);
         --b.second;
         if (b.second == 0) {
+            std::unique_lock<std::shared_timed_mutex> guard(wire_status_mutex);
             // No remaining arcs of this net bound to this wire
             WireStatus st = wires.get(wire);
             --st.curr_cong;
@@ -443,9 +444,8 @@ struct Router2
         ad.routed = false;
     }
 
-    float score_wire_for_arc(NetInfo *net, size_t user, WireId wire, uint32_t wire_idx, PipId pip)
+    float score_wire_for_arc(NetInfo *net, size_t user, WireId wire, WireStatus &wd, uint32_t wire_idx, PipId pip)
     {
-        auto wd = wires.get(wire_idx);
         auto &nd = nets.at(net->udata);
         float base_cost = ctx->getDelayNS(ctx->getPipDelay(pip).maxDelay() + ctx->getWireDelay(wire).maxDelay() +
                                           ctx->getDelayEpsilon());
@@ -496,7 +496,11 @@ struct Router2
         WireId cursor = ad.sink_wire;
         uint32_t cursor_idx = flat_wire_index(cursor);
         while (nd.wires.count(cursor_idx)) {
-            auto wd = wires.get(cursor_idx);
+            WireStatus wd;
+            {
+                std::shared_lock<std::shared_timed_mutex> guard(wire_status_mutex);
+                wd = wires.get(cursor_idx);
+            }
             if (wd.curr_cong != 1)
                 return false;
             auto &uh = nd.wires.at(cursor_idx).first;
@@ -714,7 +718,11 @@ struct Router2
                     int next = flat_wire_index(next_wire);
                     if (was_visited_bwd(t, next))
                         continue; // skip wires that have already been visited
-                    auto wd = wires.get(next);
+                    WireStatus wd;
+                    {
+                        std::shared_lock<std::shared_timed_mutex> guard(wire_status_mutex);
+                        wd = wires.get(next);
+                    }
                     if (wd.reserved != IdString() && wd.reserved != net->name)
                         continue;
                     if (wd.curr_cong > (allowed_cong + 1) ||
@@ -735,7 +743,7 @@ struct Router2
                     PipId p = t.wire2pip_bwd.at(cursor_fwd);
                     cursor_fwd = flat_wire_index(ctx->getPipDstWire(p));
                     bind_pip_internal(nd, i, cursor_fwd, p);
-                    if (ctx->debug) {
+                    if (ctx->debug && !is_mt) {
                         auto wd = wires.get(cursor_fwd);
                         ROUTE_LOG_DBG("      wire: %s (curr %d hist %d)\n", ctx->nameOfWire(ctx->getPipSrcWire(p)),
                                       wd.curr_cong - 1, wd.hist_cong);
@@ -772,7 +780,6 @@ struct Router2
         for (auto pip : path) {
             WireId wire = ctx->getPipDstWire(pip);
             uint32_t wire_idx = flat_wire_index(wire);
-            base_cost += score_wire_for_arc(net, i, wire, wire_idx, pip);
             ROUTE_LOG_DBG("   bt %s acc %f fwd %f bwd %f\n", ctx->nameOfWire(wire), base_cost,
                           get_togo_cost(net, i, wire, wire_idx, ad.sink_wire, false),
                           get_togo_cost(net, i, wire, wire_idx, nd.src_wire, true));
@@ -924,21 +931,21 @@ struct Router2
                             continue;
                         ++explored;
                         // Check data for next wire
-                        auto nwd = wires.get(next_idx);
-                        // Reserved, but for another net...
+                        WireStatus nwd;
+                        {
+                            std::shared_lock<std::shared_timed_mutex> guard(wire_status_mutex);
+                            nwd = wires.get(next_idx);
+                        }                        // Reserved, but for another net...
                         if (nwd.reserved != IdString() && nwd.reserved != net->name)
                             continue;
                         // Bound to this net, but with a different driving PIP
                         auto fnd = nd.wires.find(next_idx);
                         if (fnd != nd.wires.end() && fnd->second.first != dh)
                             continue;
-                        if (!thread_test_wire(t, next))
-                            continue; // thread safety issue
                         // All checks passed, mark as visited and add to the queue
                         WireScore next_score;
-                        next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, next_idx, dh);
-                        next_score.delay =
-                                curr.score.delay + ctx->getPipDelay(dh).maxDelay() + ctx->getWireDelay(next).maxDelay();
+                        next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, nwd, next_idx, dh);
+                        next_score.delay = 0;
                         next_score.togo_cost =
                                 cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, dst_wire, false);
                         t.queue.push(QueuedWire(next, dh, ctx->getPipLocation(dh), next_score, t.rng.rng()));
@@ -979,17 +986,18 @@ struct Router2
                             continue;
                         ++explored;
                         // Check data for next wire
-                        auto nwd = wires.get(next_idx);
+                        WireStatus nwd;
+                        {
+                            std::shared_lock<std::shared_timed_mutex> guard(wire_status_mutex);
+                            nwd = wires.get(next_idx);
+                        }
                         // Reserved, but for another net...
                         if (nwd.reserved != IdString() && nwd.reserved != net->name)
                             continue;
-                        if (!thread_test_wire(t, next))
-                            continue; // thread safety issue
                         // All checks passed, mark as visited and add to the queue
                         WireScore next_score;
-                        next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, next_idx, uh);
-                        next_score.delay =
-                                curr.score.delay + ctx->getPipDelay(uh).maxDelay() + ctx->getWireDelay(next).maxDelay();
+                        next_score.cost = curr.score.cost + score_wire_for_arc(net, i, next, nwd, next_idx, uh);
+                        next_score.delay = 0;
                         next_score.togo_cost =
                                 cfg.estimate_weight * get_togo_cost(net, i, next, next_idx, src_wire, true);
                         t.backwards_queue.push(QueuedWire(next, uh, ctx->getPipLocation(uh), next_score, t.rng.rng()));
@@ -1012,10 +1020,12 @@ struct Router2
                 if (pip == PipId() && cursor_bwd != src_wire_idx)
                     break;
                 bind_pip_internal(nd, i, cursor_bwd, pip);
-                auto wd = wires.get(cursor_bwd);
-                ROUTE_LOG_DBG("      fwd wire: %s (curr %d hist %d share %d)\n",
-                              (pip == PipId()) ? ctx->nameOfWire(src_wire) : ctx->nameOfWire(ctx->getPipSrcWire(pip)),
-                              wd.curr_cong - 1, wd.hist_cong, nd.wires.at(cursor_bwd).second);
+                if (ctx->debug && !is_mt) {
+                    auto wd = wires.get(cursor_bwd);
+                    ROUTE_LOG_DBG("      fwd wire: %s (curr %d hist %d share %d)\n",
+                                  (pip == PipId()) ? ctx->nameOfWire(src_wire) : ctx->nameOfWire(ctx->getPipSrcWire(pip)),
+                                  wd.curr_cong - 1, wd.hist_cong, nd.wires.at(cursor_bwd).second);
+                }
                 if (pip == PipId()) {
                     break;
                 }
@@ -1030,10 +1040,12 @@ struct Router2
                     break;
                 auto &bound = nd.wires.at(cursor_bwd);
                 PipId pip = bound.first;
-                auto wd = wires.get(cursor_bwd);
-                ROUTE_LOG_DBG("      ext wire: %s (curr %d hist %d share %d)\n",
-                              (pip == PipId()) ? ctx->nameOfWire(src_wire) : ctx->nameOfWire(ctx->getPipSrcWire(pip)),
-                              wd.curr_cong - 1, wd.hist_cong, bound.second);
+                if (ctx->debug && !is_mt) {
+                    auto wd = wires.get(cursor_bwd);
+                    ROUTE_LOG_DBG("      ext wire: %s (curr %d hist %d share %d)\n",
+                                  (pip == PipId()) ? ctx->nameOfWire(src_wire) : ctx->nameOfWire(ctx->getPipSrcWire(pip)),
+                                  wd.curr_cong - 1, wd.hist_cong, bound.second);
+                }
                 bind_pip_internal(nd, i, cursor_bwd, pip);
                 if (pip == PipId())
                     break;
@@ -1045,7 +1057,7 @@ struct Router2
             int cursor_fwd = flat_wire_index(midpoint_wire);
             while (was_visited_bwd(t, cursor_fwd)) {
                 PipId pip = t.wire2pip_bwd.at(cursor_fwd);
-                if (ctx->debug) {
+                if (ctx->debug && !is_mt) {
                     auto wd = wires.get(cursor_fwd);
                     ROUTE_LOG_DBG("      bwd wire: %s (curr %d hist %d share %d)\n",
                                   (pip == PipId()) ? ctx->nameOfWire(dst_wire)
@@ -1344,8 +1356,8 @@ struct Router2
 
     void do_route()
     {
-        // Don't multithread if fewer than 200 nets (heuristic)
-        if (route_queue.size() < 200) {
+        // Don't multithread if fewer than 3000 nets (heuristic)
+        if (route_queue.size() < 3000) {
             ThreadContext st;
             st.rng.rngseed(ctx->rng64());
             st.bb = ArcBounds(0, 0, std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
@@ -1354,75 +1366,18 @@ struct Router2
             }
             return;
         }
-        const int Nq = 4, Nv = 2, Nh = 2;
-        const int N = Nq + Nv + Nh;
-        std::vector<ThreadContext> tcs(N + 1);
+        const int N = 12;
+        std::vector<ThreadContext> tcs(N+1);
         for (auto &th : tcs) {
             th.rng.rngseed(ctx->rng64());
         }
-        int le_x = mid_x;
-        int rs_x = mid_x;
-        int le_y = mid_y;
-        int rs_y = mid_y;
-        // Set up thread bounding boxes
-        tcs.at(0).bb = ArcBounds(0, 0, mid_x, mid_y);
-        tcs.at(1).bb = ArcBounds(mid_x + 1, 0, std::numeric_limits<int>::max(), le_y);
-        tcs.at(2).bb = ArcBounds(0, mid_y + 1, mid_x, std::numeric_limits<int>::max());
-        tcs.at(3).bb =
-                ArcBounds(mid_x + 1, mid_y + 1, std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
-
-        tcs.at(4).bb = ArcBounds(0, 0, std::numeric_limits<int>::max(), mid_y);
-        tcs.at(5).bb = ArcBounds(0, mid_y + 1, std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
-
-        tcs.at(6).bb = ArcBounds(0, 0, mid_x, std::numeric_limits<int>::max());
-        tcs.at(7).bb = ArcBounds(mid_x + 1, 0, std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
-
-        tcs.at(8).bb = ArcBounds(0, 0, std::numeric_limits<int>::max(), std::numeric_limits<int>::max());
-
+        int i = 0;
         for (auto n : route_queue) {
-            auto &nd = nets.at(n);
-            auto ni = nets_by_udata.at(n);
-            int bin = N;
-            // Quadrants
-            if (nd.bb.x0 < le_x && nd.bb.x1 < le_x && nd.bb.y0 < le_y && nd.bb.y1 < le_y)
-                bin = 0;
-            else if (nd.bb.x0 >= rs_x && nd.bb.x1 >= rs_x && nd.bb.y0 < le_y && nd.bb.y1 < le_y)
-                bin = 1;
-            else if (nd.bb.x0 < le_x && nd.bb.x1 < le_x && nd.bb.y0 >= rs_y && nd.bb.y1 >= rs_y)
-                bin = 2;
-            else if (nd.bb.x0 >= rs_x && nd.bb.x1 >= rs_x && nd.bb.y0 >= rs_y && nd.bb.y1 >= rs_y)
-                bin = 3;
-            // Vertical split
-            else if (nd.bb.y0 < le_y && nd.bb.y1 < le_y)
-                bin = Nq + 0;
-            else if (nd.bb.y0 >= rs_y && nd.bb.y1 >= rs_y)
-                bin = Nq + 1;
-            // Horizontal split
-            else if (nd.bb.x0 < le_x && nd.bb.x1 < le_x)
-                bin = Nq + Nv + 0;
-            else if (nd.bb.x0 >= rs_x && nd.bb.x1 >= rs_x)
-                bin = Nq + Nv + 1;
-            tcs.at(bin).route_nets.push_back(ni);
+            tcs.at((i++) % N).route_nets.push_back(nets_by_udata.at(n));
         }
-        if (ctx->verbose)
-            log_info("%d/%d nets not multi-threadable\n", int(tcs.at(N).route_nets.size()), int(route_queue.size()));
         // Multithreaded part of routing - quadrants
         std::vector<std::thread> threads;
-        for (int i = 0; i < Nq; i++) {
-            threads.emplace_back([this, &tcs, i]() { router_thread(tcs.at(i)); });
-        }
-        for (auto &t : threads)
-            t.join();
-        threads.clear();
-        // Vertical splits
-        for (int i = Nq; i < Nq + Nv; i++) {
-            threads.emplace_back([this, &tcs, i]() { router_thread(tcs.at(i)); });
-        }
-        for (auto &t : threads)
-            t.join();
-        threads.clear();
-        // Horizontal splits
-        for (int i = Nq + Nv; i < Nq + Nv + Nh; i++) {
+        for (int i = 0; i < N; i++) {
             threads.emplace_back([this, &tcs, i]() { router_thread(tcs.at(i)); });
         }
         for (auto &t : threads)
