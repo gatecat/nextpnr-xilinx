@@ -451,11 +451,11 @@ def import_device(name, prjxray_root, metadata_root):
 		return ij["intents"][str(ij["tiles"][tiletype][wirename])]
 
 	d = Device(name)
-	basepart = name.split('t')[0] + "t"
+	fabricname = name.split('t')[0] + "t"
 	# Load intent JSON
 	with open(metadata_root + "/wire_intents.json", "r") as ijf:
 		ij = json.load(ijf)
-	with open(prjxray_root + "/" + basepart + "/tilegrid.json") as gf:
+	with open(prjxray_root + "/" + fabricname + "/tilegrid.json") as gf:
 		tgj = json.load(gf)
 	for tile, tiledata in sorted(tgj.items()):
 		x = int(tiledata["grid_x"])
@@ -494,6 +494,6 @@ def import_device(name, prjxray_root, metadata_root):
 			if sl[2] == "site":
 				continue # header
 			d.sites_by_name[sl[2]].package_pin = sl[0]
-	with open(prjxray_root + "/" + basepart + "/tileconn.json", "r") as tcf:
+	with open(prjxray_root + "/" + fabricname + "/tileconn.json", "r") as tcf:
 		apply_tileconn(tcf, d)
 	return d
