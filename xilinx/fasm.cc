@@ -706,7 +706,15 @@ struct FasmBackend
         if (is_output) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
                 write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
-            if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
+	    if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
+	        write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
+	    else if (is_riob18 && iostandard == "LVCMOS12")
+	        write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
+	    else if (is_riob18 && iostandard == "SSTL15")
+                write_bit("SSTL15.DRIVE.I_FIXED");
+	    else if (is_riob18 && iostandard == "LVDS")
+                write_bit("LVDS.DRIVE.I_FIXED");
+            else if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
                 write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
             if (iostandard == "SSTL135")
                 write_bit("SSTL135.DRIVE.I_FIXED");
@@ -724,6 +732,8 @@ struct FasmBackend
         if (is_input && !diff) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
                 write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+	    if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15" || iostandard == "LVCMOS12"))
+	        write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
             if (iostandard == "SSTL135" || iostandard == "SSTL15") {
                 ioconfig_by_hclk[hclk].vref = true;
                 write_bit("SSTL135_SSTL15.IN");
