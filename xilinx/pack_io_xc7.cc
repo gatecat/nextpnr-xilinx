@@ -438,7 +438,11 @@ void XC7Packer::pack_io()
 
 std::string XC7Packer::get_ologic_site(const std::string &io_bel)
 {
-    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/OUTBUF"));
+    BelId ibc_bel;
+    if (io_bel.find("IOB18") != std::string::npos)
+        ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/OUTBUF_DCIEN"));
+    else
+        ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/OUTBUF"));
     std::queue<WireId> visit;
     visit.push(ctx->getBelPinWire(ibc_bel, ctx->id("IN")));
 
@@ -458,7 +462,11 @@ std::string XC7Packer::get_ologic_site(const std::string &io_bel)
 
 std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
 {
-    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
+    BelId ibc_bel;
+    if (io_bel.find("IOB18") != std::string::npos)
+        ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/INBUF_DCIEN"));
+    else
+      ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
     std::queue<WireId> visit;
     visit.push(ctx->getBelPinWire(ibc_bel, ctx->id("OUT")));
 
@@ -478,7 +486,11 @@ std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
 
 std::string XC7Packer::get_idelay_site(const std::string &io_bel)
 {
-    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
+    BelId ibc_bel;
+    if (io_bel.find("IOB18") != std::string::npos)
+        ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/INBUF_DCIEN"));
+    else
+      ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
     std::queue<WireId> visit;
     visit.push(ctx->getBelPinWire(ibc_bel, ctx->id("OUT")));
 
@@ -549,7 +561,8 @@ void XC7Packer::pack_iologic()
         CellInfo *outbuf = nullptr;
         for (auto &usr : net->users) {
             IdString type = usr.cell->type;
-            if (type == ctx->id("IOB33_OUTBUF") || type == ctx->id("IOB33M_OUTBUF")) {
+            if (type == ctx->id("IOB33_OUTBUF") || type == ctx->id("IOB33M_OUTBUF")
+		|| type == ctx->id("IOB18_OUTBUF_DCIEN") || type == ctx->id("IOB18M_OUTBUF_DCIEN")) {
                 if (outbuf != nullptr)
                     return (CellInfo *)nullptr; // drives multiple outputs
                 outbuf = usr.cell;
