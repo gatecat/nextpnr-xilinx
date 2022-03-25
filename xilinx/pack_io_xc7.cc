@@ -376,45 +376,55 @@ void XC7Packer::pack_io()
     hriobuf_rules[ctx->id("OBUF")].port_xform[ctx->id("I")] = ctx->id("IN");
     hriobuf_rules[ctx->id("OBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
     hriobuf_rules[ctx->id("OBUF")].port_xform[ctx->id("T")] = ctx->id("TRI");
+    hriobuf_rules[ctx->id("OBUFT")] = hriobuf_rules[ctx->id("OBUF")];
+
     hriobuf_rules[ctx->id("IBUF")].new_type = ctx->id("IOB33_INBUF_EN");
     hriobuf_rules[ctx->id("IBUF")].port_xform[ctx->id("I")] = ctx->id("PAD");
     hriobuf_rules[ctx->id("IBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
+    hriobuf_rules[ctx->id("IBUF_INTERMDISABLE")] = hriobuf_rules[ctx->id("IBUF")];
+    hriobuf_rules[ctx->id("IBUF_IBUFDISABLE")] = hriobuf_rules[ctx->id("IBUF")];
+    hriobuf_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")] = hriobuf_rules[ctx->id("IBUF")];
+    hriobuf_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFFI_IN");
+    hriobuf_rules[ctx->id("IBUFDS")] = hriobuf_rules[ctx->id("IBUF")];
+    hriobuf_rules[ctx->id("IBUFDS")].port_xform[ctx->id("IB")] = ctx->id("DIFFI_IN");
 
     hpiobuf_rules[ctx->id("OBUF")].new_type = ctx->id("IOB18_OUTBUF_DCIEN");
     hpiobuf_rules[ctx->id("OBUF")].port_xform[ctx->id("I")] = ctx->id("IN");
     hpiobuf_rules[ctx->id("OBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
     hpiobuf_rules[ctx->id("OBUF")].port_xform[ctx->id("T")] = ctx->id("TRI");
+    hpiobuf_rules[ctx->id("OBUFT")] = hpiobuf_rules[ctx->id("OBUF")];
+
     hpiobuf_rules[ctx->id("IBUF")].new_type = ctx->id("IOB18_INBUF_DCIEN");
     hpiobuf_rules[ctx->id("IBUF")].port_xform[ctx->id("I")] = ctx->id("PAD");
     hpiobuf_rules[ctx->id("IBUF")].port_xform[ctx->id("O")] = ctx->id("OUT");
+    hpiobuf_rules[ctx->id("IBUF_INTERMDISABLE")] = hpiobuf_rules[ctx->id("IBUF")];
+    hpiobuf_rules[ctx->id("IBUF_IBUFDISABLE")] = hpiobuf_rules[ctx->id("IBUF")];
+    hriobuf_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")] = hriobuf_rules[ctx->id("IBUF")];
+    hpiobuf_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFFI_IN");
+    hpiobuf_rules[ctx->id("IBUFDS")] = hpiobuf_rules[ctx->id("IBUF")];
+    hpiobuf_rules[ctx->id("IBUFDS")].port_xform[ctx->id("IB")] = ctx->id("DIFFI_IN");
 
-    // Special xform for OBUF and Ibuf.
+    // Special xform for OBUFx and IBUFx.
     std::unordered_map<IdString, XFormRule> rules;
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
-        if (ci->type == ctx->id("IBUF") || ci->type == ctx->id("OBUF")) {
-	    std::string belname = ci->attrs[ctx->id("BEL")].c_str();
-	    size_t pos = belname.find("/");
-	    if (belname.substr(pos+1, 5) == "IOB18")
-	        rules = hpiobuf_rules;
-	    else if (belname.substr(pos+1, 5) == "IOB33")
-	        rules = hriobuf_rules;
-	    else
-	        log_error("Unexpected IOBUF BEL %s\n", belname.c_str());
+	if (!ci->attrs.count(ctx->id("BEL")))
+	    continue;
+	std::string belname = ci->attrs[ctx->id("BEL")].c_str();
+	size_t pos = belname.find("/");
+	if (belname.substr(pos+1, 5) == "IOB18")
+	    rules = hpiobuf_rules;
+	else if (belname.substr(pos+1, 5) == "IOB33")
+	    rules = hriobuf_rules;
+	else
+	    log_error("Unexpected IOBUF BEL %s\n", belname.c_str());
+        if (rules.count(ci->type)) {
             xform_cell(rules, ci);
         }
     }
 
     std::unordered_map<IdString, XFormRule> hrio_rules;
     hrio_rules[ctx->id("PAD")].new_type = ctx->id("PAD");
-    hrio_rules[ctx->id("OBUFT")] = hrio_rules[ctx->id("OBUF")];
-
-    hrio_rules[ctx->id("IBUF_INTERMDISABLE")] = hrio_rules[ctx->id("IBUF")];
-    hrio_rules[ctx->id("IBUF_IBUFDISABLE")] = hrio_rules[ctx->id("IBUF")];
-    hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")] = hrio_rules[ctx->id("IBUF")];
-    hrio_rules[ctx->id("IBUFDS_INTERMDISABLE_INT")].port_xform[ctx->id("IB")] = ctx->id("DIFFI_IN");
-    hrio_rules[ctx->id("IBUFDS")] = hrio_rules[ctx->id("IBUF")];
-    hrio_rules[ctx->id("IBUFDS")].port_xform[ctx->id("IB")] = ctx->id("DIFFI_IN");
 
     hrio_rules[ctx->id("INV")].new_type = ctx->id("INVERTER");
     hrio_rules[ctx->id("INV")].port_xform[ctx->id("I")] = ctx->id("IN");

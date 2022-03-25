@@ -769,7 +769,7 @@ struct FasmBackend
         std::string site = ctx->getBelSite(pad->bel);
         std::string belname;
         BelId inv;
-	if (0&&is_riob18)
+	if (is_riob18)
 	    inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
 	else
 	    inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
