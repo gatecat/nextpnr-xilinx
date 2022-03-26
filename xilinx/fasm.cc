@@ -690,7 +690,7 @@ struct FasmBackend
         std::string tile = get_tile_name(pad->bel.tile);
         push(tile);
 
-        bool is_riob18 = tile.find("RIOB18_") != std::string::npos;
+	bool is_riob18 = boost::starts_with(tile, "RIOB18_");
         bool is_sing = tile.find("_SING_") != std::string::npos;
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
