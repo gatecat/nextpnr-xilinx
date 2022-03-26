@@ -589,7 +589,8 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
-            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
+            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos
+		|| drv->type.str(ctx).find("INBUF_DCIEN") != std::string::npos)
                 io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has IDATAIN input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -673,7 +674,8 @@ void XC7Packer::pack_iologic()
                 if (d == nullptr || d->driver.cell == nullptr)
                     log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
                 CellInfo *drv = d->driver.cell;
-                if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos)
+                if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos
+		    || drv->type.str(ctx).find("INBUF_DCIEN") != std::string::npos)
                     io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
                 else
                     log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
