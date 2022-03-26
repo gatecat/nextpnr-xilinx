@@ -75,17 +75,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
     auto pad_site = [&](NetInfo *n) {
         for (auto user : n->users)
             if (user.cell->type == ctx->id("PAD"))
-#if 0
-	      {
-		auto belname = user.cell->attrs[ctx->id("BEL")].as_string();
-		auto bel = ctx->getBelByName(ctx->id(belname));
-		int s = ctx->locInfo(bel).bel_data[bel.index].site;
-		log_info("PAD bel %s has site %d (idx %d)\n", belname.c_str(), s, bel.index);
                 return ctx->getBelSite(ctx->getBelByName(ctx->id(user.cell->attrs[ctx->id("BEL")].as_string())));
-	      }
-#else
-                return ctx->getBelSite(ctx->getBelByName(ctx->id(user.cell->attrs[ctx->id("BEL")].as_string())));
-#endif
         NPNR_ASSERT_FALSE(("can't find PAD for net " + n->name.str(ctx)).c_str());
     };
 
@@ -209,7 +199,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
 	std::string tile_p = get_tilename_by_sitename(ctx, site_p);
-        log_info("decompose_io: Tile '%s'\n", tile_p.c_str());
+        //log_info("decompose_io: Tile '%s'\n", tile_p.c_str());
 	bool is_riob18 = boost::starts_with(tile_p, "RIOB18_");
 
         disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
@@ -602,41 +592,6 @@ void XC7Packer::pack_iologic()
         }
         // FIXME: ODELAY
     }
-
-#if 0
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->type == ctx->id("ODDR")) {
-            NetInfo *q = get_net_or_empty(ci, ctx->id("Q"));
-            if (q == nullptr || q->users.empty())
-                log_error("%s '%s' has disconnected Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
-            BelId io_bel;
-            CellInfo *ob = find_p_outbuf(q);
-            if (ob != nullptr)
-                io_bel = ctx->getBelByName(ctx->id(ob->attrs.at(ctx->id("BEL")).as_string()));
-            else
-                log_error("%s '%s' has illegal fanout on Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
-            std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
-	    log_info("find ODDR at site %s\n", ol_site.c_str());
-            ci->attrs[ctx->id("BEL")] = ol_site + "/OUTFF";
-	    ci->type = ctx->id("OLOGICE3_OUTFF");
-	    rename_port(ctx, ci, ctx->id("C"), ctx->id("CK"));
-            rename_port(ctx, ci, ctx->id("R"), ctx->id("SR"));
-	    disconnect_port(ctx, ci, ctx->id("S"));
-	    disconnect_port(ctx, ci, ctx->id("Q"));
-	    //disconnect_port(ctx, ob, ctx->id("IN"));
-	    //auto omux = create_cell(ctx, ctx->id("OMUX"), ctx->id(ci->name.str(ctx) + "$omux$"));
-	    //omux->attrs[ctx->id("BEL")] = ol_site + "/OMUX";
-	    //omux->type = ctx->id("OLOGICE3_OMUX");
-            //NetInfo *muxout = get_net_or_empty(omux.get(), ctx->id("OMUX_OUT"));
-	    //connect_port(ctx, muxout, ob, ctx->id("IN"));
-            //NetInfo *outff_q = get_net_or_empty(ci, ctx->id("OUTFF_Q"));
-	    //connect_port(ctx, outff_q, omux.get(), ctx->id("OUTFF_Q"));
-	    //replace_port(ci, ctx->id("Q"), omux.get(), ctx->id("OUT"));
-	    //new_cells.push_back(std::move(omux));
-	}
-    }
-#endif
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
