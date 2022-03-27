@@ -718,14 +718,19 @@ struct FasmBackend
                 write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
             if (iostandard == "SSTL135")
                 write_bit("SSTL135.DRIVE.I_FIXED");
-            if (slew == "SLOW" && is_riob18)
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
-	    else if (slew == "SLOW")
+            if (is_riob18 && slew == "SLOW") {
+	        if (iostandard == "SSTL135")
+                    write_bit("SSTL135.SLEW.SLOW");
+	        else if (iostandard == "SSTL15")
+                    write_bit("SSTL15.SLEW.SLOW");
+		else
+                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
+	    } else if (slew == "SLOW")
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW");
+            else if (is_riob18)
+                write_bit(iostandard + ".SLEW.FAST");
             else if (iostandard == "SSTL135" || iostandard == "SSTL15")
                 write_bit("SSTL135_SSTL15.SLEW.FAST");
-            else if (is_riob18)
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.FAST");
 	    else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
         }
@@ -749,7 +754,10 @@ struct FasmBackend
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
         }
         if (is_input && diff) {
-            write_bit("SSTL135_SSTL15.IN_DIFF");
+	    if (is_riob18)
+                write_bit("LVDS_SSTL135_SSTL15.IN_DIFF");
+	    else
+                write_bit("SSTL135_SSTL15.IN_DIFF");
             if (pad->attrs.count(ctx->id("IN_TERM")))
                 write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
         }
