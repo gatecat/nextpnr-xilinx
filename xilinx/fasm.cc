@@ -690,10 +690,11 @@ struct FasmBackend
         std::string tile = get_tile_name(pad->bel.tile);
         push(tile);
 
-	bool is_riob18 = boost::starts_with(tile, "RIOB18_");
+        bool is_riob18 = boost::starts_with(tile, "RIOB18_");
         bool is_sing = tile.find("_SING_") != std::string::npos;
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
+
         push("IOB_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y)));
         bool diff = false;
         if (boost::starts_with(iostandard, "DIFF_")) {
@@ -737,6 +738,7 @@ struct FasmBackend
         if (is_input && !diff) {
             if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
                 write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+
 	    if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15" || iostandard == "LVCMOS12"))
 	        write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
             if (iostandard == "SSTL135" || iostandard == "SSTL15") {
@@ -751,40 +753,44 @@ struct FasmBackend
             if (!is_output && is_riob18)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVDS_SSTL135_SSTL15.IN_ONLY");
 	    else if (!is_output)
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
+            write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
         }
+
         if (is_input && diff) {
-	    if (is_riob18)
+            if (is_riob18)
                 write_bit("LVDS_SSTL135_SSTL15.IN_DIFF");
-	    else
-                write_bit("SSTL135_SSTL15.IN_DIFF");
+            else
+                write_bit("LVDS_25_SSTL135_SSTL15.IN_DIFF");
+
             if (pad->attrs.count(ctx->id("IN_TERM")))
                 write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
         }
-        if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" ||
-	    (!is_riob18 && iostandard == "LVCMOS18") ||
-            iostandard == "SSTL135") {
-	    if (is_riob18)
-	        write_bit("LVCMOS12_LVCMOS15_SSTL135_SSTL15.STEPDOWN");
-	    else
-	        write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
+
+        if (!is_riob18 && (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" ||
+	                       iostandard == "LVCMOS18" || iostandard == "SSTL135")) {
+            write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
             ioconfig_by_hclk[hclk].stepdown = true;
             is_stepdown = true;
         }
 
         write_bit("PULLTYPE." + pulltype);
         pop();
+
         std::string site = ctx->getBelSite(pad->bel);
         std::string belname;
         BelId inv;
-	if (is_riob18)
-	    inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
-	else
-	    inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
+
+	    if (is_riob18)
+	        inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
+	    else
+	        inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
+
         if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr)
             write_bit("OUT_DIFF");
+
         if (is_stepdown && !is_sing)
             write_bit("IOB_Y" + std::to_string(ioLoc.y) + ".LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
+
         pop();
     }
 
