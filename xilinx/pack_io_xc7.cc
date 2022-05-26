@@ -106,7 +106,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
         CellInfo *inbuf = insert_ibuf(int_name(xil_iob->name, "IBUF", is_se_iobuf), ibuf_type, pad_net, top_out);
 	std::string tile = get_tilename_by_sitename(ctx, site);
-	//log_info("decompose_io: Tile '%s'\n", tile.c_str());
+	log_info("decompose_io: Tile '%s'\n", tile.c_str());
 	if (boost::starts_with(tile, "RIOB18_"))
 	    inbuf->attrs[ctx->id("BEL")] = site + "/IOB18/INBUF_DCIEN";
 	else
@@ -119,7 +119,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
     }
 
     if (is_se_obuf || is_se_iobuf) {
-        log_info("Generating output buffer for '%s'\n", xil_iob->name.c_str(ctx));
+        log_info("Generating output buffer for ===> '%s'\n", xil_iob->name.c_str(ctx));
         NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
@@ -131,7 +131,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
                 is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
                 get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
 	std::string tile = get_tilename_by_sitename(ctx, site);
-	//log_info("decompose_io: Tile '%s'\n", tile.c_str());
+	log_info("decompose_io: Tile '%s'\n", tile.c_str());
 	if (boost::starts_with(tile, "RIOB18_"))
 	    obuf->attrs[ctx->id("BEL")] = site + "/IOB18/OUTBUF_DCIEN";
 	else
@@ -312,11 +312,11 @@ void XC7Packer::pack_io()
                           loc.c_str());
             log_info("    Constraining '%s' to site '%s'\n", pad->name.c_str(ctx), site.c_str());
 	    std::string tile = get_tilename_by_sitename(ctx, site);
-	    //log_info("    Tile '%s'\n", tile.c_str());
+	    log_info("    Tile '%s'\n", tile.c_str());
 	    if (boost::starts_with(tile, "RIOB18_"))
 	        pad->attrs[ctx->id("BEL")] = std::string(site + "/IOB18/PAD");
 	    else
-                pad->attrs[ctx->id("BEL")] = std::string(site + "/IOB33/PAD");
+            pad->attrs[ctx->id("BEL")] = std::string(site + "/IOB33/PAD");
         }
         if (pad->attrs.count(ctx->id("BEL"))) {
             used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")).as_string())));
