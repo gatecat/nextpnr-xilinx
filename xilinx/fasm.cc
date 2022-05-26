@@ -705,42 +705,47 @@ struct FasmBackend
         int hclk = ctx->getHclkForIob(pad->bel);
 
         if (is_output) {
-            if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
-                write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
-	    if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
-	        write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
-	    else if (is_riob18 && iostandard == "LVCMOS12")
-	        write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
-	    else if (is_riob18 && iostandard == "SSTL15")
+	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
+	            write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+
+	        if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
+	            write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
+	        else if (is_riob18 && iostandard == "LVCMOS12")
+	            write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
+	        else if (is_riob18 && iostandard == "SSTL15")
                 write_bit("SSTL15.DRIVE.I_FIXED");
-	    else if (is_riob18 && iostandard == "LVDS")
+	        else if (is_riob18 && iostandard == "LVDS")
                 write_bit("LVDS.DRIVE.I_FIXED");
             else if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
                 write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
+
             if (iostandard == "SSTL135")
                 write_bit("SSTL135.DRIVE.I_FIXED");
+
             if (is_riob18 && slew == "SLOW") {
-	        if (iostandard == "SSTL135")
+                if (iostandard == "SSTL135")
                     write_bit("SSTL135.SLEW.SLOW");
-	        else if (iostandard == "SSTL15")
+                else if (iostandard == "SSTL15")
                     write_bit("SSTL15.SLEW.SLOW");
-		else
+                else
                     write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
-	    } else if (slew == "SLOW")
+            } else if (slew == "SLOW")
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW");
             else if (is_riob18)
                 write_bit(iostandard + ".SLEW.FAST");
             else if (iostandard == "SSTL135" || iostandard == "SSTL15")
                 write_bit("SSTL135_SSTL15.SLEW.FAST");
-	    else
+	        else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
         }
-        if (is_input && !diff) {
-            if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
-                write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
 
-	    if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15" || iostandard == "LVCMOS12"))
-	        write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
+        if (is_input && !diff) {
+	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
+	            write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+
+	        if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15" || iostandard == "LVCMOS12"))
+	            write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
+
             if (iostandard == "SSTL135" || iostandard == "SSTL15") {
                 ioconfig_by_hclk[hclk].vref = true;
                 write_bit("SSTL135_SSTL15.IN");
@@ -756,7 +761,13 @@ struct FasmBackend
             write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
         }
 
-        if (is_input && diff) {
+            if (!is_output) {
+                if (is_riob18)
+                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVDS_SSTL135_SSTL15.IN_ONLY");
+                else
+                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
+            }
+        } else if (is_input && diff) {
             if (is_riob18)
                 write_bit("LVDS_SSTL135_SSTL15.IN_DIFF");
             else
