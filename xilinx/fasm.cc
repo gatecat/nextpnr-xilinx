@@ -777,8 +777,8 @@ struct FasmBackend
                 write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
         }
 
-        if (!is_riob18 && (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" ||
-	                       iostandard == "LVCMOS18" || iostandard == "SSTL135")) {
+        if (!is_riob18 && (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" ||
+                           iostandard == "SSTL135"  || iostandard == "SSTL15" )) {
             write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
             ioconfig_by_hclk[hclk].stepdown = true;
             is_stepdown = true;
