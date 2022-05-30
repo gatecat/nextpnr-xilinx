@@ -31,7 +31,7 @@ void Arch::parseXdc(std::istream &in)
     int lineno = 0;
 
     auto isempty = [](const std::string &str) {
-        return std::all_of(str.begin(), str.end(), [](char c) { return isblank(c) || c == '\r' || c == '\n'; });
+        return std::all_of(str.begin(), str.end(), [](char c) { return std::isspace(c); });
     };
     auto strip_quotes = [](const std::string &str) {
         if (str.at(0) == '"') {
@@ -64,7 +64,7 @@ void Arch::parseXdc(std::istream &in)
                     flush();
                 continue;
             }
-            if (std::isblank(c)) {
+            if (std::isspace(c)) {
                 if (brcount == 0) {
                     flush();
                     continue;
