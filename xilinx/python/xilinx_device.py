@@ -452,6 +452,10 @@ def import_device(name, prjxray_root, metadata_root):
 
 	d = Device(name)
 	fabricname = name.split('t')[0] + "t"
+	if fabricname == 'xc7a35t':
+		# https://github.com/gatecat/nextpnr-xilinx/issues/35
+		# https://github.com/f4pga/prjxray/pull/1889
+		fabricname = 'xc7a50t'
 	# Load intent JSON
 	with open(metadata_root + "/wire_intents.json", "r") as ijf:
 		ij = json.load(ijf)
