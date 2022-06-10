@@ -692,6 +692,9 @@ struct FasmBackend
                 if (pad->attrs.count(ctx->id("IN_TERM")))
                     write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
             }
+            if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18") {
+                write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
+            }
             if (!is_output)
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
         }
