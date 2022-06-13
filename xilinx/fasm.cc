@@ -150,8 +150,7 @@ struct FasmBackend
                                "OLOGIC_Y" + i + ".OMUX.D1", "OLOGIC_Y" + i + ".OQUSED", "OLOGIC_Y" + i + ".OQUSED",
                                "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"};
                 pp_config[{ctx->id("RIOI" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
-                           ctx->id("RIOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
-                                                                     "ILOGIC_Y" + i + ".ZINV_D"};
+                           ctx->id("RIOI_ILOGIC" + i + "_D")}] = {"ILOGIC_Y" + i + ".ZINV_D"};
                 pp_config[{ctx->id("RIOI" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
                            ctx->id("RIOI_ILOGIC" + i + "_DDLY")}] = {"ILOGIC_Y" + i + ".IDELMUXE3.P0",
                                                                         "ILOGIC_Y" + i + ".ZINV_D"};
@@ -705,23 +704,31 @@ struct FasmBackend
         int hclk = ctx->getHclkForIob(pad->bel);
 
         if (is_output) {
-	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL")
-	            write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+            // DRIVE
+	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL") {
+                if (!is_riob18)
+	                write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+                else
+                    log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
+            }
 
-	        if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
-	            write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
-	        else if (is_riob18 && iostandard == "LVCMOS12")
-	            write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
-	        else if (is_riob18 && iostandard == "SSTL15")
-                write_bit("SSTL15.DRIVE.I_FIXED");
-	        else if (is_riob18 && iostandard == "LVDS")
-                write_bit("LVDS.DRIVE.I_FIXED");
+            if (is_riob18) {
+                if ((iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
+                    write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
+                else if (iostandard == "LVCMOS12")
+                    write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
+                else if (iostandard == "SSTL15")
+                    write_bit("SSTL15.DRIVE.I_FIXED");
+                else if (iostandard == "LVDS")
+                    write_bit("LVDS.DRIVE.I_FIXED");
+            }
             else if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
                 write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
 
             if (iostandard == "SSTL135")
                 write_bit("SSTL135.DRIVE.I_FIXED");
 
+            // SLEW
             if (is_riob18 && slew == "SLOW") {
                 if (iostandard == "SSTL135")
                     write_bit("SSTL135.SLEW.SLOW");
@@ -737,16 +744,20 @@ struct FasmBackend
                 write_bit("SSTL135_SSTL15.SLEW.FAST");
 	        else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
+
+            if (!is_riob18 & diff)
+                write_bit("OUT_DIFF");
         }
 
         if (is_input && !diff) {
-	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25")
+	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25") {
+                if (!is_riob18)
 	            write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+                else
+                    log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
+            }
 
-	        if (is_riob18 && (iostandard == "LVCMOS18" || iostandard == "LVCMOS15" || iostandard == "LVCMOS12"))
-	            write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
-
-            if (iostandard == "SSTL135" || iostandard == "SSTL15") {
+            if (!is_riob18 && (iostandard == "SSTL135" || iostandard == "SSTL15")) {
                 ioconfig_by_hclk[hclk].vref = true;
                 write_bit("SSTL135_SSTL15.IN");
                 if (pad->attrs.count(ctx->id("IN_TERM")))
@@ -762,14 +773,17 @@ struct FasmBackend
         }
 
             if (!is_output) {
-                if (is_riob18)
-                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVDS_SSTL135_SSTL15.IN_ONLY");
-                else
+                if (is_riob18) {
+                    if (iostandard == "LVDS")
+                        write_bit("LVDS.IN_ONLY");
+                    else
+                        write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL12_SSTL135_SSTL15.IN_ONLY");
+                } else
                     write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
             }
         } else if (is_input && diff) {
             if (is_riob18)
-                write_bit("LVDS_SSTL135_SSTL15.IN_DIFF");
+                write_bit("LVDS_SSTL12_SSTL135_SSTL15.IN_DIFF");
             else
                 write_bit("LVDS_25_SSTL135_SSTL15.IN_DIFF");
 
@@ -784,8 +798,14 @@ struct FasmBackend
             is_stepdown = true;
         }
 
+        if (is_input && is_output && ioLoc.y == 0)
+            write_bit("INOUT");
+
+        if (is_riob18 && (is_input || is_output) && (boost::starts_with(iostandard, "SSTL") || iostandard == "LVDS"))
+            write_bit(iostandard + ".IN_USE");
+
         write_bit("PULLTYPE." + pulltype);
-        pop();
+        pop(); // IOB_YN
 
         std::string site = ctx->getBelSite(pad->bel);
         std::string belname;
@@ -802,7 +822,7 @@ struct FasmBackend
         if (is_stepdown && !is_sing)
             write_bit("IOB_Y" + std::to_string(ioLoc.y) + ".LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
 
-        pop();
+        pop(); // tile
     }
 
     void write_iol_config(CellInfo *ci)
