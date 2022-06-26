@@ -163,7 +163,7 @@ struct FasmBackend
                     pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_T_OUT0"), ctx->id("IOB_T0")}] = {};
                     pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_DIFFI_IN0"), ctx->id("IOB_PADOUT1")}] = {};
                 }
-	    }
+        }
 
         for (std::string s1 : {"TOP", "BOT"}) {
             for (std::string s2 : {"L", "R"}) {
@@ -234,8 +234,8 @@ struct FasmBackend
             std::string tile_name = get_tile_name(pip.tile);
             for (auto c : pp) {
                 if (boost::starts_with(tile_name, "RIOI3_SING")
-		    || boost::starts_with(tile_name, "LIOI3_SING")
-		    || boost::starts_with(tile_name, "RIOI_SING")) {
+                    || boost::starts_with(tile_name, "LIOI3_SING")
+                    || boost::starts_with(tile_name, "RIOI_SING")) {
                     // Need to flip for top HCLK
                     bool is_top_sing = pip.tile < ctx->getHclkForIoi(pip.tile);
                     if (is_top_sing) {
@@ -265,8 +265,8 @@ struct FasmBackend
             }
             std::string orig_dst_name = dst_name;
             if (boost::starts_with(tile_name, "RIOI3_SING")
-		|| boost::starts_with(tile_name, "LIOI3_SING")
-		|| boost::starts_with(tile_name, "RIOI_SING")) {
+                || boost::starts_with(tile_name, "LIOI3_SING")
+                || boost::starts_with(tile_name, "RIOI_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
                 if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
                     (dst_name.find("CLK") == std::string::npos))
@@ -705,9 +705,9 @@ struct FasmBackend
 
         if (is_output) {
             // DRIVE
-	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL") {
+            if (iostandard == "LVCMOS33" || iostandard == "LVTTL") {
                 if (!is_riob18)
-	                write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
                 else
                     log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
             }
@@ -742,7 +742,7 @@ struct FasmBackend
                 write_bit(iostandard + ".SLEW.FAST");
             else if (iostandard == "SSTL135" || iostandard == "SSTL15")
                 write_bit("SSTL135_SSTL15.SLEW.FAST");
-	        else
+            else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
 
             if (!is_riob18 & diff)
@@ -750,9 +750,9 @@ struct FasmBackend
         }
 
         if (is_input && !diff) {
-	        if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25") {
+            if (iostandard == "LVCMOS33" || iostandard == "LVTTL" || iostandard == "LVCMOS25") {
                 if (!is_riob18)
-	            write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
+                    write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
                 else
                     log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
             }
@@ -766,11 +766,6 @@ struct FasmBackend
             if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18") {
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
             }
-            if (!is_output && is_riob18)
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVDS_SSTL135_SSTL15.IN_ONLY");
-	    else if (!is_output)
-            write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
-        }
 
             if (!is_output) {
                 if (is_riob18) {
@@ -811,10 +806,10 @@ struct FasmBackend
         std::string belname;
         BelId inv;
 
-	    if (is_riob18)
-	        inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
-	    else
-	        inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
+        if (is_riob18)
+            inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
+        else
+            inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
 
         if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr)
             write_bit("OUT_DIFF");
@@ -870,11 +865,11 @@ struct FasmBackend
             }
 #else
             if (type == "DDR")
-	        write_bit("DATA_WIDTH.DDR.W" + std::to_string(width));
-	    else if (type == "SDR")
-	        write_bit("DATA_WIDTH.SDR.W" + std::to_string(width));
-	    else
-	        write_bit("DATA_WIDTH.W" + std::to_string(width));
+            write_bit("DATA_WIDTH.DDR.W" + std::to_string(width));
+        else if (type == "SDR")
+            write_bit("DATA_WIDTH.SDR.W" + std::to_string(width));
+        else
+            write_bit("DATA_WIDTH.W" + std::to_string(width));
 #endif
             write_bit("SRTYPE.SYNC");
             write_bit("TSRTYPE.SYNC");
