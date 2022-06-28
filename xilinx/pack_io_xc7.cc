@@ -237,6 +237,10 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
 void XC7Packer::pack_io()
 {
+    // make sure the supporting data structure of
+    // get_tilename_by_sitename()
+    // is initialized before we use it below
+    ctx->setup_byname();
 
     log_info("Inserting IO buffers..\n");
 

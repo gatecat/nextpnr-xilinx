@@ -118,8 +118,10 @@ void Arch::setup_byname() const
     if (site_by_name.empty()) {
         for (int i = 0; i < chip_info->num_tiles; i++) {
             auto &tile = chip_info->tile_insts[i];
-            for (int j = 0; j < tile.num_sites; j++)
-                site_by_name[tile.site_insts[j].name.get()] = std::make_pair(i, j);
+            for (int j = 0; j < tile.num_sites; j++) {
+                auto name = tile.site_insts[j].name.get();
+                site_by_name[name] = std::make_pair(i, j);
+            }
         }
     }
 }
