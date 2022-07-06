@@ -514,7 +514,16 @@ std::string XC7Packer::get_idelay_site(const std::string &io_bel)
 
 std::string XC7Packer::get_ioctrl_site(const std::string &io_bel)
 {
-    BelId pad_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/PAD"));
+    std::vector<std::string> parts;
+    boost::split(parts, io_bel, boost::is_any_of("/"));
+    auto loc         = parts[0];
+    auto iobank      = parts[1];
+    auto pad_bel_str = loc + "/" + iobank + "/PAD";
+    auto msg         = "could not get bel for: '" + pad_bel_str + "'";
+
+    BelId pad_bel = ctx->getBelByName(ctx->id(pad_bel_str));
+    NPNR_ASSERT_MSG(0 <= pad_bel.tile && 0 <= pad_bel.index, msg.c_str());
+
     int hclk_tile = ctx->getHclkForIob(pad_bel);
     auto &td = ctx->chip_info->tile_insts[hclk_tile];
     for (int i = 0; i < td.num_sites; i++) {
