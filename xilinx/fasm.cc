@@ -719,8 +719,8 @@ struct FasmBackend
                     write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
                 else if (iostandard == "LVCMOS12")
                     write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
-                else if (iostandard == "SSTL15")
-                    write_bit("SSTL15.DRIVE.I_FIXED");
+                //else if (iostandard == "SSTL15")
+                    //write_bit("SSTL15.DRIVE.I_FIXED");
                 else if (iostandard == "LVDS")
                     write_bit("LVDS.DRIVE.I_FIXED");
             }
@@ -775,8 +775,8 @@ struct FasmBackend
                     // vivado generates these bits only for Y0 of a diff pair
                     if (yLoc == 0) {
                         write_bit("LVDS_SSTL12_SSTL135_SSTL15.IN_DIFF");
-                        // vivado sets this also for DIFF_SSTL
-                        write_bit("LVDS.IN_USE");
+                        if (iostandard == "LVDS" || boost::contains(iostandard, "SSTL"))
+                            write_bit("LVDS.IN_USE");
                     }
                 } else {
                     write_bit("LVDS_25_SSTL135_SSTL15.IN_DIFF");
@@ -806,14 +806,18 @@ struct FasmBackend
             is_stepdown = true;
         }
 
-        if (is_input && is_output && yLoc == 1)
-            write_bit("INOUT");
 
-        if (is_riob18 && (is_input || is_output) && !diff && (boost::contains(iostandard, "SSTL") || iostandard == "LVDS")) {
+        if (is_riob18 && (is_input || is_output) && (boost::contains(iostandard, "SSTL") || iostandard == "LVDS")) {
             if (((yLoc == 0) && (iostandard == "LVDS")) ||
                 boost::contains(iostandard, "SSTL")) {
-                write_bit(iostandard + ".IN_USE");
+                // TODO: I get bit conflicts with this, it seems to work anyway. Test more.
+                //write_bit("LVDS.IN_USE");
             }
+        }
+
+        if (is_input && is_output && !diff && yLoc == 1) {
+            if (is_riob18 && boost::starts_with(iostandard, "SSTL"))
+                write_bit("SSTL12_SSTL135_SSTL15.IN");
         }
 
         write_bit("PULLTYPE." + pulltype);
@@ -850,6 +854,8 @@ struct FasmBackend
         push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
         if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
+            write_bit("ODDR.SRUSED");
+            write_bit("ODDR_TDDR.IN_USE");
             write_bit("OQUSED", get_net_or_empty(ci, ctx->id("OQ")) != nullptr);
             write_bit("ZINV_CLK", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
             for (std::string t : {"T1", "T2", "T3", "T4"})
@@ -892,7 +898,9 @@ struct FasmBackend
             write_bit("TSRTYPE.SYNC");
             pop();
         } else if (ci->type == ctx->id("ISERDESE2_ISERDESE2")) {
+            std::string data_rate = str_or_default(ci->params, ctx->id("DATA_RATE"));
             write_bit("IDDR_OR_ISERDES.IN_USE");
+            if (data_rate == "DDR") write_bit("IDDR.IN_USE");
             write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
             write_bit("IFF.SRTYPE.SYNC");
             for (int i = 1; i <= 4; i++) {
