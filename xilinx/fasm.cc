@@ -719,6 +719,7 @@ struct FasmBackend
                     write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
                 else if (iostandard == "LVCMOS12")
                     write_bit("LVCMOS12.DRIVE.I2_I4_I6_I8");
+                // TODO: turned this off to make output more like vivado. Test more....
                 //else if (iostandard == "SSTL15")
                     //write_bit("SSTL15.DRIVE.I_FIXED");
                 else if (iostandard == "LVDS")
