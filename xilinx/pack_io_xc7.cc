@@ -557,6 +557,27 @@ void XC7Packer::fold_inverter(CellInfo *cell, std::string port)
     }
 }
 
+void XC7Packer::prepare_iologic()
+{
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        // ODDR must be transformed to an OSERDESE2
+        if (ci->type == ctx->id("ODDR")) {
+            ci->type = ctx->id("OSERDESE2");
+            ci->params[ctx->id("DATA_RATE_OQ")] = std::string("DDR");
+            rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
+            rename_port(ctx, ci, ctx->id("R"), ctx->id("RST"));
+            rename_port(ctx, ci, ctx->id("Q"), ctx->id("OQ"));
+            rename_port(ctx, ci, ctx->id("CE"), ctx->id("OCE"));
+            tie_port(ci, "TCE", true);
+
+            // TODO: implement set port functionality
+            disconnect_port(ctx, ci, ctx->id("S"));
+            ci->ports.erase(ctx->id("S"));
+        }
+    }
+}
+
 void XC7Packer::pack_iologic()
 {
     std::unordered_map<IdString, BelId> iodelay_to_io;
