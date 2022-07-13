@@ -119,7 +119,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
     }
 
     if (is_se_obuf || is_se_iobuf) {
-        log_info("Generating output buffer for ===> '%s'\n", xil_iob->name.c_str(ctx));
+        log_info("Generating output buffer for '%s'\n", xil_iob->name.c_str(ctx));
         NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
