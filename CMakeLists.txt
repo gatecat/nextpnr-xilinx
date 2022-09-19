@@ -1,6 +1,5 @@
-# TODO: sensible minimum CMake version
-cmake_minimum_required(VERSION 3.3)
-project(nextpnr)
+cmake_minimum_required(VERSION 3.5)
+project(nextpnr CXX C)
 
 option(BUILD_GUI "Build GUI" ON)
 option(BUILD_PYTHON "Build Python Integration" ON)
@@ -18,11 +17,13 @@ set(link_param "")
 if (STATIC_BUILD)
     set(Boost_USE_STATIC_LIBS   ON)
     if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows" AND MSVC)
-        set(CMAKE_CXX_FLAGS_RELEASE "/MT")
-        set(CMAKE_CXX_FLAGS_DEBUG "/MTd")
-        if (BUILD_PYTHON)
-            add_definitions(-DBOOST_PYTHON_STATIC_LIB)
+    elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+        if (MSVC)
+            set(CMAKE_CXX_FLAGS_RELEASE "/MT")
+            set(CMAKE_CXX_FLAGS_DEBUG "/MTd")
+            if (BUILD_PYTHON)
+                add_definitions(-DBOOST_PYTHON_STATIC_LIB)
+            endif()
         endif()
     else()
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
@@ -36,12 +37,13 @@ if (STATIC_BUILD)
 endif()
 
 if (EXTERNAL_CHIPDB)
-    if (NOT DEFINED EXTERNAL_CHIPDB_ROOT)
-        message(STATUS "EXTERNAL_CHIPDB_ROOT not defined using -DEXTERNAL_CHIPDB_ROOT=/path/to/nextpnr. Default to /usr/share/nextpnr")
-        set(EXTERNAL_CHIPDB_ROOT "/usr/share/nextpnr")
-    endif()
+    set(EXTERNAL_CHIPDB_ROOT "${CMAKE_INSTALL_PREFIX}/share/nextpnr" CACHE STRING
+        "External chipdb path")
+    message(STATUS "Using external chipdb path: ${EXTERNAL_CHIPDB_ROOT}")
     add_definitions("-DEXTERNAL_CHIPDB_ROOT=\"${EXTERNAL_CHIPDB_ROOT}\"")
 endif()
+
+set(PROGRAM_PREFIX "" CACHE STRING "Name prefix for executables")
 
 # List of families to build
 set(FAMILIES generic ice40 ecp5 xilinx)
@@ -103,10 +105,14 @@ if (BUILD_GUI AND NOT BUILD_PYTHON)
     message(FATAL_ERROR "GUI requires Python to build")
 endif()
 
-find_package(PythonInterp 3.5 REQUIRED)
+if (BUILD_GUI)
+    # For higher quality backtraces
+    set(CMAKE_ENABLE_EXPORTS ON)
+endif()
+
+find_package(Python3 3.5 REQUIRED COMPONENTS Interpreter)
 if (BUILD_PYTHON)
-    # TODO: sensible minimum Python version
-    find_package(PythonLibs 3.5 REQUIRED)
+    find_package(Python3 3.5 REQUIRED COMPONENTS Development)
 else()
     add_definitions("-DNO_PYTHON")
 endif()
@@ -151,7 +157,7 @@ if (BUILD_PYTHON)
     # Some distributions (Arch) call it libboost_python3, others such as Ubuntu
     # call it libboost_python35. In the latter case we must consider all minor versions
     # Original source: https://github.com/BVLC/caffe/blob/master/cmake/Dependencies.cmake#L148
-    set(version ${PYTHONLIBS_VERSION_STRING})
+    set(version ${Python3_VERSION})
 
     STRING(REGEX REPLACE "[^0-9]" "" boost_py_version "${version}")
     find_package(Boost QUIET COMPONENTS "python-py${boost_py_version}" ${boost_libs})
@@ -171,7 +177,7 @@ if (BUILD_PYTHON)
     endwhile ()
 
     if (NOT Boost_PYTHON_FOUND)
-        foreach (PyVer 3 36 37 38 39)
+        foreach (PyVer 3 36 37 38 39 310)
             find_package(Boost QUIET COMPONENTS python${PyVer} ${boost_libs})
             if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
                 set(Boost_PYTHON_FOUND TRUE)
@@ -193,7 +199,7 @@ if (BUILD_PYTHON)
     endif ()
 endif()
 
-include_directories(common/ json/ frontend/ 3rdparty/json11/ ${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+include_directories(common/ json/ frontend/ 3rdparty/json11/ ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
 
 if(BUILD_HEAP)
     find_package (Eigen3 REQUIRED NO_MODULE)
@@ -208,7 +214,9 @@ aux_source_directory(3rdparty/json11 EXT_JSON11_FILES)
 aux_source_directory(frontend/ FRONTEND_FILES)
 
 set(COMMON_FILES ${COMMON_SRC_FILES} ${EXT_JSON11_FILES} ${JSON_PARSER_FILES} ${FRONTEND_FILES})
-set(CMAKE_BUILD_TYPE Release)
+if( NOT CMAKE_BUILD_TYPE )
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 if(MINGW)
     add_definitions("-Wa,-mbig-obj")
@@ -217,7 +225,7 @@ endif(MINGW)
 include(bba/bba.cmake)
 
 foreach (family ${ARCH})
-    message(STATUS "Configuring architecture : ${family}")
+    message(STATUS "Configuring architecture: ${family}")
     string(TOUPPER ${family} ufamily)
     aux_source_directory(${family}/ ${ufamily}_FILES)
 
@@ -226,9 +234,13 @@ foreach (family ${ARCH})
     endif()
 
     # Add the CLI binary target
-    add_executable(nextpnr-${family} ${COMMON_FILES} ${${ufamily}_FILES})
-    install(TARGETS nextpnr-${family} RUNTIME DESTINATION bin)
-    target_compile_definitions(nextpnr-${family} PRIVATE MAIN_EXECUTABLE)
+    add_executable(${PROGRAM_PREFIX}nextpnr-${family} ${COMMON_FILES} ${${ufamily}_FILES})
+    if (WASI)
+        # set(CMAKE_EXECUTABLE_SUFFIX) breaks CMake tests for some reason
+        set_property(TARGET ${PROGRAM_PREFIX}nextpnr-${family} PROPERTY SUFFIX ".wasm")
+    endif()
+    install(TARGETS ${PROGRAM_PREFIX}nextpnr-${family} RUNTIME DESTINATION bin)
+    target_compile_definitions(${PROGRAM_PREFIX}nextpnr-${family} PRIVATE MAIN_EXECUTABLE)
 
     # Add any new per-architecture targets here
     if (BUILD_TESTS)
@@ -237,8 +249,8 @@ foreach (family ${ARCH})
             set(COVERAGE_LCOV_EXCLUDES '/usr/include/*' '3rdparty/*' 'generated/*' 'bba/*' 'tests/*')
             SETUP_TARGET_FOR_COVERAGE_LCOV(
                 NAME ${family}-coverage
-                EXECUTABLE nextpnr-${family}-test
-                DEPENDENCIES nextpnr-${family}-test
+                EXECUTABLE ${PROGRAM_PREFIX}nextpnr-${family}-test
+                DEPENDENCIES ${PROGRAM_PREFIX}nextpnr-${family}-test
             )
         endif()
 
@@ -247,24 +259,28 @@ foreach (family ${ARCH})
             aux_source_directory(tests/gui/ GUI_TEST_FILES)
         endif()
 
-        add_executable(nextpnr-${family}-test ${${ufamily}_TEST_FILES}
+        add_executable(${PROGRAM_PREFIX}nextpnr-${family}-test ${${ufamily}_TEST_FILES}
                 ${COMMON_FILES} ${${ufamily}_FILES} ${GUI_TEST_FILES})
-        target_link_libraries(nextpnr-${family}-test PRIVATE gtest_main)
-        add_sanitizers(nextpnr-${family}-test)
+        target_link_libraries(${PROGRAM_PREFIX}nextpnr-${family}-test PRIVATE gtest_main)
+        add_sanitizers(${PROGRAM_PREFIX}nextpnr-${family}-test)
 
         add_test(${family}-test ${CMAKE_CURRENT_BINARY_DIR}/nextpnr-${family}-test)
     endif()
 
     # Set ${family_targets} to the list of targets being build for this family
-    set(family_targets nextpnr-${family})
+    set(family_targets ${PROGRAM_PREFIX}nextpnr-${family})
 
     if (BUILD_TESTS)
-        set(family_targets ${family_targets} nextpnr-${family}-test)
+        set(family_targets ${family_targets} ${PROGRAM_PREFIX}nextpnr-${family}-test)
     endif()
 
     # Include the family-specific CMakeFile
     include(${family}/family.cmake)
     foreach (target ${family_targets})
+        foreach(lib_dep ${EXTRA_LIB_DEPS})
+            target_link_libraries(${target} PRIVATE ${lib_dep})
+        endforeach()
+
         # Include family-specific source files to all family targets and set defines appropriately
         target_include_directories(${target} PRIVATE ${family}/ ${CMAKE_CURRENT_BINARY_DIR}/generated/)
         target_compile_definitions(${target} PRIVATE NEXTPNR_NAMESPACE=nextpnr_${family} ARCH_${ufamily} ARCHNAME=${family})
@@ -279,7 +295,7 @@ foreach (family ${ARCH})
             target_link_libraries(${target} LINK_PUBLIC gui_${family} ${GUI_LIBRARY_FILES_${ufamily}})
         endif()
         if (BUILD_PYTHON)
-            target_link_libraries(${target} LINK_PUBLIC ${PYTHON_LIBRARIES})
+            target_link_libraries(${target} LINK_PUBLIC ${Python3_LIBRARIES})
             if (STATIC_BUILD)
                 target_link_libraries(${target} LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${ZLIB_LIBRARIES} ${EXPAT_LIBRARIES})
                 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
