@@ -352,8 +352,7 @@ void Arch::setup_pip_blacklist()
                     src_name.find("CK_BUFG_CASCIN") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
             }
-        // } else if (boost::starts_with(type, "HCLK_IOI")) {
-	} else if (boost::starts_with(type, "HCLK_IOI")) {
+        } else if (boost::starts_with(type, "HCLK_IOI")) {
             for (int j = 0; j < td.num_pips; j++) {
                 auto &pd = td.pip_data[j];
                 std::string dest_name = IdString(td.wire_data[pd.dst_index].name).str(this);
@@ -363,7 +362,6 @@ void Arch::setup_pip_blacklist()
                     src_name.find("IMUX") != std::string::npos)
                     blacklist_pips[td.type].insert(j);
             }
-	// } else if (type.find("IOI3") != std::string::npos) {
         } else if (type.find("IOI") != std::string::npos) {
             for (int j = 0; j < td.num_pips; j++) {
                 auto &pd = td.pip_data[j];
