@@ -106,7 +106,6 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
         CellInfo *inbuf = insert_ibuf(int_name(xil_iob->name, "IBUF", is_se_iobuf), ibuf_type, pad_net, top_out);
         std::string tile = get_tilename_by_sitename(ctx, site);
-        log_info("decompose_io: Tile '%s'\n", tile.c_str());
         if (boost::starts_with(tile, "RIOB18_"))
             inbuf->attrs[ctx->id("BEL")] = site + "/IOB18/INBUF_DCIEN";
         else
@@ -131,7 +130,6 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
                 is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
                 get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
         std::string tile = get_tilename_by_sitename(ctx, site);
-        log_info("decompose_io: Tile '%s'\n", tile.c_str());
         if (boost::starts_with(tile, "RIOB18_"))
             obuf->attrs[ctx->id("BEL")] = site + "/IOB18/OUTBUF_DCIEN";
         else
@@ -162,7 +160,6 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
         std::string tile_p = get_tilename_by_sitename(ctx, site_p);
-        //log_info("decompose_io: Tile '%s'\n", tile_p.c_str());
         bool is_riob18 = boost::starts_with(tile_p, "RIOB18_");
 
         if (!is_diff_iobuf && !is_diff_out_iobuf) {
@@ -199,7 +196,6 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
         std::string tile_p = get_tilename_by_sitename(ctx, site_p);
-        //log_info("decompose_io: Tile '%s'\n", tile_p.c_str());
         bool is_riob18 = boost::starts_with(tile_p, "RIOB18_");
 
         disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
