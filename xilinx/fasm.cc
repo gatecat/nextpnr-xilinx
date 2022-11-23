@@ -289,7 +289,6 @@ struct FasmBackend
                     }
                 }
             }
-            //if (tile_name.find("IOI3") != std::string::npos) {
             if (tile_name.find("IOI") != std::string::npos) {
                 if (dst_name.find("OCLKB") != std::string::npos && src_name.find("IOI_OCLKM_") != std::string::npos)
                     return; // missing, not sure if really a ppip?
@@ -299,7 +298,6 @@ struct FasmBackend
             out << dst_name << ".";
             out << src_name << std::endl;
 
-            //if (tile_name.find("IOI3") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
             if (tile_name.find("IOI") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
                 dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
                 orig_dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');

@@ -240,7 +240,7 @@ void XC7Packer::pack_carries()
                 c4->constr_parent = root;
                 root->constr_children.push_back(c4);
                 c4->constr_x = 0;
-		// Looks no CARRY4 on the tile of which grid_y is a multiple of 26. Skip them
+                // Looks no CARRY4 on the tile of which grid_y is a multiple of 26. Skip them
                 c4->constr_y = -(i / 4 + i / (4*25));
                 c4->constr_abs_z = true;
                 c4->constr_z = BEL_CARRY4;
