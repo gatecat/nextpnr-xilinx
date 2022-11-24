@@ -240,7 +240,8 @@ void XC7Packer::pack_carries()
                 c4->constr_parent = root;
                 root->constr_children.push_back(c4);
                 c4->constr_x = 0;
-                c4->constr_y = -i / 4;
+                // Looks no CARRY4 on the tile of which grid_y is a multiple of 26. Skip them
+                c4->constr_y = -(i / 4 + i / (4*25));
                 c4->constr_abs_z = true;
                 c4->constr_z = BEL_CARRY4;
             }
@@ -345,7 +346,7 @@ void XC7Packer::pack_carries()
                 root->constr_children.push_back(s_lut);
                 s_lut->constr_parent = root;
                 s_lut->constr_x = 0;
-                s_lut->constr_y = -i / 4;
+                s_lut->constr_y = -(i / 4 + i / (4*25));
                 s_lut->constr_abs_z = true;
                 s_lut->constr_z = (z << 4 | BEL_6LUT);
             }
@@ -353,7 +354,7 @@ void XC7Packer::pack_carries()
                 root->constr_children.push_back(di_lut);
                 di_lut->constr_parent = root;
                 di_lut->constr_x = 0;
-                di_lut->constr_y = -i / 4;
+                di_lut->constr_y = -(i / 4 + i / (4*25));
                 di_lut->constr_abs_z = true;
                 di_lut->constr_z = (z << 4 | BEL_5LUT);
             }

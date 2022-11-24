@@ -356,7 +356,7 @@ class NextpnrTileType:
 		name = bel.name()
 		bt = bel.bel_type()
 		prim_st = site.primary.site_type()
-		if prim_st in ("IOB33M", "IOB33S", "IOB33"):
+		if prim_st in ("IOB33M", "IOB33S", "IOB33", "IOB18M", "IOB18S", "IOB18"):
 			name = site.site_type() + "/" + name
 		nb = NextpnrBel(
 			name=name, index=len(self.bels), 
