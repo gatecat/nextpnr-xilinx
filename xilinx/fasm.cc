@@ -759,10 +759,16 @@ struct FasmBackend
                         log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
                 }
 
-                if (!is_riob18 && (iostandard == "SSTL135" || iostandard == "SSTL15")) {
+                if (iostandard == "SSTL12" || iostandard == "SSTL135" || iostandard == "SSTL15") {
                     ioconfig_by_hclk[hclk].vref = true;
-                    write_bit("SSTL135_SSTL15.IN");
-                    if (pad->attrs.count(ctx->id("IN_TERM")))
+                    if (!is_riob18)
+                        write_bit("SSTL135_SSTL15.IN");
+
+                    if (is_riob18 && yLoc == 1) {
+                        write_bit("SSTL12_SSTL135_SSTL15.IN");
+                    }
+
+                    if (!is_riob18 && pad->attrs.count(ctx->id("IN_TERM")))
                         write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
                 }
 
