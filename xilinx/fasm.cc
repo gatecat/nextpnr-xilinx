@@ -693,6 +693,7 @@ struct FasmBackend
         bool is_stepdown = false;
         bool is_sstl = iostandard == "SSTL12" || iostandard == "SSTL135" || iostandard == "SSTL15";
         bool is_diff_sstl = iostandard == "DIFF_SSTL12" || iostandard == "DIFF_SSTL135" || iostandard == "DIFF_SSTL15";
+        bool is_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
 
         auto yLoc = is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y);
         push("IOB_Y" + std::to_string(yLoc));
@@ -777,7 +778,7 @@ struct FasmBackend
                         write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
                 }
 
-                if (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18") {
+                if (is_lvcmos) {
                     write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
                 }
             } else /* diff */ {
@@ -809,8 +810,9 @@ struct FasmBackend
             }
         }
 
-        if (!is_riob18 && (iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18" ||
-                           iostandard == "SSTL135"  || iostandard == "SSTL15" )) {
+        if (!is_riob18 && (is_lvcmos || is_sstl)) {
+            if (iostandard == "SSTL12")
+                log_error("SSTL12 is only available on high performance banks.");
             write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN");
             ioconfig_by_hclk[hclk].stepdown = true;
             is_stepdown = true;
