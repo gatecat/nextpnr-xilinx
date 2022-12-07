@@ -751,9 +751,6 @@ struct FasmBackend
                 write_bit("SSTL135_SSTL15.SLEW.FAST");
             else
                 write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL.SLEW.FAST");
-
-            if (!is_riob18 & diff)
-                write_bit("OUT_DIFF");
         }
 
         if (is_input) {
