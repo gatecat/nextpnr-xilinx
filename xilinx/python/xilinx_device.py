@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from tileconn import apply_tileconn
 from parse_sdf import parse_sdf_file
 # Represents Xilinx device data from PrjXray etc
@@ -451,7 +452,11 @@ def import_device(name, prjxray_root, metadata_root):
 		return ij["intents"][str(ij["tiles"][tiletype][wirename])]
 
 	d = Device(name)
-	fabricname = name.split('t')[0] + "t"
+	match = re.search("^(xc7[akz]\d+t?)\w+-\d", name)
+	if not match:
+		raise RuntimeError("{} is not known device name".format(name))
+	fabricname = match.groups()[0]
+
 	if fabricname == 'xc7a35t':
 		# https://github.com/gatecat/nextpnr-xilinx/issues/35
 		# https://github.com/f4pga/prjxray/pull/1889
