@@ -696,11 +696,9 @@ struct FasmBackend
         auto yLoc = is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y);
         push("IOB_Y" + std::to_string(yLoc));
 
-        bool is_diff = false;
-        if (boost::starts_with(iostandard, "DIFF_") || iostandard == "LVDS") {
-            is_diff = true;
-            iostandard.erase(0, 5);
-        }
+        bool has_diff_prefix = boost::starts_with(iostandard, "DIFF_");
+        bool is_diff = iostandard == "LVDS" || has_diff_prefix;
+        if (has_diff_prefix) iostandard.erase(0, 5);
         bool is_sstl = iostandard == "SSTL12" || iostandard == "SSTL135" || iostandard == "SSTL15";
 
         int hclk = ctx->getHclkForIob(pad->bel);
