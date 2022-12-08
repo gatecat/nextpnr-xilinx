@@ -780,7 +780,7 @@ struct FasmBackend
                     // vivado generates these bits only for Y0 of a diff pair
                     if (yLoc == 0) {
                         write_bit("LVDS_SSTL12_SSTL135_SSTL15.IN_DIFF");
-                        if (iostandard == "LVDS" || boost::contains(iostandard, "SSTL"))
+                        if (iostandard == "LVDS")
                             write_bit("LVDS.IN_USE");
                     }
                 } else {
