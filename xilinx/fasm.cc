@@ -762,7 +762,7 @@ struct FasmBackend
                     if (!is_riob18)
                         write_bit("SSTL135_SSTL15.IN");
 
-                    if (is_riob18 && yLoc == 1) {
+                    if (is_riob18) {
                         write_bit("SSTL12_SSTL135_SSTL15.IN");
                     }
 
