@@ -303,7 +303,7 @@ std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, cons
         IdString ip = ctx->id("I" + std::to_string(i));
         cell->ports[ip].name = ip;
         cell->ports[ip].type = PORT_IN;
-        cell.get()->connectPort(ip, inputs.at(i));
+        cell->connectPort(ip, inputs.at(i));
     }
     cell->ports[ctx->id("O")].name = ctx->id("O");
     cell->ports[ctx->id("O")].type = PORT_OUT;

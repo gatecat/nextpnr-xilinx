@@ -156,8 +156,8 @@ void USPacker::pack_carries()
 
                 last_muxcy->disconnectPort(ctx->id("O"));
 
-                zero_lut.get()->connectPorts(ctx->id("O"), feed_xorcy.get(), ctx->id("LI"));
-                zero_lut.get()->connectPorts(ctx->id("O"), dummy_muxcy.get(), ctx->id("S"));
+                zero_lut->connectPorts(ctx->id("O"), feed_xorcy.get(), ctx->id("LI"));
+                zero_lut->connectPorts(ctx->id("O"), dummy_muxcy.get(), ctx->id("S"));
                 last_muxcy->connectPorts(ctx->id("O"), feed_xorcy.get(), ctx->id("CI"));
                 last_muxcy->connectPorts(ctx->id("O"), dummy_muxcy.get(), ctx->id("CI"));
 
