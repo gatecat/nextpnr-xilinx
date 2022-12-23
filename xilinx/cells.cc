@@ -5,9 +5,8 @@ NEXTPNR_NAMESPACE_BEGIN
 
 std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name)
 {
-    std::unique_ptr<CellInfo> cell{new CellInfo};
-    cell->type = type;
-    cell->name = name;
+    std::unique_ptr<CellInfo> cell = std::make_unique<CellInfo>(ctx, name, type);
+
     auto add_port = [&](const std::string &name, PortType dir) {
         IdString id = ctx->id(name);
         cell->ports[id].name = id;
@@ -159,9 +158,8 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
 
 std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString name)
 {
-    std::unique_ptr<CellInfo> cell{new CellInfo};
-    cell->type = type;
-    cell->name = name;
+    std::unique_ptr<CellInfo> cell = std::make_unique<CellInfo>(ctx, name, type);
+
     auto add_port = [&](const std::string &name, PortType dir) {
         IdString id = ctx->id(name);
         cell->ports[id].name = id;
@@ -300,18 +298,16 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
 std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, const std::vector<NetInfo *> &inputs,
                                      NetInfo *output, const Property &init)
 {
-    std::unique_ptr<CellInfo> cell{new CellInfo};
-    cell->type = ctx->id("LUT" + std::to_string(inputs.size()));
-    cell->name = ctx->id(name);
+    std::unique_ptr<CellInfo> cell = std::make_unique<CellInfo>(ctx, ctx->id(name), ctx->id("LUT" + std::to_string(inputs.size())));
     for (size_t i = 0; i < inputs.size(); i++) {
         IdString ip = ctx->id("I" + std::to_string(i));
         cell->ports[ip].name = ip;
         cell->ports[ip].type = PORT_IN;
-        connect_port(ctx, inputs.at(i), cell.get(), ip);
+        cell.get()->connectPort(ip, inputs.at(i));
     }
     cell->ports[ctx->id("O")].name = ctx->id("O");
     cell->ports[ctx->id("O")].type = PORT_OUT;
-    connect_port(ctx, output, cell.get(), ctx->id("O"));
+    cell->connectPort(ctx->id("O"), output);
     cell->params[ctx->id("INIT")] = init;
     return cell;
 }

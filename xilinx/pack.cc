@@ -37,7 +37,7 @@ void XilinxPacker::flush_cells()
 {
     for (auto pcell : packed_cells) {
         for (auto &port : ctx->cells[pcell]->ports) {
-            disconnect_port(ctx, ctx->cells[pcell].get(), port.first);
+            ctx->cells[pcell]->disconnectPort(port.first);
         }
         ctx->cells.erase(pcell);
     }
@@ -49,7 +49,7 @@ void XilinxPacker::flush_cells()
     new_cells.clear();
 }
 
-void XilinxPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci)
+void XilinxPacker::xform_cell(const dict<IdString, XFormRule> &rules, CellInfo *ci)
 {
     auto &rule = rules.at(ci->type);
     ci->attrs[ctx->id("X_ORIG_TYPE")] = ci->type.str(ctx);
@@ -61,12 +61,12 @@ void XilinxPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rul
     for (auto pname : orig_port_names) {
         if (rule.port_multixform.count(pname)) {
             auto old_port = ci->ports.at(pname);
-            disconnect_port(ctx, ci, pname);
+            ci->disconnectPort(pname);
             ci->ports.erase(pname);
             for (auto new_name : rule.port_multixform.at(pname)) {
                 ci->ports[new_name].name = new_name;
                 ci->ports[new_name].type = old_port.type;
-                connect_port(ctx, old_port.net, ci, new_name);
+                ci->connectPort(new_name, old_port.net);
                 ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
             }
         } else {
@@ -81,7 +81,7 @@ void XilinxPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rul
                 new_name = ctx->id(stripped_name);
             }
             if (new_name != pname) {
-                rename_port(ctx, ci, pname, new_name);
+                ci->renamePort(pname, new_name);
             }
             ci->attrs[ctx->id("X_ORIG_PORT_" + new_name.str(ctx))] = pname.str(ctx);
         }
@@ -101,12 +101,12 @@ void XilinxPacker::xform_cell(const std::unordered_map<IdString, XFormRule> &rul
         ci->params[param.first] = param.second;
 }
 
-void XilinxPacker::generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary)
+void XilinxPacker::generic_xform(const dict<IdString, XFormRule> &rules, bool print_summary)
 {
     std::map<std::string, int> cell_count;
     std::map<std::string, int> new_types;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (rules.count(ci->type)) {
             cell_count[ci->type.str(ctx)]++;
             xform_cell(rules, ci);
@@ -127,14 +127,14 @@ void XilinxPacker::generic_xform(const std::unordered_map<IdString, XFormRule> &
 
 std::unique_ptr<CellInfo> XilinxPacker::feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users)
 {
-    std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
-    feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
+    std::unique_ptr<NetInfo> feedthru_net = std::make_unique<NetInfo>(ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx)));
+
     std::unique_ptr<CellInfo> lut = create_lut(ctx, net->name.str(ctx) + "$LUT$" + std::to_string(++autoidx), {net},
                                                feedthru_net.get(), Property(2));
 
     for (auto &usr : feed_users) {
-        disconnect_port(ctx, usr.cell, usr.port);
-        connect_port(ctx, feedthru_net.get(), usr.cell, usr.port);
+        usr.cell->disconnectPort(usr.port);
+        usr.cell->connectPort(usr.port, feedthru_net.get());
     }
 
     IdString netname = feedthru_net->name;
@@ -145,17 +145,16 @@ std::unique_ptr<CellInfo> XilinxPacker::feed_through_lut(NetInfo *net, const std
 std::unique_ptr<CellInfo> XilinxPacker::feed_through_muxf(NetInfo *net, IdString type,
                                                           const std::vector<PortRef> &feed_users)
 {
-    std::unique_ptr<NetInfo> feedthru_net{new NetInfo};
-    feedthru_net->name = ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx));
+    std::unique_ptr<NetInfo> feedthru_net = std::make_unique<NetInfo>(ctx->id(net->name.str(ctx) + "$legal$" + std::to_string(++autoidx)));
     std::unique_ptr<CellInfo> mux =
             create_cell(ctx, type, ctx->id(net->name.str(ctx) + "$MUX$" + std::to_string(++autoidx)));
-    connect_port(ctx, net, mux.get(), ctx->id("I0"));
-    connect_port(ctx, feedthru_net.get(), mux.get(), ctx->id("O"));
-    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), mux.get(), ctx->id("S"));
+    mux->connectPort(ctx->id("I0"), net);
+    mux->connectPort(ctx->id("O"), feedthru_net.get());
+    mux->connectPort(ctx->id("S"), ctx->nets[ctx->id("$PACKER_GND_NET")].get());
 
     for (auto &usr : feed_users) {
-        disconnect_port(ctx, usr.cell, usr.port);
-        connect_port(ctx, feedthru_net.get(), usr.cell, usr.port);
+        usr.cell->disconnectPort(usr.port);
+        usr.cell->connectPort(usr.port, feedthru_net.get());
     }
 
     IdString netname = feedthru_net->name;
@@ -170,9 +169,8 @@ IdString XilinxPacker::int_name(IdString base, const std::string &postfix, bool 
 
 NetInfo *XilinxPacker::create_internal_net(IdString base, const std::string &postfix, bool is_hierarchy)
 {
-    std::unique_ptr<NetInfo> net{new NetInfo};
     IdString name = ctx->id(base.str(ctx) + (is_hierarchy ? "$subnet$" : "$intnet$") + postfix);
-    net->name = name;
+    std::unique_ptr<NetInfo> net = std::make_unique<NetInfo>(name);
     NPNR_ASSERT(!ctx->nets.count(name));
     ctx->nets[name] = std::move(net);
     return ctx->nets.at(name).get();
@@ -182,7 +180,7 @@ void XilinxPacker::pack_luts()
 {
     log_info("Packing LUTs..\n");
 
-    std::unordered_map<IdString, XFormRule> lut_rules;
+    dict<IdString, XFormRule> lut_rules;
     for (int k = 1; k <= 6; k++) {
         IdString lut = ctx->id("LUT" + std::to_string(k));
         lut_rules[lut].new_type = id_SLICE_LUTX;
@@ -190,7 +188,7 @@ void XilinxPacker::pack_luts()
             lut_rules[lut].port_xform[ctx->id("I" + std::to_string(i))] = ctx->id("A" + std::to_string(i + 1));
         lut_rules[lut].port_xform[ctx->id("O")] = ctx->id("O6");
     }
-    lut_rules[ctx->id("LUT6_2")] = lut_rules[ctx->id("LUT6")];
+    lut_rules[ctx->id("LUT6_2")] = XFormRule(lut_rules[ctx->id("LUT6")]);
     generic_xform(lut_rules, true);
 }
 
@@ -198,7 +196,7 @@ void XilinxPacker::pack_ffs()
 {
     log_info("Packing flipflops..\n");
 
-    std::unordered_map<IdString, XFormRule> ff_rules;
+    dict<IdString, XFormRule> ff_rules;
     ff_rules[ctx->id("FDCE")].new_type = id_SLICE_FFX;
     ff_rules[ctx->id("FDCE")].port_xform[ctx->id("C")] = ctx->xc7 ? id_CK : id_CLK;
     ff_rules[ctx->id("FDCE")].port_xform[ctx->id("CLR")] = id_SR;
@@ -221,16 +219,16 @@ void XilinxPacker::pack_ffs()
     ff_rules[ctx->id("FDSE")].set_attrs.emplace_back(ctx->id("X_FFSYNC"), "1");
     // ff_rules[ctx->id("FDSE")].param_xform[ctx->id("IS_S_INVERTED")] = ctx->id("IS_SR_INVERTED");
 
-    ff_rules[ctx->id("FDCE_1")] = ff_rules[ctx->id("FDCE")];
+    ff_rules[ctx->id("FDCE_1")] = XFormRule(ff_rules[ctx->id("FDCE")]);
     ff_rules[ctx->id("FDCE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
 
-    ff_rules[ctx->id("FDPE_1")] = ff_rules[ctx->id("FDPE")];
+    ff_rules[ctx->id("FDPE_1")] = XFormRule(ff_rules[ctx->id("FDPE")]);
     ff_rules[ctx->id("FDPE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
 
-    ff_rules[ctx->id("FDRE_1")] = ff_rules[ctx->id("FDRE")];
+    ff_rules[ctx->id("FDRE_1")] = XFormRule(ff_rules[ctx->id("FDRE")]);
     ff_rules[ctx->id("FDRE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
 
-    ff_rules[ctx->id("FDSE_1")] = ff_rules[ctx->id("FDSE")];
+    ff_rules[ctx->id("FDSE_1")] = XFormRule(ff_rules[ctx->id("FDSE")]);
     ff_rules[ctx->id("FDSE_1")].set_params.emplace_back(ctx->id("IS_C_INVERTED"), 1);
 
     generic_xform(ff_rules, true);
@@ -239,20 +237,20 @@ void XilinxPacker::pack_ffs()
 void XilinxPacker::pack_lutffs()
 {
     int pairs = 0;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->constr_parent != nullptr || !ci->constr_children.empty())
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
+        if (ci->cluster != ClusterId() || !ci->constr_children.empty())
             continue;
         if (ci->type != id_SLICE_FFX)
             continue;
-        NetInfo *d = get_net_or_empty(ci, id_D);
+        NetInfo *d = ci->getPort(id_D);
         if (d->driver.cell == nullptr || d->driver.cell->type != id_SLICE_LUTX || d->driver.port != id_O6)
             continue;
         CellInfo *lut = d->driver.cell;
-        if (lut->constr_parent != nullptr || !lut->constr_children.empty())
+        if (lut->cluster != ClusterId() || !lut->constr_children.empty())
             continue;
         lut->constr_children.push_back(ci);
-        ci->constr_parent = lut;
+        ci->cluster = lut->cluster;
         ci->constr_x = 0;
         ci->constr_y = 0;
         ci->constr_z = (BEL_FF - BEL_6LUT);
@@ -263,7 +261,7 @@ void XilinxPacker::pack_lutffs()
 
 bool XilinxPacker::is_constrained(const CellInfo *cell)
 {
-    return cell->constr_x != cell->UNCONSTR || cell->constr_y != cell->UNCONSTR || cell->constr_z != cell->UNCONSTR;
+    return cell->cluster != ClusterId();
 }
 
 void XilinxPacker::legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &mux_roots)
@@ -271,7 +269,7 @@ void XilinxPacker::legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &m
     if (curr->type.str(ctx).substr(0, 3) == "LUT")
         return;
     for (IdString p : {ctx->id("I0"), ctx->id("I1")}) {
-        NetInfo *pn = get_net_or_empty(curr, p);
+        NetInfo *pn = curr->getPort(p);
         if (pn == nullptr || pn->driver.cell == nullptr)
             continue;
         if (curr->type == ctx->id("MUXF7")) {
@@ -308,7 +306,7 @@ void XilinxPacker::legalise_muxf_tree(CellInfo *curr, std::vector<CellInfo *> &m
 void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffset)
 {
 
-    if (curr->type == id_SLICE_LUTX && (curr->constr_abs_z || curr->constr_parent != nullptr))
+    if (curr->type == id_SLICE_LUTX && (curr->constr_abs_z || curr->cluster != ClusterId()))
         return;
 
     int base_z = 0;
@@ -340,11 +338,11 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         curr->constr_y = 0;
         curr->constr_z = curr_z - base_z;
         curr->constr_abs_z = false;
-        curr->constr_parent = base;
+        curr->cluster = base->cluster;
         base->constr_children.push_back(curr);
     }
     if (curr->type == ctx->id("MUXF7") || curr->type == ctx->id("MUXF8") || curr->type == ctx->id("MUXF9")) {
-        NetInfo *i0 = get_net_or_empty(curr, ctx->id("I0")), *i1 = get_net_or_empty(curr, ctx->id("I1"));
+        NetInfo *i0 = curr->getPort(ctx->id("I0")), *i1 = curr->getPort(ctx->id("I1"));
         if (i0 != nullptr && i0->driver.cell != nullptr)
             constrain_muxf_tree(i0->driver.cell, base, zoffset + input_spacing);
         if (i1 != nullptr && i1->driver.cell != nullptr)
@@ -356,22 +354,22 @@ void XilinxPacker::pack_muxfs()
 {
     log_info("Packing MUX[789]s..\n");
     std::vector<CellInfo *> mux_roots;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         ci->attrs.erase(ctx->id("MUX_TREE_ROOT"));
         if (ci->type == ctx->id("MUXF9")) {
             if (ctx->xc7)
                 log_error("MUXF9 is not supported on xc7!\n");
             mux_roots.push_back(ci);
         } else if (ci->type == ctx->id("MUXF8")) {
-            NetInfo *o = get_net_or_empty(ci, ctx->id("O"));
-            if (o == nullptr || o->users.size() != 1 || o->users.at(0).cell->type != ctx->id("MUXF9") ||
-                is_constrained(o->users.at(0).cell) || o->users.at(0).port == ctx->id("S"))
+            NetInfo *o = ci->getPort(ctx->id("O"));
+            if (o == nullptr || o->users.entries() != 1 || (*o->users.begin()).cell->type != ctx->id("MUXF9") ||
+                is_constrained((*o->users.begin()).cell) || (*o->users.begin()).port == ctx->id("S"))
                 mux_roots.push_back(ci);
         } else if (ci->type == ctx->id("MUXF7")) {
-            NetInfo *o = get_net_or_empty(ci, ctx->id("O"));
-            if (o == nullptr || o->users.size() != 1 || o->users.at(0).cell->type != ctx->id("MUXF8") ||
-                is_constrained(o->users.at(0).cell) || o->users.at(0).port == ctx->id("S"))
+            NetInfo *o = ci->getPort(ctx->id("O"));
+            if (o == nullptr || o->users.entries() != 1 || (*o->users.begin()).cell->type != ctx->id("MUXF8") ||
+                is_constrained((*o->users.begin()).cell) || (*o->users.begin()).port == ctx->id("S"))
                 mux_roots.push_back(ci);
         }
     }
@@ -385,7 +383,7 @@ void XilinxPacker::pack_muxfs()
 
 void XilinxPacker::finalise_muxfs()
 {
-    std::unordered_map<IdString, XFormRule> muxf_rules;
+    dict<IdString, XFormRule> muxf_rules;
     muxf_rules[ctx->id("MUXF9")].new_type = id_F9MUX;
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I0")] = ctx->id("0");
     muxf_rules[ctx->id("MUXF9")].port_xform[ctx->id("I1")] = ctx->id("1");
@@ -400,7 +398,7 @@ void XilinxPacker::finalise_muxfs()
 
 void XilinxPacker::pack_srls()
 {
-    std::unordered_map<IdString, XFormRule> srl_rules;
+    dict<IdString, XFormRule> srl_rules;
     srl_rules[ctx->id("SRL16E")].new_type = id_SLICE_LUTX;
     srl_rules[ctx->id("SRL16E")].port_xform[ctx->id("CLK")] = id_CLK;
     srl_rules[ctx->id("SRL16E")].port_xform[ctx->id("CE")] = id_WE;
@@ -417,28 +415,28 @@ void XilinxPacker::pack_srls()
     // FIXME: Q31 support
     generic_xform(srl_rules, true);
     // Fixup SRL inputs
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type != id_SLICE_LUTX)
             continue;
         std::string orig_type = str_or_default(ci->attrs, ctx->id("X_ORIG_TYPE"));
         if (orig_type == "SRL16E") {
             for (int i = 3; i >= 0; i--) {
-                rename_port(ctx, ci, ctx->id("A" + std::to_string(i)), ctx->id("A" + std::to_string(i + 2)));
+                ci->renamePort(ctx->id("A" + std::to_string(i)), ctx->id("A" + std::to_string(i + 2)));
             }
             for (auto tp : {id_A1, id_A6}) {
                 ci->ports[tp].name = tp;
                 ci->ports[tp].type = PORT_IN;
-                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, tp);
+                ci->connectPort(tp, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
         } else if (orig_type == "SRLC32E") {
             for (int i = 4; i >= 0; i--) {
-                rename_port(ctx, ci, ctx->id("A" + std::to_string(i)), ctx->id("A" + std::to_string(i + 2)));
+                ci->renamePort(ctx->id("A" + std::to_string(i)), ctx->id("A" + std::to_string(i + 2)));
             }
             for (auto tp : {id_A1}) {
                 ci->ports[tp].name = tp;
                 ci->ports[tp].type = PORT_IN;
-                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, tp);
+                ci->connectPort(tp, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
         }
     }
@@ -452,24 +450,18 @@ void XilinxPacker::pack_constants()
     if (invertible_pins.empty())
         get_invertible_pins(ctx, invertible_pins);
     if (!ctx->cells.count(ctx->id("$PACKER_GND_DRV"))) {
-        std::unique_ptr<CellInfo> gnd_cell{new CellInfo};
-        gnd_cell->name = ctx->id("$PACKER_GND_DRV");
-        gnd_cell->type = id_PSEUDO_GND;
+        std::unique_ptr<CellInfo> gnd_cell = std::make_unique<CellInfo>(ctx, ctx->id("$PACKER_GND_DRV"), id_PSEUDO_GND);
         gnd_cell->ports[id_Y].name = id_Y;
         gnd_cell->ports[id_Y].type = PORT_OUT;
-        std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
-        gnd_net->name = ctx->id("$PACKER_GND_NET");
+        std::unique_ptr<NetInfo> gnd_net = std::make_unique<NetInfo>(ctx->id("$PACKER_GND_NET"));
         gnd_net->driver.cell = gnd_cell.get();
         gnd_net->driver.port = id_Y;
         gnd_cell->ports.at(id_Y).net = gnd_net.get();
 
-        std::unique_ptr<CellInfo> vcc_cell{new CellInfo};
-        vcc_cell->name = ctx->id("$PACKER_VCC_DRV");
-        vcc_cell->type = id_PSEUDO_VCC;
+        std::unique_ptr<CellInfo> vcc_cell = std::make_unique<CellInfo>(ctx, ctx->id("$PACKER_VCC_DRV"), id_PSEUDO_VCC);
         vcc_cell->ports[id_Y].name = id_Y;
         vcc_cell->ports[id_Y].type = PORT_OUT;
-        std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
-        vcc_net->name = ctx->id("$PACKER_VCC_NET");
+        std::unique_ptr<NetInfo> vcc_net = std::make_unique<NetInfo>(ctx->id("$PACKER_VCC_NET"));
         vcc_net->driver.cell = vcc_cell.get();
         vcc_net->driver.port = id_Y;
         vcc_cell->ports.at(id_Y).net = vcc_net.get();
@@ -485,8 +477,8 @@ void XilinxPacker::pack_constants()
 
     std::vector<std::tuple<CellInfo *, IdString, bool>> const_ports;
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (!tied_pins.count(ci->type))
             continue;
         auto &tp = tied_pins.at(ci->type);
@@ -498,8 +490,8 @@ void XilinxPacker::pack_constants()
         }
     }
 
-    for (auto net : sorted(ctx->nets)) {
-        NetInfo *ni = net.second;
+    for (auto& net : ctx->nets) {
+        NetInfo *ni = net.second.get();
         if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("GND")) {
             IdString drv_cell = ni->driver.cell->name;
             for (auto &usr : ni->users) {
@@ -532,7 +524,7 @@ void XilinxPacker::pack_constants()
         if (ci->ports.at(pname).net != nullptr) {
             // Case where a port with a default tie value is previously connected to an undriven net
             NPNR_ASSERT(ci->ports.at(pname).net->driver.cell == nullptr);
-            disconnect_port(ctx, ci, pname);
+            ci->disconnectPort(pname);
         }
 
         if (!cval && invertible_pins.count(ci->type) && invertible_pins.at(ci->type).count(pname)) {
@@ -542,7 +534,7 @@ void XilinxPacker::pack_constants()
             cval = true;
         }
 
-        connect_port(ctx, cval ? vcc : gnd, ci, pname);
+        ci->connectPort(pname, cval ? vcc : gnd);
     }
 
     for (auto dn : dead_nets) {
@@ -567,9 +559,9 @@ void XilinxPacker::tie_port(CellInfo *ci, const std::string &port, bool value, b
         ci->ports[p].type = PORT_IN;
     }
     if (value || inv)
-        connect_port(ctx, ctx->nets.at(ctx->id("$PACKER_VCC_NET")).get(), ci, p);
+        ci->connectPort(p, ctx->nets.at(ctx->id("$PACKER_VCC_NET")).get());
     else
-        connect_port(ctx, ctx->nets.at(ctx->id("$PACKER_GND_NET")).get(), ci, p);
+        ci->connectPort(p, ctx->nets.at(ctx->id("$PACKER_GND_NET")).get());
     if (!value && inv)
         ci->params[ctx->id("IS_" + port + "_INVERTED")] = Property(1);
 }
@@ -579,7 +571,7 @@ void USPacker::pack_bram()
     log_info("Packing BRAM..\n");
 
     // Rules for normal TDP BRAM
-    std::unordered_map<IdString, XFormRule> bram_rules;
+    dict<IdString, XFormRule> bram_rules;
     bram_rules[ctx->id("RAMB18E2")].new_type = id_RAMB18E2_RAMB18E2;
     bram_rules[ctx->id("RAMB18E2")].port_multixform[ctx->id(std::string("WEA[0]"))] = {ctx->id("WEA0"),
                                                                                        ctx->id("WEA1")};
@@ -597,7 +589,7 @@ void USPacker::pack_bram()
     bram_rules[ctx->id("RAMB36E2")].port_multixform[ctx->id("ECCPIPECE")] = {ctx->id("ECCPIPECEL")};
 
     // Special rules for SDP rules, relating to WE connectivity
-    std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
+    dict<IdString, XFormRule> sdp_bram_rules = bram_rules;
     for (int i = 0; i < 2; i++) {
         // Connects to two WEBWE bel pins
         sdp_bram_rules[ctx->id("RAMB18E2")]
@@ -650,8 +642,8 @@ void USPacker::pack_bram()
         bram_rules[ctx->id("RAMB36E2")].port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))] = {};
 
     // Process SDP BRAM first
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if ((ci->type == ctx->id("RAMB18E2") &&
              int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36) ||
             (ci->type == ctx->id("RAMB36E2") &&
@@ -660,8 +652,8 @@ void USPacker::pack_bram()
     }
 
     // Rewrite byte enables according to data width
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("RAMB18E2") || ci->type == ctx->id("RAMB36E2")) {
             for (char port : {'A', 'B'}) {
                 int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
@@ -674,15 +666,15 @@ void USPacker::pack_bram()
                     continue;
                 int used_we_width = std::max(write_width / 9, 1);
                 for (int i = used_we_width; i < we_width; i++) {
-                    NetInfo *low_we = get_net_or_empty(ci, ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
+                    NetInfo *low_we = ci->getPort(ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
                                                                    std::to_string(i % used_we_width) + "]"));
                     IdString curr_we = ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") + std::to_string(i) + "]");
                     if (!ci->ports.count(curr_we)) {
                         ci->ports[curr_we].type = PORT_IN;
                         ci->ports[curr_we].name = curr_we;
                     }
-                    disconnect_port(ctx, ci, curr_we);
-                    connect_port(ctx, low_we, ci, curr_we);
+                    ci->disconnectPort(curr_we);
+                    ci->connectPort(curr_we, low_we);
                 }
             }
         }
@@ -691,15 +683,15 @@ void USPacker::pack_bram()
     generic_xform(bram_rules, false);
 
     // These pins have no logical mapping, so must be tied after transformation
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == id_RAMB18E2_RAMB18E2) {
             for (int i = 2; i < 4; i++) {
                 IdString port = ctx->id("WEA" + std::to_string(i));
                 if (!ci->ports.count(port)) {
                     ci->ports[port].name = port;
                     ci->ports[port].type = PORT_IN;
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, port);
+                    ci->connectPort(port, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
                 }
             }
         }
@@ -711,7 +703,7 @@ void XC7Packer::pack_bram()
     log_info("Packing BRAM..\n");
 
     // Rules for normal TDP BRAM
-    std::unordered_map<IdString, XFormRule> bram_rules;
+    dict<IdString, XFormRule> bram_rules;
     bram_rules[ctx->id("RAMB18E1")].new_type = id_RAMB18E1_RAMB18E1;
     bram_rules[ctx->id("RAMB18E1")].port_multixform[ctx->id(std::string("WEA[0]"))] = {ctx->id("WEA0"),
                                                                                        ctx->id("WEA1")};
@@ -730,7 +722,7 @@ void XC7Packer::pack_bram()
     bram_rules[ctx->id("RAMB36E1")].port_multixform[ctx->id("ADDRBWRADDR[15]")].push_back(ctx->id("ADDRBWRADDRL15"));
 
     // Special rules for SDP rules, relating to WE connectivity
-    std::unordered_map<IdString, XFormRule> sdp_bram_rules = bram_rules;
+    dict<IdString, XFormRule> sdp_bram_rules = bram_rules;
     for (int i = 0; i < 4; i++) {
         // Connects to two WEBWE bel pins
         sdp_bram_rules[ctx->id("RAMB18E1")]
@@ -765,8 +757,8 @@ void XC7Packer::pack_bram()
         bram_rules[ctx->id("RAMB36E1")].port_multixform[ctx->id(std::string("WEBWE[" + std::to_string(i) + "]"))] = {};
 
     // Process SDP BRAM first
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if ((ci->type == ctx->id("RAMB18E1") &&
              int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_B")), 0) == 36) ||
             (ci->type == ctx->id("RAMB36E1") &&
@@ -775,8 +767,8 @@ void XC7Packer::pack_bram()
     }
 
     // Rewrite byte enables according to data width
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("RAMB18E1") || ci->type == ctx->id("RAMB36E1")) {
             for (char port : {'A', 'B'}) {
                 int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
@@ -789,15 +781,15 @@ void XC7Packer::pack_bram()
                     continue;
                 int used_we_width = std::max(write_width / 9, 1);
                 for (int i = used_we_width; i < we_width; i++) {
-                    NetInfo *low_we = get_net_or_empty(ci, ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
+                    NetInfo *low_we = ci->getPort(ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") +
                                                                    std::to_string(i % used_we_width) + "]"));
                     IdString curr_we = ctx->id(std::string(port == 'B' ? "WEBWE[" : "WEA[") + std::to_string(i) + "]");
                     if (!ci->ports.count(curr_we)) {
                         ci->ports[curr_we].type = PORT_IN;
                         ci->ports[curr_we].name = curr_we;
                     }
-                    disconnect_port(ctx, ci, curr_we);
-                    connect_port(ctx, low_we, ci, curr_we);
+                    ci->disconnectPort(curr_we);
+                    ci->connectPort(curr_we, low_we);
                 }
             }
         }
@@ -806,8 +798,8 @@ void XC7Packer::pack_bram()
     generic_xform(bram_rules, false);
 
     // These pins have no logical mapping, so must be tied after transformation
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == id_RAMB18E1_RAMB18E1) {
             int wwa = int_or_default(ci->params, ctx->id("WRITE_WIDTH_A"), 0);
             for (int i = ((wwa == 0) ? 0 : 2); i < 4; i++) {
@@ -815,7 +807,7 @@ void XC7Packer::pack_bram()
                 if (!ci->ports.count(port)) {
                     ci->ports[port].name = port;
                     ci->ports[port].type = PORT_IN;
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                    ci->connectPort(port, ctx->nets[ctx->id("$PACKER_GND_NET")].get());
                 }
             }
             int wwb = int_or_default(ci->params, ctx->id("WRITE_WIDTH_B"), 0);
@@ -825,7 +817,7 @@ void XC7Packer::pack_bram()
                     if (!ci->ports.count(port)) {
                         ci->ports[port].name = port;
                         ci->ports[port].type = PORT_IN;
-                        connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                        ci->connectPort(port, ctx->nets[ctx->id("$PACKER_GND_NET")].get());
                     }
                 }
             }
@@ -835,9 +827,9 @@ void XC7Packer::pack_bram()
                     ci->ports[p].name = p;
                     ci->ports[p].type = PORT_IN;
                 } else {
-                    disconnect_port(ctx, ci, p);
+                    ci->disconnectPort(p);
                 }
-                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, p);
+                ci->connectPort(p, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
         } else if (ci->type == id_RAMB36E1_RAMB36E1) {
             for (auto p : {ctx->id("ADDRARDADDRL15"), ctx->id("ADDRBWRADDRL15")}) {
@@ -845,23 +837,23 @@ void XC7Packer::pack_bram()
                     ci->ports[p].name = p;
                     ci->ports[p].type = PORT_IN;
                 } else {
-                    disconnect_port(ctx, ci, p);
+                    ci->disconnectPort(p);
                 }
-                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, p);
+                ci->connectPort(p, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
             if (int_or_default(ci->params, ctx->id("WRITE_WIDTH_A"), 0) == 1) {
-                disconnect_port(ctx, ci, ctx->id("DIADI1"));
-                connect_port(ctx, get_net_or_empty(ci, ctx->id("DIADI0")), ci, ctx->id("DIADI1"));
+                ci->disconnectPort(ctx->id("DIADI1"));
+                ci->connectPort(ctx->id("DIADI1"), ci->getPort(ctx->id("DIADI0")));
                 ci->attrs[ctx->id("X_ORIG_PORT_DIADI1")] = std::string("DIADI[0]");
-                disconnect_port(ctx, ci, ctx->id("DIPADIP0"));
-                disconnect_port(ctx, ci, ctx->id("DIPADIP1"));
+                ci->disconnectPort(ctx->id("DIPADIP0"));
+                ci->disconnectPort(ctx->id("DIPADIP1"));
             }
             if (int_or_default(ci->params, ctx->id("WRITE_WIDTH_B"), 0) == 1) {
-                disconnect_port(ctx, ci, ctx->id("DIBDI1"));
-                connect_port(ctx, get_net_or_empty(ci, ctx->id("DIBDI0")), ci, ctx->id("DIBDI1"));
+                ci->disconnectPort(ctx->id("DIBDI1"));
+                ci->connectPort(ctx->id("DIBDI1"), ci->getPort(ctx->id("DIBDI0")));
                 ci->attrs[ctx->id("X_ORIG_PORT_DIBDI1")] = std::string("DIBDI[0]");
-                disconnect_port(ctx, ci, ctx->id("DIPBDIP0"));
-                disconnect_port(ctx, ci, ctx->id("DIPBDIP1"));
+                ci->disconnectPort(ctx->id("DIPBDIP0"));
+                ci->disconnectPort(ctx->id("DIPBDIP1"));
             }
             if (int_or_default(ci->params, ctx->id("WRITE_WIDTH_B"), 0) != 72) {
                 for (std::string s : {"L", "U"}) {
@@ -870,7 +862,7 @@ void XC7Packer::pack_bram()
                         if (!ci->ports.count(port)) {
                             ci->ports[port].name = port;
                             ci->ports[port].type = PORT_IN;
-                            connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                            ci->connectPort(port, ctx->nets[ctx->id("$PACKER_GND_NET")].get());
                         }
                     }
                 }
@@ -882,7 +874,7 @@ void XC7Packer::pack_bram()
                         if (!ci->ports.count(port)) {
                             ci->ports[port].name = port;
                             ci->ports[port].type = PORT_IN;
-                            connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, port);
+                            ci->connectPort(port, ctx->nets[ctx->id("$PACKER_GND_NET")].get());
                         }
                     }
                 }
@@ -893,20 +885,20 @@ void XC7Packer::pack_bram()
 
 void USPacker::pack_uram()
 {
-    std::unordered_map<IdString, XFormRule> uram_rules;
+    dict<IdString, XFormRule> uram_rules;
     uram_rules[id_URAM288].new_type = id_BEL_URAM288;
-    uram_rules[ctx->id("URAM288_BASE")] = uram_rules[id_URAM288];
+    uram_rules[ctx->id("URAM288_BASE")] = XFormRule(uram_rules[id_URAM288]);
     generic_xform(uram_rules, true);
 }
 
 void XilinxPacker::pack_inverters()
 {
     // FIXME: fold where possible
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("INV")) {
             ci->params[ctx->id("INIT")] = Property(1, 2);
-            rename_port(ctx, ci, ctx->id("I"), ctx->id("I0"));
+            ci->renamePort(ctx->id("I"), ctx->id("I0"));
             ci->type = ctx->id("LUT1");
         }
     }
@@ -971,46 +963,46 @@ void Arch::assignCellInfo(CellInfo *cell)
     if (cell->type == id_SLICE_LUTX) {
         cell->lutInfo.input_count = 0;
         for (IdString a : {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6}) {
-            NetInfo *pn = get_net_or_empty(cell, a);
+            NetInfo *pn = cell->getPort(a);
             if (pn != nullptr)
                 cell->lutInfo.input_sigs[cell->lutInfo.input_count++] = pn;
         }
         cell->lutInfo.output_count = 0;
         for (IdString o : {id_O6, id_O5}) {
-            NetInfo *pn = get_net_or_empty(cell, o);
+            NetInfo *pn = cell->getPort(o);
             if (pn != nullptr)
                 cell->lutInfo.output_sigs[cell->lutInfo.output_count++] = pn;
         }
         for (int i = cell->lutInfo.output_count; i < 2; i++)
             cell->lutInfo.output_sigs[i] = nullptr;
-        cell->lutInfo.di1_net = get_net_or_empty(cell, id_DI1);
-        cell->lutInfo.di2_net = get_net_or_empty(cell, id_DI2);
-        cell->lutInfo.wclk = get_net_or_empty(cell, id_CLK);
+        cell->lutInfo.di1_net = cell->getPort(id_DI1);
+        cell->lutInfo.di2_net = cell->getPort(id_DI2);
+        cell->lutInfo.wclk = cell->getPort(id_CLK);
         cell->lutInfo.memory_group = 0; // fixme
         cell->lutInfo.is_srl = cell->attrs.count(id("X_LUT_AS_SRL"));
         cell->lutInfo.is_memory = cell->attrs.count(id("X_LUT_AS_DRAM"));
         cell->lutInfo.only_drives_carry = false;
         if (xc7) {
-            if (cell->constr_parent != nullptr && cell->lutInfo.output_count > 0 &&
-                cell->lutInfo.output_sigs[0] != nullptr && cell->lutInfo.output_sigs[0]->users.size() == 1 &&
-                cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY4)
+            if (cell->cluster != ClusterId() && cell->lutInfo.output_count > 0 &&
+                cell->lutInfo.output_sigs[0] != nullptr && cell->lutInfo.output_sigs[0]->users.entries() == 1 &&
+                (*cell->lutInfo.output_sigs[0]->users.begin()).cell->type == id_CARRY4)
                 cell->lutInfo.only_drives_carry = true;
         } else {
-            if (cell->constr_parent != nullptr && cell->lutInfo.output_count > 0 &&
-                cell->lutInfo.output_sigs[0] != nullptr && cell->lutInfo.output_sigs[0]->users.size() == 1 &&
-                cell->lutInfo.output_sigs[0]->users.at(0).cell->type == id_CARRY8)
+            if (cell->cluster != ClusterId() && cell->lutInfo.output_count > 0 &&
+                cell->lutInfo.output_sigs[0] != nullptr && cell->lutInfo.output_sigs[0]->users.entries() == 1 &&
+                (*cell->lutInfo.output_sigs[0]->users.begin()).cell->type == id_CARRY8)
                 cell->lutInfo.only_drives_carry = true;
         }
 
         const IdString addr_msb_sigs[] = {id_WA7, id_WA8, id_WA9};
         for (int i = 0; i < 3; i++)
-            cell->lutInfo.address_msb[i] = get_net_or_empty(cell, addr_msb_sigs[i]);
+            cell->lutInfo.address_msb[i] = cell->getPort(addr_msb_sigs[i]);
 
     } else if (cell->type == id_SLICE_FFX) {
-        cell->ffInfo.d = get_net_or_empty(cell, id_D);
-        cell->ffInfo.clk = get_net_or_empty(cell, xc7 ? id_CK : id_CLK);
-        cell->ffInfo.ce = get_net_or_empty(cell, id_CE);
-        cell->ffInfo.sr = get_net_or_empty(cell, id_SR);
+        cell->ffInfo.d = cell->getPort(id_D);
+        cell->ffInfo.clk = cell->getPort(xc7 ? id_CK : id_CLK);
+        cell->ffInfo.ce = cell->getPort(id_CE);
+        cell->ffInfo.sr = cell->getPort(id_SR);
         cell->ffInfo.is_clkinv = bool_or_default(cell->params, id("IS_CLK_INVERTED"), false);
         cell->ffInfo.is_srinv = bool_or_default(cell->params, id("IS_R_INVERTED"), false) ||
                                 bool_or_default(cell->params, id("IS_S_INVERTED"), false) ||
@@ -1020,28 +1012,28 @@ void Arch::assignCellInfo(CellInfo *cell)
         cell->ffInfo.ffsync = cell->attrs.count(id("X_FFSYNC"));
     } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
                cell->type == id("SELMUX2_1")) {
-        cell->muxInfo.sel = get_net_or_empty(cell, id_S0);
-        cell->muxInfo.out = get_net_or_empty(cell, id_OUT);
+        cell->muxInfo.sel = cell->getPort(id_S0);
+        cell->muxInfo.out = cell->getPort(id_OUT);
     } else if (cell->type == id_CARRY8) {
         for (int i = 0; i < 8; i++) {
-            cell->carryInfo.out_sigs[i] = get_net_or_empty(cell, id("O" + std::to_string(i)));
-            cell->carryInfo.cout_sigs[i] = get_net_or_empty(cell, id("CO" + std::to_string(i)));
-            cell->carryInfo.x_sigs[i] = get_net_or_empty(cell, id(std::string(1, 'A' + i) + "X"));
+            cell->carryInfo.out_sigs[i] = cell->getPort(id("O" + std::to_string(i)));
+            cell->carryInfo.cout_sigs[i] = cell->getPort(id("CO" + std::to_string(i)));
+            cell->carryInfo.x_sigs[i] = cell->getPort(id(std::string(1, 'A' + i) + "X"));
         }
     } else if (cell->type == id_CARRY4) {
         for (int i = 0; i < 4; i++) {
-            cell->carryInfo.out_sigs[i] = get_net_or_empty(cell, id("O" + std::to_string(i)));
-            cell->carryInfo.cout_sigs[i] = get_net_or_empty(cell, id("CO" + std::to_string(i)));
+            cell->carryInfo.out_sigs[i] = cell->getPort(id("O" + std::to_string(i)));
+            cell->carryInfo.cout_sigs[i] = cell->getPort(id("CO" + std::to_string(i)));
             cell->carryInfo.x_sigs[i] = nullptr;
         }
-        cell->carryInfo.x_sigs[0] = get_net_or_empty(cell, id("CYINIT"));
+        cell->carryInfo.x_sigs[0] = cell->getPort(id("CYINIT"));
     }
 }
 
 void Arch::assignArchInfo()
 {
-    for (auto cell : sorted(cells)) {
-        assignCellInfo(cell.second);
+    for (auto& cell : cells) {
+        assignCellInfo(cell.second.get());
     }
 }
 

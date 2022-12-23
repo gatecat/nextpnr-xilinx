@@ -23,7 +23,7 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins)
+void get_invertible_pins(Context *ctx, dict<IdString, pool<IdString>> &invertible_pins)
 {
     // List of pins that have an IS_x_INVERTED attributed, so we can optimise tie-zero to tie-one for these pins
     // See scripts/invertible_pins.py
@@ -365,7 +365,7 @@ void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unorder
     invertible_pins[ctx->id("XADC")].insert(ctx->id("DCLK"));
 }
 
-void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map<IdString, bool>> &tied_pins)
+void get_tied_pins(Context *ctx, dict<IdString, dict<IdString, bool>> &tied_pins)
 {
     // List of pins that are tied to a fixed value when unused.
     // This doesn't include the PS8, due to the large number of tied-zero pins that are implied by the
@@ -665,7 +665,7 @@ void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vecto
 }
 
 // Gets a list of pins that are to be directly connected to a top level IO pin (only)
-void get_top_level_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &toplevel_pins)
+void get_top_level_pins(Context *ctx, dict<IdString, pool<IdString>> &toplevel_pins)
 {
     toplevel_pins[ctx->id("IBUF")] = {ctx->id("I")};
     toplevel_pins[ctx->id("IBUF_ANALOG")] = {ctx->id("I")};

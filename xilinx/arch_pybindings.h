@@ -29,7 +29,7 @@ namespace PythonConversion {
 
 template <> struct string_converter<BelId>
 {
-    BelId from_str(Context *ctx, std::string name) { return ctx->getBelByName(ctx->id(name)); }
+    BelId from_str(Context *ctx, std::string name) { return ctx->getBelByNameStr(name); }
 
     std::string to_str(Context *ctx, BelId id)
     {
@@ -41,7 +41,7 @@ template <> struct string_converter<BelId>
 
 template <> struct string_converter<WireId>
 {
-    WireId from_str(Context *ctx, std::string name) { return ctx->getWireByName(ctx->id(name)); }
+    WireId from_str(Context *ctx, std::string name) { return ctx->getWireByNameStr(name); }
 
     std::string to_str(Context *ctx, WireId id)
     {
@@ -53,7 +53,7 @@ template <> struct string_converter<WireId>
 
 template <> struct string_converter<const WireId>
 {
-    WireId from_str(Context *ctx, std::string name) { return ctx->getWireByName(ctx->id(name)); }
+    WireId from_str(Context *ctx, std::string name) { return ctx->getWireByNameStr(name); }
 
     std::string to_str(Context *ctx, WireId id)
     {
@@ -65,7 +65,7 @@ template <> struct string_converter<const WireId>
 
 template <> struct string_converter<PipId>
 {
-    PipId from_str(Context *ctx, std::string name) { return ctx->getPipByName(ctx->id(name)); }
+    PipId from_str(Context *ctx, std::string name) { return ctx->getPipByNameStr(name); }
 
     std::string to_str(Context *ctx, PipId id)
     {

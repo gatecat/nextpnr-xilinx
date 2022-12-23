@@ -33,9 +33,9 @@ struct FasmBackend
     Context *ctx;
     std::ostream &out;
     std::vector<std::string> fasm_ctx;
-    std::unordered_map<int, std::vector<PipId>> pips_by_tile;
+    dict<int, std::vector<PipId>> pips_by_tile;
 
-    std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
+    dict<IdString, pool<IdString>> invertible_pins;
 
     FasmBackend(Context *ctx, std::ostream &out) : ctx(ctx), out(out){};
 
@@ -93,25 +93,16 @@ struct FasmBackend
         IdString tileType;
         IdString dest;
         IdString source;
-        struct Hash
-        {
-            size_t operator()(const PseudoPipKey &key) const noexcept
-            {
-                std::size_t seed = 0;
-                boost::hash_combine(seed, std::hash<IdString>()(key.tileType));
-                boost::hash_combine(seed, std::hash<IdString>()(key.source));
-                boost::hash_combine(seed, std::hash<IdString>()(key.dest));
-                return seed;
-            }
-        };
 
         bool operator==(const PseudoPipKey &b) const
         {
             return std::tie(this->tileType, this->dest, this->source) == std::tie(b.tileType, b.dest, b.source);
         }
+
+        unsigned int hash() const { return mkhash(mkhash(tileType.hash(), source.hash()), dest.hash()); }
     };
 
-    std::unordered_map<PseudoPipKey, std::vector<std::string>, PseudoPipKey::Hash> pp_config;
+    dict<PseudoPipKey, std::vector<std::string>> pp_config;
     void get_pseudo_pip_data()
     {
         /*
@@ -345,7 +336,7 @@ struct FasmBackend
                 dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
                 orig_dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
 
-                WireId w = ctx->getWireByName(ctx->id(tile_name + "/" + orig_dst_name));
+                WireId w = ctx->getWireByNameStr(tile_name + "/" + orig_dst_name);
                 NPNR_ASSERT(w != WireId());
                 if (ctx->getBoundWireNet(w) == nullptr) {
                     out << tile_name << ".";
@@ -401,8 +392,8 @@ struct FasmBackend
             if (lut == nullptr)
                 continue;
             auto lut_inputs = get_inputs(lut);
-            std::unordered_map<int, std::vector<std::string>> phys_to_log;
-            std::unordered_map<std::string, int> log_to_bit;
+            dict<int, std::vector<std::string>> phys_to_log;
+            dict<std::string, int> log_to_bit;
             for (int j = 0; j < int(lut_inputs.size()); j++)
                 log_to_bit[lut_inputs[j].str(ctx)] = j;
             for (int j = 0; j < 6; j++) {
@@ -571,7 +562,7 @@ struct FasmBackend
                 if (negedge_ff) SET_CHECK(is_clkinv, true);
                 else SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
 
-                NetInfo *sr = get_net_or_empty(ff, ctx->id("SR")), *ce = get_net_or_empty(ff, ctx->id("CE"));
+                NetInfo *sr = ff->getPort(ctx->id("SR")), *ce = ff->getPort(ctx->id("CE"));
 
                 SET_CHECK(is_srused, sr != nullptr && sr->name != ctx->id("$PACKER_GND_NET"));
                 SET_CHECK(is_ceused, ce != nullptr && ce->name != ctx->id("$PACKER_VCC_NET"));
@@ -655,8 +646,8 @@ struct FasmBackend
                     } else if (type == "SRLC32E") {
                         is_srl = true;
                     }
-                    wa7_used |= (get_net_or_empty(lut, ctx->id("WA7")) != nullptr);
-                    wa8_used |= (get_net_or_empty(lut, ctx->id("WA8")) != nullptr);
+                    wa7_used |= (lut->getPort(ctx->id("WA7")) != nullptr);
+                    wa8_used |= (lut->getPort(ctx->id("WA8")) != nullptr);
                 }
                 if (is_slicem && i != 3) {
                     write_routing_bel(
@@ -694,7 +685,7 @@ struct FasmBackend
         push(get_half_name(half, is_mtile));
 
         write_routing_bel(get_site_wire(carry->bel, "PRECYINIT_OUT"));
-        if (get_net_or_empty(carry, ctx->id("CIN")) != nullptr)
+        if (carry->getPort(ctx->id("CIN")) != nullptr)
             write_bit("PRECYINIT.CIN");
         push("CARRY4");
         for (char c : {'A', 'B', 'C', 'D'})
@@ -723,8 +714,8 @@ struct FasmBackend
     void write_routing()
     {
         get_pseudo_pip_data();
-        for (auto net : sorted(ctx->nets)) {
-            NetInfo *ni = net.second;
+        for (auto& net : ctx->nets) {
+            NetInfo *ni = net.second.get();
             for (auto &w : ni->wires) {
                 if (w.second.pip != PipId())
                     write_pip(w.second.pip, ni);
@@ -739,11 +730,11 @@ struct FasmBackend
         bool vref = false;
     };
 
-    std::unordered_map<int, BankIoConfig> ioconfig_by_hclk;
+    dict<int, BankIoConfig> ioconfig_by_hclk;
 
     void write_io_config(CellInfo *pad)
     {
-        NetInfo *pad_net = get_net_or_empty(pad, ctx->id("PAD"));
+        NetInfo *pad_net = pad->getPort(ctx->id("PAD"));
         NPNR_ASSERT(pad_net != nullptr);
         std::string iostandard = str_or_default(pad->attrs, ctx->id("IOSTANDARD"), "LVCMOS33");
         std::string pulltype = str_or_default(pad->attrs, ctx->id("PULLTYPE"), "NONE");
@@ -925,9 +916,9 @@ struct FasmBackend
         BelId inv;
 
         if (is_riob18)
-            inv = ctx->getBelByName(ctx->id(site + "/IOB18S/O_ININV"));
+            inv = ctx->getBelByNameStr(site + "/IOB18S/O_ININV");
         else
-            inv = ctx->getBelByName(ctx->id(site + "/IOB33S/O_ININV"));
+            inv = ctx->getBelByNameStr(site + "/IOB33S/O_ININV");
 
         if (inv != BelId() && ctx->getBoundBelCell(inv) != nullptr)
             write_bit("OUT_DIFF");
@@ -1018,10 +1009,10 @@ struct FasmBackend
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
             write_bit("ODDR.SRUSED");
             write_bit("ODDR_TDDR.IN_USE");
-            write_bit("OQUSED", get_net_or_empty(ci, ctx->id("OQ")) != nullptr);
+            write_bit("OQUSED", ci->getPort(ctx->id("OQ")) != nullptr);
             write_bit("ZINV_CLK", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
             for (std::string t : {"T1", "T2", "T3", "T4"})
-                write_bit("ZINV_" + t, (get_net_or_empty(ci, ctx->id(t)) != nullptr || t == "T1") &&
+                write_bit("ZINV_" + t, (ci->getPort(ctx->id(t)) != nullptr || t == "T1") &&
                                                !bool_or_default(ci->params, ctx->id("IS_" + t + "_INVERTED"), false));
             for (std::string d : {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"})
                 write_bit("IS_" + d + "_INVERTED",
@@ -1034,9 +1025,9 @@ struct FasmBackend
             push("OSERDES");
             write_bit("IN_USE");
             std::string type = str_or_default(ci->params, ctx->id("DATA_RATE_OQ"), "BUF");
-            write_bit(std::string("DATA_RATE_OQ.") + ((get_net_or_empty(ci, ctx->id("OQ")) != nullptr) ? type : "BUF"));
+            write_bit(std::string("DATA_RATE_OQ.") + ((ci->getPort(ctx->id("OQ")) != nullptr) ? type : "BUF"));
             write_bit(std::string("DATA_RATE_TQ.") +
-                      ((get_net_or_empty(ci, ctx->id("TQ")) != nullptr)
+                      ((ci->getPort(ctx->id("TQ")) != nullptr)
                                ? str_or_default(ci->params, ctx->id("DATA_RATE_TQ"), "BUF")
                                : "BUF"));
             int width = int_or_default(ci->params, ctx->id("DATA_WIDTH"), 8);
@@ -1117,8 +1108,8 @@ struct FasmBackend
 
     void write_io()
     {
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
+        for (auto& cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
                 blank();
@@ -1162,10 +1153,10 @@ struct FasmBackend
         std::string name, type;
 
         std::set<std::string> all_gclk;
-        std::unordered_map<int, std::set<std::string>> hclk_by_row;
+        dict<int, std::set<std::string>> hclk_by_row;
 
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
+        for (auto& cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
             if (ci->type == ctx->id("BUFGCTRL")) {
                 push(get_tile_name(ci->bel.tile));
                 auto xy = ctx->getSiteLocInTile(ci->bel);
@@ -1410,7 +1401,7 @@ struct FasmBackend
         if (name == "DIVCLK" || name == "CLKFBOUT") {
             used = true;
         } else {
-            used = get_net_or_empty(ci, ctx->id(name)) != nullptr;
+            used = ci->getPort(ctx->id(name)) != nullptr;
         }
         if (name == "DIVCLK") {
             write_int_vector("DIVCLK_DIVCLK_HIGH_TIME[5:0]", high, 6);
@@ -1583,8 +1574,8 @@ struct FasmBackend
 
     void write_ip()
     {
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
+        for (auto& cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
             if (ci->type == ctx->id("DSP48E1_DSP48E1")) {
                 write_dsp_cell(ci);
                 blank();

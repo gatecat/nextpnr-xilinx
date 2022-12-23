@@ -24,10 +24,10 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins);
-void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map<IdString, bool>> &tied_pins);
+void get_invertible_pins(Context *ctx, dict<IdString, pool<IdString>> &invertible_pins);
+void get_tied_pins(Context *ctx, dict<IdString, dict<IdString, bool>> &tied_pins);
 void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vector<std::string>>> &ul_pins);
-void get_top_level_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &toplevel_pins);
+void get_top_level_pins(Context *ctx, dict<IdString, pool<IdString>> &toplevel_pins);
 
 NEXTPNR_NAMESPACE_END
 

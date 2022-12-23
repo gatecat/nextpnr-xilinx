@@ -35,32 +35,32 @@ NEXTPNR_NAMESPACE_BEGIN
 void XC7Packer::prepare_clocking()
 {
     log_info("Preparing clocking...\n");
-    std::unordered_map<IdString, IdString> upgrade;
+    dict<IdString, IdString> upgrade;
     upgrade[ctx->id("MMCME2_BASE")] = ctx->id("MMCME2_ADV");
     upgrade[ctx->id("PLLE2_BASE")] = ctx->id("PLLE2_ADV");
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (upgrade.count(ci->type)) {
             IdString new_type = upgrade.at(ci->type);
             ci->type = new_type;
         } else if (ci->type == ctx->id("BUFG")) {
             ci->type = ctx->id("BUFGCTRL");
-            rename_port(ctx, ci, ctx->id("I"), ctx->id("I0"));
+            ci->renamePort(ctx->id("I"), ctx->id("I0"));
             tie_port(ci, "CE0", true, true);
             tie_port(ci, "S0", true, true);
             tie_port(ci, "S1", false, true);
             tie_port(ci, "IGNORE0", true, true);
         } else if (ci->type == ctx->id("BUFGCE")) {
             ci->type = ctx->id("BUFGCTRL");
-            rename_port(ctx, ci, ctx->id("I"), ctx->id("I0"));
-            rename_port(ctx, ci, ctx->id("CE"), ctx->id("CE0"));
+            ci->renamePort(ctx->id("I"), ctx->id("I0"));
+            ci->renamePort(ctx->id("CE"), ctx->id("CE0"));
             tie_port(ci, "S0", true, true);
             tie_port(ci, "S1", false, true);
             tie_port(ci, "IGNORE0", true, true);
         }
         if (ci->attrs.count(ctx->id("BEL")))
-            used_bels.insert(ctx->getBelByName(ctx->id(ci->attrs.at(ctx->id("BEL")).as_string())));
+            used_bels.insert(ctx->getBelByNameStr(ci->attrs.at(ctx->id("BEL")).as_string()));
     }
 }
 
@@ -73,12 +73,12 @@ void XC7Packer::pack_plls()
             ci->params[param] = value;
     };
 
-    std::unordered_map<IdString, XFormRule> pll_rules;
+    dict<IdString, XFormRule> pll_rules;
     pll_rules[ctx->id("MMCME2_ADV")].new_type = ctx->id("MMCME2_ADV_MMCME2_ADV");
     pll_rules[ctx->id("PLLE2_ADV")].new_type = ctx->id("PLLE2_ADV_PLLE2_ADV");
     generic_xform(pll_rules);
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         // Preplace PLLs to make use of dedicated/short routing paths
         if (ci->type == id_MMCM_MMCM_TOP || ci->type == id_PLL_PLL_TOP)
             try_preplace(ci, ctx->id("CLKIN1"));
@@ -97,8 +97,8 @@ void XC7Packer::pack_plls()
 
             // Fixup routing
             if (str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL") == "INTERNAL") {
-                disconnect_port(ctx, ci, ctx->id("CLKFBIN"));
-                connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, ctx->id("CLKFBIN"));
+                ci->disconnectPort(ctx->id("CLKFBIN"));
+                ci->connectPort(ctx->id("CLKFBIN"), ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
         }
     }
@@ -107,22 +107,22 @@ void XC7Packer::pack_plls()
 void XC7Packer::pack_gbs()
 {
     log_info("Packing global buffers...\n");
-    std::unordered_map<IdString, XFormRule> gb_rules;
+    dict<IdString, XFormRule> gb_rules;
     gb_rules[id_BUFGCTRL].new_type = id_BUFGCTRL;
     gb_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
 
     generic_xform(gb_rules);
 
     // Make sure prerequisites are set up first
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("PS7_PS7"))
             preplace_unique(ci);
     }
 
     // Preplace global buffers to make use of dedicated/short routing
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == id_BUFGCTRL)
             try_preplace(ci, ctx->id("I0"));
         if (ci->type == ctx->id("BUFG_BUFG"))

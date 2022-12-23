@@ -84,12 +84,12 @@ void XC7Packer::pack_dsps()
 
     std::vector<CellInfo *> all_dsps;
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
 
         auto add_const_pin = [&](PortInfo& port, std::string& pins, std::string& pin_name, std::string net) {
             if (port.net && port.net->name == ctx->id(net)) {
-                disconnect_port(ctx, ci, port.name);
+                ci->disconnectPort(port.name);
                 pins += " " + pin_name;
             }
         };
@@ -109,7 +109,7 @@ void XC7Packer::pack_dsps()
                     if (port.second.net == nullptr)
                         continue;
                     if (port.second.net->name == ctx->id("$PACKER_GND_NET"))
-                        disconnect_port(ctx, ci, port.first);
+                        ci->disconnectPort(port.first);
                 }
 
                 // prjxray has extra bits for these ports to hardwire them to VCC/GND

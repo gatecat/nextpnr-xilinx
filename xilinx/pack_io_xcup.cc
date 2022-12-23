@@ -35,8 +35,8 @@ NEXTPNR_NAMESPACE_BEGIN
 CellInfo *USPacker::insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o)
 {
     auto ibufc = create_cell(ctx, ctx->id("IBUFCTRL"), name);
-    connect_port(ctx, i, ibufc.get(), ctx->id("I"));
-    connect_port(ctx, o, ibufc.get(), ctx->id("O"));
+    ibufc->connectPort(ctx->id("I"), i);
+    ibufc->connectPort(ctx->id("O"), o);
     CellInfo *ibufc_ptr = ibufc.get();
     new_cells.push_back(std::move(ibufc));
     return ibufc_ptr;
@@ -45,8 +45,8 @@ CellInfo *USPacker::insert_ibufctrl(IdString name, NetInfo *i, NetInfo *o)
 CellInfo *USPacker::insert_inbuf(IdString name, NetInfo *pad, NetInfo *o)
 {
     auto inbuf = create_cell(ctx, ctx->id("INBUF"), name);
-    connect_port(ctx, pad, inbuf.get(), ctx->id("PAD"));
-    connect_port(ctx, o, inbuf.get(), ctx->id("O"));
+    inbuf->connectPort(ctx->id("PAD"), pad);
+    inbuf->connectPort(ctx->id("O"), o);
     CellInfo *inbuf_ptr = inbuf.get();
     new_cells.push_back(std::move(inbuf));
     return inbuf_ptr;
@@ -55,9 +55,9 @@ CellInfo *USPacker::insert_inbuf(IdString name, NetInfo *pad, NetInfo *o)
 CellInfo *XilinxPacker::insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri)
 {
     auto obuf = create_cell(ctx, type, name);
-    connect_port(ctx, i, obuf.get(), ctx->id("I"));
-    connect_port(ctx, tri, obuf.get(), ctx->id("T"));
-    connect_port(ctx, o, obuf.get(), ctx->id("O"));
+    obuf->connectPort(ctx->id("I"), i);
+    obuf->connectPort(ctx->id("T"), tri);
+    obuf->connectPort(ctx->id("O"), o);
     CellInfo *obuf_ptr = obuf.get();
     new_cells.push_back(std::move(obuf));
     return obuf_ptr;
@@ -66,9 +66,9 @@ CellInfo *XilinxPacker::insert_obuf(IdString name, IdString type, NetInfo *i, Ne
 CellInfo *USPacker::insert_diffinbuf(IdString name, const std::array<NetInfo *, 2> &i, NetInfo *o)
 {
     auto dibuf = create_cell(ctx, ctx->id("DIFFINBUF"), name);
-    connect_port(ctx, i[0], dibuf.get(), ctx->id("DIFF_IN_P"));
-    connect_port(ctx, i[1], dibuf.get(), ctx->id("DIFF_IN_N"));
-    connect_port(ctx, o, dibuf.get(), ctx->id("O"));
+    dibuf->connectPort(ctx->id("DIFF_IN_P"), i[0]);
+    dibuf->connectPort(ctx->id("DIFF_IN_N"), i[1]);
+    dibuf->connectPort(ctx->id("O"), o);
     CellInfo *dibuf_ptr = dibuf.get();
     new_cells.push_back(std::move(dibuf));
     return dibuf_ptr;
@@ -77,8 +77,8 @@ CellInfo *USPacker::insert_diffinbuf(IdString name, const std::array<NetInfo *, 
 CellInfo *XilinxPacker::insert_outinv(IdString name, NetInfo *i, NetInfo *o)
 {
     auto inv = create_cell(ctx, ctx->id("INV"), name);
-    connect_port(ctx, i, inv.get(), ctx->id("I"));
-    connect_port(ctx, o, inv.get(), ctx->id("O"));
+    inv->connectPort(ctx->id("I"), i);
+    inv->connectPort(ctx->id("O"), o);
     CellInfo *inv_ptr = inv.get();
     new_cells.push_back(std::move(inv));
     return inv_ptr;
@@ -92,28 +92,26 @@ NetInfo *XilinxPacker::invert_net(NetInfo *toinv)
     // and IOLOGIC packing
     if (toinv->driver.cell != nullptr && toinv->driver.cell->type == ctx->id("LUT1") &&
         int_or_default(toinv->driver.cell->params, ctx->id("INIT"), 0) == 1) {
-        NetInfo *preinv = get_net_or_empty(toinv->driver.cell, ctx->id("I0"));
+        NetInfo *preinv = toinv->driver.cell->getPort(ctx->id("I0"));
         // If only one user, also sweep the inversion LUT to avoid packing issues
-        if (toinv->users.size() == 1) {
+        if (toinv->users.entries() == 1) {
             packed_cells.insert(toinv->driver.cell->name);
-            disconnect_port(ctx, toinv->driver.cell, ctx->id("I0"));
-            disconnect_port(ctx, toinv->driver.cell, ctx->id("O"));
+            toinv->driver.cell->disconnectPort(ctx->id("I0"));
+            toinv->driver.cell->disconnectPort(ctx->id("O"));
         }
         return preinv;
     } else {
-        std::unique_ptr<NetInfo> inv{new NetInfo};
-        IdString inv_name = ctx->id(toinv->name.str(ctx) + "$inverted$" + std::to_string(autoidx++));
-        inv->name = inv_name;
-        auto lut = create_lut(ctx, inv_name.str(ctx) + "$lut", {toinv}, inv.get(), Property(1));
+        std::unique_ptr<NetInfo> inv = std::make_unique<NetInfo>(ctx->id(toinv->name.str(ctx) + "$inverted$" + std::to_string(autoidx++)));
+        auto lut = create_lut(ctx, inv->name.str(ctx) + "$lut", {toinv}, inv.get(), Property(1));
         NetInfo *inv_ptr = inv.get();
-        ctx->nets[inv_name] = std::move(inv);
+        ctx->nets[inv->name] = std::move(inv);
         new_cells.push_back(std::move(lut));
         return inv_ptr;
     }
 }
 
 namespace {
-static const std::unordered_set<std::string> pseudo_diff_iotypes = {
+static const pool<std::string> pseudo_diff_iotypes = {
         "DIFF_POD12_DCI",  "DIFF_POD12",        "DIFF_POD10_DCI",  "DIFF_POD10",
         "DIFF_SSTL12_DCI", "DIFF_SSTL_135_DCI", "DIFF_SSTL15_DCI", "DIFF_SSTL18_I_DCI",
         "DIFF_SSTL12_I",   "DIFF_SSTL12_II",    "DIFF_HSTL_I_12",  "DIFF_HSTL_I_12_DCI"};
@@ -130,7 +128,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     auto pad_site = [&](NetInfo *n) {
         for (auto user : n->users)
             if (user.cell->type == ctx->id("PAD"))
-                return ctx->getBelSite(ctx->getBelByName(ctx->id(user.cell->attrs[ctx->id("BEL")].as_string())));
+                return ctx->getBelSite(ctx->getBelByNameStr(user.cell->attrs[ctx->id("BEL")].as_string()));
         NPNR_ASSERT_FALSE(("can't find PAD for net " + n->name.str(ctx)).c_str());
     };
 
@@ -139,11 +137,11 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
      * To avoid various nasty bugs (such as auto-transformation by Vivado of dedicated INV primitives to LUT1s), we
      * have to maintain this hierarchy so it can be re-built during DCP conversion in RapidWright
      */
-    std::unordered_map<IdString, PortInfo> orig_ports = xil_iob->ports;
+    dict<IdString, PortInfo> orig_ports = xil_iob->ports;
     std::vector<CellInfo *> subcells;
 
     auto diffinbuf_site = [&](std::string site_p) {
-        BelId pad_out_buf = ctx->getBelByName(ctx->id(site_p + "/PADOUT"));
+        BelId pad_out_buf = ctx->getBelByNameStr(site_p + "/PADOUT");
         WireId cursor = ctx->getBelPinWire(pad_out_buf, ctx->id("OUT"));
         while (true) {
             auto pips_dh = ctx->getPipsDownhill(cursor);
@@ -157,45 +155,45 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     };
 
     if (is_se_ibuf || is_se_iobuf) {
-        NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("I"));
+        NetInfo *pad_net = xil_iob->getPort(is_se_iobuf ? ctx->id("IO") : ctx->id("I"));
         NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
         if (!is_se_iobuf)
-            disconnect_port(ctx, xil_iob, ctx->id("I"));
+            xil_iob->disconnectPort(ctx->id("I"));
         NetInfo *inb_out = create_internal_net(xil_iob->name, "OUT");
         CellInfo *inbuf = insert_inbuf(int_name(xil_iob->name, "INBUF_INST"), pad_net, inb_out);
         inbuf->attrs[ctx->id("BEL")] = site + "/INBUF";
         // Don't need to check cell type here, as replace_port is a no-op if port doesn't exist
-        replace_port(xil_iob, ctx->id("VREF"), inbuf, ctx->id("VREF"));
-        replace_port(xil_iob, ctx->id("OSC_EN"), inbuf, ctx->id("OSC_EN"));
+        xil_iob->movePortTo(ctx->id("VREF"), inbuf, ctx->id("VREF"));
+        xil_iob->movePortTo(ctx->id("OSC_EN"), inbuf, ctx->id("OSC_EN"));
         for (int i = 0; i < 4; i++)
-            replace_port(xil_iob, ctx->id("OSC[" + std::to_string(i) + "]"), inbuf,
+            xil_iob->movePortTo(ctx->id("OSC[" + std::to_string(i) + "]"), inbuf,
                          ctx->id("OSC[" + std::to_string(i) + "]"));
 
-        NetInfo *top_out = get_net_or_empty(xil_iob, ctx->id("O"));
-        disconnect_port(ctx, xil_iob, ctx->id("O"));
+        NetInfo *top_out = xil_iob->getPort(ctx->id("O"));
+        xil_iob->disconnectPort(ctx->id("O"));
         CellInfo *ibufctrl = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL_INST"), inb_out, top_out);
         ibufctrl->attrs[ctx->id("BEL")] = site + "/IBUFCTRL";
-        replace_port(xil_iob, ctx->id("IBUFDISABLE"), ibufctrl, ctx->id("IBUFDISABLE"));
+        xil_iob->movePortTo(ctx->id("IBUFDISABLE"), ibufctrl, ctx->id("IBUFDISABLE"));
         if (is_se_iobuf)
-            connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("T")), ibufctrl, ctx->id("T"));
+            ibufctrl->connectPort(ctx->id("T"), xil_iob->getPort(ctx->id("T")));
 
         subcells.push_back(inbuf);
         subcells.push_back(ibufctrl);
     }
     if (is_se_obuf || is_se_iobuf) {
-        NetInfo *pad_net = get_net_or_empty(xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
+        NetInfo *pad_net = xil_iob->getPort(is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
-        disconnect_port(ctx, xil_iob, is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
+        xil_iob->disconnectPort(is_se_iobuf ? ctx->id("IO") : ctx->id("O"));
         bool has_dci = xil_iob->type == ctx->id("IOBUF_DCIEN") || xil_iob->type == ctx->id("IOBUFE3");
         CellInfo *obuf = insert_obuf(
                 int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == ctx->id("OBUFT")) ? "OBUFT" : "OBUF",
                          !is_se_obuf),
                 is_se_iobuf ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT")) : xil_iob->type,
-                get_net_or_empty(xil_iob, ctx->id("I")), pad_net, get_net_or_empty(xil_iob, ctx->id("T")));
+                xil_iob->getPort(ctx->id("I")), pad_net, xil_iob->getPort(ctx->id("T")));
         obuf->attrs[ctx->id("BEL")] = site + "/OUTBUF";
-        replace_port(xil_iob, ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
+        xil_iob->movePortTo(ctx->id("DCITERMDISABLE"), obuf, ctx->id("DCITERMDISABLE"));
         if (is_se_iobuf)
             subcells.push_back(obuf);
     }
@@ -215,17 +213,17 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
 
     if (is_diff_ibuf || is_diff_out_ibuf || is_diff_iobuf || is_diff_out_iobuf) {
         NetInfo *pad_p_net =
-                get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("I"));
+                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("I"));
         NPNR_ASSERT(pad_p_net != nullptr);
         std::string site_p = pad_site(pad_p_net);
         NetInfo *pad_n_net =
-                get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("IB"));
+                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("IB"));
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
 
         if (!is_diff_iobuf && !is_diff_out_iobuf) {
-            disconnect_port(ctx, xil_iob, ctx->id("I"));
-            disconnect_port(ctx, xil_iob, ctx->id("IB"));
+            xil_iob->disconnectPort(ctx->id("I"));
+            xil_iob->disconnectPort(ctx->id("IB"));
         }
 
         std::string site_dibuf = diffinbuf_site(site_p);
@@ -234,15 +232,15 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
                 insert_diffinbuf(int_name(xil_iob->name, "DIFFINBUF_INST"), {pad_p_net, pad_n_net}, dibuf_out);
         dibuf->attrs[ctx->id("BEL")] = site_dibuf + "/DIFFINBUF";
         for (int i = 0; i < 2; i++)
-            replace_port(xil_iob, ctx->id("OSC_EN[" + std::to_string(i) + "]"), dibuf,
+            xil_iob->movePortTo(ctx->id("OSC_EN[" + std::to_string(i) + "]"), dibuf,
                          ctx->id("OSC_EN[" + std::to_string(i) + "]"));
         for (int i = 0; i < 4; i++)
-            replace_port(xil_iob, ctx->id("OSC[" + std::to_string(i) + "]"), dibuf,
+            xil_iob->movePortTo(ctx->id("OSC[" + std::to_string(i) + "]"), dibuf,
                          ctx->id("OSC[" + std::to_string(i) + "]"));
-        replace_port(xil_iob, ctx->id("VREF"), dibuf, ctx->id("VREF"));
+        xil_iob->movePortTo(ctx->id("VREF"), dibuf, ctx->id("VREF"));
 
-        NetInfo *top_out = get_net_or_empty(xil_iob, ctx->id("O"));
-        disconnect_port(ctx, xil_iob, ctx->id("O"));
+        NetInfo *top_out = xil_iob->getPort(ctx->id("O"));
+        xil_iob->disconnectPort(ctx->id("O"));
         CellInfo *ibufctrl_p = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRL_INST"), dibuf_out, top_out);
         ibufctrl_p->attrs[ctx->id("BEL")] = site_p + "/IBUFCTRL";
 
@@ -251,9 +249,9 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
 
         if (is_diff_out_ibuf || is_diff_out_iobuf) {
             NetInfo *dibuf_out_b = create_internal_net(xil_iob->name, "OUTB");
-            connect_port(ctx, dibuf_out_b, dibuf, ctx->id("O_B"));
-            NetInfo *top_out_b = get_net_or_empty(xil_iob, ctx->id("OB"));
-            disconnect_port(ctx, xil_iob, ctx->id("OB"));
+            dibuf->connectPort(ctx->id("O_B"), dibuf_out_b);
+            NetInfo *top_out_b = xil_iob->getPort(ctx->id("OB"));
+            xil_iob->disconnectPort(ctx->id("OB"));
             CellInfo *ibufctrl_n = insert_ibufctrl(int_name(xil_iob->name, "IBUFCTRLN_INST"), dibuf_out_b, top_out_b);
             ibufctrl_n->attrs[ctx->id("BEL")] = site_n + "/IBUFCTRL";
             subcells.push_back(ibufctrl_n);
@@ -263,20 +261,20 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     if (is_diff_obuf || is_diff_out_iobuf || is_diff_iobuf) {
         if (is_pseudo_diff_out) {
             NetInfo *pad_p_net =
-                    get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
+                    xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
             NPNR_ASSERT(pad_p_net != nullptr);
             std::string site_p = pad_site(pad_p_net);
             NetInfo *pad_n_net =
-                    get_net_or_empty(xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
+                    xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
             NPNR_ASSERT(pad_n_net != nullptr);
             std::string site_n = pad_site(pad_n_net);
 
-            disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
-            disconnect_port(ctx, xil_iob, (is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
+            xil_iob->disconnectPort((is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IO") : ctx->id("O"));
+            xil_iob->disconnectPort((is_diff_iobuf || is_diff_out_iobuf) ? ctx->id("IOB") : ctx->id("OB"));
 
             NetInfo *inv_i = create_internal_net(xil_iob->name, is_diff_obuf ? "I_B" : "OBUFTDS$subnet$I_B");
             CellInfo *inv = insert_outinv(int_name(xil_iob->name, is_diff_obuf ? "INV" : "OBUFTDS$subcell$INV"),
-                                          get_net_or_empty(xil_iob, ctx->id("I")), inv_i);
+                                          xil_iob->getPort(ctx->id("I")), inv_i);
             inv->attrs[ctx->id("BEL")] = site_p + "/OUTINV";
 
             bool has_dci = xil_iob->type == ctx->id("IOBUFDS_DCIEN") || xil_iob->type == ctx->id("IOBUFDSE3");
@@ -285,22 +283,22 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
                     int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
                     (is_diff_iobuf || is_diff_out_iobuf) ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
                                                          : ctx->id("OBUF"),
-                    get_net_or_empty(xil_iob, ctx->id("I")), pad_p_net, get_net_or_empty(xil_iob, ctx->id("T")));
+                    xil_iob->getPort(ctx->id("I")), pad_p_net, xil_iob->getPort(ctx->id("T")));
 
             obuf_p->attrs[ctx->id("BEL")] = site_p + "/OUTBUF";
             subcells.push_back(obuf_p);
-            connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_p, ctx->id("DCITERMDISABLE"));
+            obuf_p->connectPort(ctx->id("DCITERMDISABLE"), xil_iob->getPort(ctx->id("DCITERMDISABLE")));
 
             CellInfo *obuf_n = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "N" : "OBUFTDS$subcell$N"),
                                            (is_diff_iobuf || is_diff_out_iobuf)
                                                    ? (has_dci ? ctx->id("OBUFT_DCIEN") : ctx->id("OBUFT"))
                                                    : ctx->id("OBUF"),
-                                           inv_i, pad_n_net, get_net_or_empty(xil_iob, ctx->id("T")));
+                                           inv_i, pad_n_net, xil_iob->getPort(ctx->id("T")));
 
             obuf_n->attrs[ctx->id("BEL")] = site_n + "/OUTBUF";
-            connect_port(ctx, get_net_or_empty(xil_iob, ctx->id("DCITERMDISABLE")), obuf_n, ctx->id("DCITERMDISABLE"));
+            obuf_n->connectPort(ctx->id("DCITERMDISABLE"), xil_iob->getPort(ctx->id("DCITERMDISABLE")));
 
-            disconnect_port(ctx, xil_iob, ctx->id("DCITERMDISABLE"));
+            xil_iob->disconnectPort(ctx->id("DCITERMDISABLE"));
 
             subcells.push_back(inv);
             subcells.push_back(obuf_p);
@@ -340,7 +338,7 @@ CellInfo *XilinxPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
     CellInfo *tbuf = nullptr;
     if (npnr_io->type == ctx->id("$nextpnr_ibuf")) {
         cell = create_cell(ctx, ctx->id("IBUF"), ctx->id(npnr_io->name.str(ctx) + "$ibuf$"));
-        replace_port(npnr_io, ctx->id("O"), cell.get(), ctx->id("O"));
+        npnr_io->movePortTo(ctx->id("O"), cell.get(), ctx->id("O"));
         top_port = ctx->id("I");
     } else if (npnr_io->type == ctx->id("$nextpnr_obuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
         NetInfo *donet = npnr_io->ports.at(ctx->id("I")).net;
@@ -354,35 +352,35 @@ CellInfo *XilinxPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
             top_port = ctx->id("O");
         } else {
             cell = create_cell(ctx, ctx->id("IOBUF"), ctx->id(npnr_io->name.str(ctx) + "$iobuf$"));
-            replace_port(npnr_io, ctx->id("O"), cell.get(), ctx->id("O"));
+            npnr_io->movePortTo(ctx->id("O"), cell.get(), ctx->id("O"));
             top_port = ctx->id("IO");
             if (!tbuf) {
-                if (get_net_or_empty(npnr_io, ctx->id("I")) == nullptr)
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), cell.get(), ctx->id("T"));
+                if (npnr_io->getPort(ctx->id("I")) == nullptr)
+                    cell->connectPort(ctx->id("T"), ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
                 else
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), cell.get(), ctx->id("T"));
+                    cell->connectPort(ctx->id("T"), ctx->nets[ctx->id("$PACKER_GND_NET")].get());
             }
         }
         if (tbuf) {
             log_info("    Replacing %s '%s' with a tristate IO buffer\n", tbuf->type.c_str(ctx), tbuf->name.c_str(ctx));
-            replace_port(tbuf, ctx->id("A"), cell.get(), ctx->id("I"));
-            NetInfo *inv_en = invert_net(get_net_or_empty(tbuf, ctx->id("E")));
-            connect_port(ctx, inv_en, cell.get(), ctx->id("T"));
+            tbuf->movePortTo(ctx->id("A"), cell.get(), ctx->id("I"));
+            NetInfo *inv_en = invert_net(tbuf->getPort(ctx->id("E")));
+            cell->connectPort(ctx->id("T"), inv_en);
 
             ctx->nets.erase(tbuf->ports.at(ctx->id("Y")).net->name);
             tbuf->ports.at(ctx->id("Y")).net = nullptr;
             packed_cells.insert(tbuf->name);
         } else {
-            replace_port(npnr_io, ctx->id("I"), cell.get(), ctx->id("I"));
+            npnr_io->movePortTo(ctx->id("I"), cell.get(), ctx->id("I"));
         }
     } else {
         NPNR_ASSERT_FALSE("bad IO buffer type");
     }
     // Rename nets to avoid collisions
-    NetInfo *i_net = get_net_or_empty(cell.get(), ctx->id("I"));
+    NetInfo *i_net = cell->getPort(ctx->id("I"));
     if (i_net)
         rename_net(i_net->name, ctx->id(i_net->name.str(ctx) + "$auto$IOBUF_I$"));
-    NetInfo *o_net = get_net_or_empty(cell.get(), ctx->id("O"));
+    NetInfo *o_net = cell->getPort(ctx->id("O"));
     if (o_net)
         rename_net(o_net->name, ctx->id(o_net->name.str(ctx) + "$auto$IOBUF_O$"));
 
@@ -403,11 +401,11 @@ std::pair<CellInfo *, PortRef> XilinxPacker::insert_pad_and_buf(CellInfo *npnr_i
     PortRef iobuf;
     iobuf.cell = nullptr;
     if (npnr_io->type == ctx->id("$nextpnr_obuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
-        ionet = get_net_or_empty(npnr_io, ctx->id("I"));
+        ionet = npnr_io->getPort(ctx->id("I"));
         if (ionet != nullptr && ionet->driver.cell != nullptr)
             if (toplevel_ports.count(ionet->driver.cell->type) &&
                 toplevel_ports.at(ionet->driver.cell->type).count(ionet->driver.port)) {
-                if (ionet->users.size() > 1)
+                if (ionet->users.entries() > 1)
                     log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
                               ionet->driver.cell->name.c_str(ctx));
                 iobuf = ionet->driver;
@@ -415,11 +413,11 @@ std::pair<CellInfo *, PortRef> XilinxPacker::insert_pad_and_buf(CellInfo *npnr_i
         pad_cell->attrs[ctx->id("X_IO_DIR")] = std::string(npnr_io->type == ctx->id("$nextpnr_obuf") ? "OUT" : "INOUT");
     }
     if (npnr_io->type == ctx->id("$nextpnr_ibuf") || npnr_io->type == ctx->id("$nextpnr_iobuf")) {
-        ionet = get_net_or_empty(npnr_io, ctx->id("O"));
+        ionet = npnr_io->getPort(ctx->id("O"));
         if (ionet != nullptr)
             for (auto &usr : ionet->users)
                 if (toplevel_ports.count(usr.cell->type) && toplevel_ports.at(usr.cell->type).count(usr.port)) {
-                    if (ionet->users.size() > 1)
+                    if (ionet->users.entries() > 1)
                         log_error("IO buffer '%s' is connected to more than a single top level IO pin.\n",
                                   usr.cell->name.c_str(ctx));
                     iobuf = usr;
@@ -430,8 +428,7 @@ std::pair<CellInfo *, PortRef> XilinxPacker::insert_pad_and_buf(CellInfo *npnr_i
     if (!iobuf.cell) {
         // No IO buffer, need to create one
         iobuf.cell = create_iobuf(npnr_io, iobuf.port);
-        std::unique_ptr<NetInfo> pad_ionet{new NetInfo};
-        pad_ionet->name = npnr_io->name;
+        std::unique_ptr<NetInfo> pad_ionet = std::make_unique<NetInfo>(npnr_io->name);
         NPNR_ASSERT(!ctx->nets.count(pad_ionet->name));
         ionet = pad_ionet.get();
         ctx->nets[npnr_io->name] = std::move(pad_ionet);
@@ -443,12 +440,12 @@ std::pair<CellInfo *, PortRef> XilinxPacker::insert_pad_and_buf(CellInfo *npnr_i
     NPNR_ASSERT(ionet != nullptr);
 
     for (auto &port : npnr_io->ports)
-        disconnect_port(ctx, npnr_io, port.first);
+        npnr_io->disconnectPort(port.first);
 
-    connect_port(ctx, ionet, pad_cell.get(), ctx->id("PAD"));
+    pad_cell->connectPort(ctx->id("PAD"), ionet);
     if (iobuf.cell->ports.at(iobuf.port).net != ionet) {
-        disconnect_port(ctx, iobuf.cell, iobuf.port);
-        connect_port(ctx, ionet, iobuf.cell, iobuf.port);
+        iobuf.cell->disconnectPort(iobuf.port);
+        iobuf.cell->connectPort(iobuf.port, ionet);
     }
 
     result.first = pad_cell.get();
@@ -465,14 +462,14 @@ void USPacker::pack_io()
     get_top_level_pins(ctx, toplevel_ports);
     // Insert PAD cells on top level IO, and IO buffers where one doesn't exist already
     std::vector<std::pair<CellInfo *, PortRef>> pad_and_buf;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf") ||
             ci->type == ctx->id("$nextpnr_obuf"))
             pad_and_buf.push_back(insert_pad_and_buf(ci));
     }
     flush_cells();
-    std::unordered_set<BelId> used_io_bels;
+    pool<BelId> used_io_bels;
     int unconstr_io_count = 0;
     for (auto &iob : pad_and_buf) {
         CellInfo *pad = iob.first;
@@ -487,7 +484,7 @@ void USPacker::pack_io()
             pad->attrs[ctx->id("BEL")] = std::string(site + "/PAD");
         }
         if (pad->attrs.count(ctx->id("BEL"))) {
-            used_io_bels.insert(ctx->getBelByName(ctx->id(pad->attrs.at(ctx->id("BEL")).as_string())));
+            used_io_bels.insert(ctx->getBelByNameStr(pad->attrs.at(ctx->id("BEL")).as_string()));
         } else {
             ++unconstr_io_count;
         }
@@ -523,7 +520,7 @@ void USPacker::pack_io()
     flush_cells();
 
     // Type transformations from logical to physical
-    std::unordered_map<IdString, XFormRule> io_rules;
+    dict<IdString, XFormRule> io_rules;
     io_rules[ctx->id("PAD")].new_type = ctx->id("IOB_PAD");
     io_rules[ctx->id("OBUF")].new_type = ctx->id("IOB_OUTBUF");
     io_rules[ctx->id("OBUFT")].new_type = ctx->id("IOB_OUTBUF");
@@ -545,7 +542,7 @@ void USPacker::pack_io()
 
 std::string USPacker::get_iol_site(const std::string &io_bel)
 {
-    BelId ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IBUFCTRL"));
+    BelId ibc_bel = ctx->getBelByNameStr(io_bel.substr(0, io_bel.find('/')) + "/IBUFCTRL");
     WireId start = ctx->getBelPinWire(ibc_bel, ctx->id("O"));
     WireId cursor = start;
     while (true) {
@@ -561,7 +558,7 @@ std::string USPacker::get_iol_site(const std::string &io_bel)
 
 std::string USPacker::get_ioctrl_site(const std::string &iol_bel)
 {
-    BelId ibc_bel = ctx->getBelByName(ctx->id(iol_bel.substr(0, iol_bel.find('/')) + "/RXTX_BITSLICE"));
+    BelId ibc_bel = ctx->getBelByNameStr(iol_bel.substr(0, iol_bel.find('/')) + "/RXTX_BITSLICE");
     WireId start = ctx->getBelPinWire(ibc_bel, ctx->id("TX_BIT_CTRL_OUT0"));
     WireId cursor = start;
     while (true) {
@@ -577,17 +574,17 @@ std::string USPacker::get_ioctrl_site(const std::string &iol_bel)
 
 void USPacker::prepare_iologic()
 {
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         // ODDRE1 must be transformed to an OSERDESE3
         if (ci->type == ctx->id("ODDRE1")) {
             ci->type = ctx->id("OSERDESE3");
             ci->params[ctx->id("ODDR_MODE")] = std::string("TRUE");
-            rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
-            rename_port(ctx, ci, ctx->id("SR"), ctx->id("RST"));
-            rename_port(ctx, ci, ctx->id("D1"), ctx->id("D[0]"));
-            rename_port(ctx, ci, ctx->id("D2"), ctx->id("D[4]"));
-            rename_port(ctx, ci, ctx->id("Q"), ctx->id("OQ"));
+            ci->renamePort(ctx->id("C"), ctx->id("CLK"));
+            ci->renamePort(ctx->id("SR"), ctx->id("RST"));
+            ci->renamePort(ctx->id("D1"), ctx->id("D[0]"));
+            ci->renamePort(ctx->id("D2"), ctx->id("D[4]"));
+            ci->renamePort(ctx->id("Q"), ctx->id("OQ"));
         }
     }
 }
@@ -621,18 +618,18 @@ void USPacker::pack_iologic()
         return ctx->getBelTileType(bel) == ctx->id("HPIO_L") || ctx->getBelTileType(bel) == ctx->id("HPIO_RIGHT");
     };
 
-    std::unordered_map<IdString, BelId> iodelay_to_io;
+    dict<IdString, BelId> iodelay_to_io;
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("IDELAYE3")) {
-            NetInfo *d = get_net_or_empty(ci, ctx->id("IDATAIN"));
+            NetInfo *d = ci->getPort(ctx->id("IDATAIN"));
             if (d == nullptr || d->driver.cell == nullptr)
                 log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
             if (drv->type == ctx->id("IOB_IBUFCTRL"))
-                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+                io_bel = ctx->getBelByNameStr(drv->attrs.at(ctx->id("BEL")).as_string());
             else
                 log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
                           ctx->nameOf(ci), drv->type.c_str(ctx));
@@ -645,7 +642,7 @@ void USPacker::pack_iologic()
                 log_error("%s '%s' cannot be placed in a HDIO site\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             }
         } else if (ci->type == ctx->id("ODELAYE3")) {
-            NetInfo *q = get_net_or_empty(ci, ctx->id("DATAOUT"));
+            NetInfo *q = ci->getPort(ctx->id("DATAOUT"));
             if (q == nullptr || q->users.empty())
                 log_error("%s '%s' has disconnected DATAOUT output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             BelId io_bel;
@@ -653,7 +650,7 @@ void USPacker::pack_iologic()
                 // log_info("%s %s %s.%s [%s]\n", ctx->nameOf(ci), ctx->nameOf(q), ctx->nameOf(usr.cell),
                 // usr.port.c_str(ctx), usr.cell->type.c_str(ctx));
                 if (usr.cell->type == ctx->id("IOB_OUTBUF")) {
-                    io_bel = ctx->getBelByName(ctx->id(usr.cell->attrs.at(ctx->id("BEL")).as_string()));
+                    io_bel = ctx->getBelByNameStr(usr.cell->attrs.at(ctx->id("BEL")).as_string());
                     break;
                 }
             }
@@ -671,16 +668,16 @@ void USPacker::pack_iologic()
         }
     }
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("IDDRE1") || ci->type == ctx->id("ISERDESE3")) {
-            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            NetInfo *d = ci->getPort(ctx->id("D"));
             if (d == nullptr || d->driver.cell == nullptr)
                 log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
             if (drv->type == ctx->id("IOB_IBUFCTRL"))
-                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+                io_bel = ctx->getBelByNameStr(drv->attrs.at(ctx->id("BEL")).as_string());
             else if (drv->type == ctx->id("IDELAYE3") && d->driver.port == ctx->id("DATAOUT"))
                 io_bel = iodelay_to_io.at(drv->name);
             else
@@ -690,10 +687,10 @@ void USPacker::pack_iologic()
             if (is_hpio(io_bel)) {
                 xform_cell(hp_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/ISERDES";
-                if (get_net_or_empty(ci, ctx->id("IFD_CE")) == nullptr) {
+                if (ci->getPort(ctx->id("IFD_CE")) == nullptr) {
                     ci->ports[ctx->id("IFD_CE")].name = ctx->id("IFD_CE");
                     ci->ports[ctx->id("IFD_CE")].type = PORT_IN;
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("IFD_CE"));
+                    ci->connectPort(ctx->id("IFD_CE"), ctx->nets[ctx->id("$PACKER_GND_NET")].get());
                 }
             } else {
                 if (ci->type == ctx->id("ISERDESE3"))
@@ -702,39 +699,39 @@ void USPacker::pack_iologic()
                 ci->attrs[ctx->id("BEL")] = iol_site + "/IDDR";
             }
         } else if (ci->type == ctx->id("OSERDESE3")) {
-            NetInfo *q = get_net_or_empty(ci, ctx->id("OQ"));
+            NetInfo *q = ci->getPort(ctx->id("OQ"));
             if (q == nullptr || q->users.empty())
                 log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             BelId io_bel;
-            if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("IOB_OUTBUF"))
-                io_bel = ctx->getBelByName(ctx->id(q->users.at(0).cell->attrs.at(ctx->id("BEL")).as_string()));
-            else if (q->users.size() == 1 && q->users.at(0).cell->type == ctx->id("ODELAYE3") &&
-                     q->users.at(0).port == ctx->id("ODATAIN"))
-                io_bel = iodelay_to_io.at(q->users.at(0).cell->name);
+            if (q->users.entries() == 1 && (*q->users.begin()).cell->type == ctx->id("IOB_OUTBUF"))
+                io_bel = ctx->getBelByNameStr((*q->users.begin()).cell->attrs.at(ctx->id("BEL")).as_string());
+            else if (q->users.entries() == 1 && (*q->users.begin()).cell->type == ctx->id("ODELAYE3") &&
+                     (*q->users.begin()).port == ctx->id("ODATAIN"))
+                io_bel = iodelay_to_io.at((*q->users.begin()).cell->name);
             else
                 log_error("%s '%s' has illegal fanout on OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
 
             std::string iol_site = get_iol_site(ctx->getBelName(io_bel).str(ctx));
             if (is_hpio(io_bel)) {
-                NetInfo *rst = get_net_or_empty(ci, ctx->id("RST"));
+                NetInfo *rst = ci->getPort(ctx->id("RST"));
                 if (rst == ctx->nets[ctx->id("$PACKER_GND_NET")].get()) {
                     // Can't use the general invertible_pins framework here as this only applies
                     // to HPIO locations
-                    disconnect_port(ctx, ci, ctx->id("RST"));
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_VCC_NET")].get(), ci, ctx->id("RST"));
+                    ci->disconnectPort(ctx->id("RST"));
+                    ci->connectPort(ctx->id("RST"), ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
                     ci->params[ctx->id("IS_RST_INVERTED")] = 1;
                 }
 
                 xform_cell(hp_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/OSERDES";
-                if (get_net_or_empty(ci, ctx->id("OFD_CE")) == nullptr) {
+                if (ci->getPort(ctx->id("OFD_CE")) == nullptr) {
                     ci->ports[ctx->id("OFD_CE")].name = ctx->id("OFD_CE");
                     ci->ports[ctx->id("OFD_CE")].type = PORT_IN;
-                    connect_port(ctx, ctx->nets[ctx->id("$PACKER_GND_NET")].get(), ci, ctx->id("OFD_CE"));
+                    ci->connectPort(ctx->id("OFD_CE"), ctx->nets[ctx->id("$PACKER_GND_NET")].get());
                 }
 
             } else {
-                disconnect_port(ctx, ci, ctx->id("T"));
+                ci->disconnectPort(ctx->id("T"));
                 xform_cell(hd_iol_rules, ci);
                 ci->attrs[ctx->id("BEL")] = iol_site + "/OPTFF";
             }
@@ -745,8 +742,8 @@ void USPacker::pack_iologic()
 void USPacker::pack_idelayctrl()
 {
     CellInfo *idelayctrl = nullptr;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("IDELAYCTRL")) {
             if (idelayctrl != nullptr)
                 log_error("Found more than one IDELAYCTRL cell!\n");
@@ -756,8 +753,8 @@ void USPacker::pack_idelayctrl()
     if (idelayctrl == nullptr)
         return;
     std::set<std::string> ioctrl_sites;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("IDELAYE3") || ci->type == ctx->id("ODELAYE3")) {
             if (!ci->attrs.count(ctx->id("BEL")))
                 continue;
@@ -766,29 +763,29 @@ void USPacker::pack_idelayctrl()
     }
     if (ioctrl_sites.empty())
         log_error("Found IDELAYCTRL but no I/ODELAYs\n");
-    NetInfo *rdy = get_net_or_empty(idelayctrl, ctx->id("RDY"));
-    disconnect_port(ctx, idelayctrl, ctx->id("RDY"));
+    NetInfo *rdy = idelayctrl->getPort(ctx->id("RDY"));
+    idelayctrl->disconnectPort(ctx->id("RDY"));
     std::vector<NetInfo *> dup_rdys;
     int i = 0;
     for (auto site : ioctrl_sites) {
         auto dup_idc = create_cell(ctx, ctx->id("IDELAYCTRL"),
                                    int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i), false));
-        connect_port(ctx, get_net_or_empty(idelayctrl, ctx->id("REFCLK")), dup_idc.get(), ctx->id("REFCLK"));
-        connect_port(ctx, get_net_or_empty(idelayctrl, ctx->id("RST")), dup_idc.get(), ctx->id("RST"));
+        dup_idc->connectPort(ctx->id("REFCLK"), idelayctrl->getPort(ctx->id("REFCLK")));
+        dup_idc->connectPort(ctx->id("RST"), idelayctrl->getPort(ctx->id("RST")));
         if (rdy != nullptr) {
             NetInfo *dup_rdy =
                     (ioctrl_sites.size() == 1)
                             ? rdy
                             : create_internal_net(idelayctrl->name, "CTRL_DUP_" + std::to_string(i) + "_RDY", false);
-            connect_port(ctx, dup_rdy, dup_idc.get(), ctx->id("RDY"));
+            dup_idc->connectPort(ctx->id("RDY"), dup_rdy);
             dup_rdys.push_back(dup_rdy);
         }
         dup_idc->attrs[ctx->id("BEL")] = site + "/CONTROL";
         new_cells.push_back(std::move(dup_idc));
         ++i;
     }
-    disconnect_port(ctx, idelayctrl, ctx->id("REFCLK"));
-    disconnect_port(ctx, idelayctrl, ctx->id("RST"));
+    idelayctrl->disconnectPort(ctx->id("REFCLK"));
+    idelayctrl->disconnectPort(ctx->id("RST"));
 
     if (rdy != nullptr) {
         // AND together all the RDY signals

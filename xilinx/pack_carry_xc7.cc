@@ -35,7 +35,7 @@ NEXTPNR_NAMESPACE_BEGIN
 bool XC7Packer::has_illegal_fanout(NetInfo *carry)
 {
     // FIXME: sometimes we can feed out of the chain
-    if (carry->users.size() > 2)
+    if (carry->users.entries() > 2)
         return true;
     CellInfo *muxcy = nullptr, *xorcy = nullptr;
     for (auto &usr : carry->users) {
@@ -58,8 +58,8 @@ bool XC7Packer::has_illegal_fanout(NetInfo *carry)
         }
     }
     if (muxcy && xorcy) {
-        NetInfo *muxcy_s = get_net_or_empty(muxcy, ctx->id("S"));
-        NetInfo *xorcy_li = get_net_or_empty(xorcy, ctx->id("LI"));
+        NetInfo *muxcy_s = muxcy->getPort(ctx->id("S"));
+        NetInfo *xorcy_li = xorcy->getPort(ctx->id("LI"));
         if (muxcy_s != xorcy_li)
             return true;
     }
@@ -68,33 +68,33 @@ bool XC7Packer::has_illegal_fanout(NetInfo *carry)
 
 void XilinxPacker::split_carry4s()
 {
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type != ctx->id("CARRY4"))
             continue;
-        NetInfo *cin = get_net_or_empty(ci, ctx->id("CI"));
+        NetInfo *cin = ci->getPort(ctx->id("CI"));
         if (cin == nullptr || cin->name == ctx->id("$PACKER_GND_NET")) {
-            cin = get_net_or_empty(ci, ctx->id("CYINIT"));
+            cin = ci->getPort(ctx->id("CYINIT"));
         }
-        disconnect_port(ctx, ci, ctx->id("CI"));
-        disconnect_port(ctx, ci, ctx->id("CYINIT"));
+        ci->disconnectPort(ctx->id("CI"));
+        ci->disconnectPort(ctx->id("CYINIT"));
 
         for (int i = 0; i < 4; i++) {
             std::unique_ptr<CellInfo> xorcy =
                     create_cell(ctx, ctx->id("XORCY"), ctx->id(ci->name.str(ctx) + "$split$xorcy" + std::to_string(i)));
             std::unique_ptr<CellInfo> muxcy =
                     create_cell(ctx, ctx->id("MUXCY"), ctx->id(ci->name.str(ctx) + "$split$muxcy" + std::to_string(i)));
-            connect_port(ctx, cin, muxcy.get(), ctx->id("CI"));
-            connect_port(ctx, cin, xorcy.get(), ctx->id("CI"));
-            replace_port(ci, ctx->id("DI[" + std::to_string(i) + "]"), muxcy.get(), ctx->id("DI"));
-            connect_port(ctx, get_net_or_empty(ci, ctx->id("S[" + std::to_string(i) + "]")), muxcy.get(), ctx->id("S"));
-            replace_port(ci, ctx->id("S[" + std::to_string(i) + "]"), xorcy.get(), ctx->id("LI"));
-            replace_port(ci, ctx->id("O[" + std::to_string(i) + "]"), xorcy.get(), ctx->id("O"));
-            NetInfo *co = get_net_or_empty(ci, ctx->id("CO[" + std::to_string(i) + "]"));
-            disconnect_port(ctx, ci, ctx->id("CO[" + std::to_string(i) + "]"));
+            muxcy->connectPort(ctx->id("CI"), cin);
+            xorcy->connectPort(ctx->id("CI"), cin);
+            ci->movePortTo(ctx->id("DI[" + std::to_string(i) + "]"), muxcy.get(), ctx->id("DI"));
+            muxcy->connectPort(ctx->id("S"), ci->getPort(ctx->id("S[" + std::to_string(i) + "]")));
+            ci->movePortTo(ctx->id("S[" + std::to_string(i) + "]"), xorcy.get(), ctx->id("LI"));
+            ci->movePortTo(ctx->id("O[" + std::to_string(i) + "]"), xorcy.get(), ctx->id("O"));
+            NetInfo *co = ci->getPort(ctx->id("CO[" + std::to_string(i) + "]"));
+            ci->disconnectPort(ctx->id("CO[" + std::to_string(i) + "]"));
             if (co == nullptr)
                 co = create_internal_net(ci->name, "$split$co" + std::to_string(i), false);
-            connect_port(ctx, co, muxcy.get(), ctx->id("O"));
+            muxcy->connectPort(ctx->id("O"), co);
             cin = co;
             new_cells.push_back(std::move(xorcy));
             new_cells.push_back(std::move(muxcy));
@@ -110,11 +110,11 @@ void XC7Packer::pack_carries()
     split_carry4s();
     std::vector<CellInfo *> root_muxcys;
     // Find MUXCYs
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type != ctx->id("MUXCY"))
             continue;
-        NetInfo *ci_net = get_net_or_empty(ci, ctx->id("CI"));
+        NetInfo *ci_net = ci->getPort(ctx->id("CI"));
         if (ci_net == nullptr || ci_net->driver.cell == nullptr || ci_net->driver.cell->type != ctx->id("MUXCY") ||
             has_illegal_fanout(ci_net)) {
             root_muxcys.push_back(ci);
@@ -122,7 +122,7 @@ void XC7Packer::pack_carries()
     }
 
     // Create chains from root MUXCYs
-    std::unordered_set<IdString> processed_muxcys;
+    pool<IdString> processed_muxcys;
     std::vector<CarryGroup> groups;
     int muxcy_count = 0, xorcy_count = 0;
     for (auto root : root_muxcys) {
@@ -134,14 +134,14 @@ void XC7Packer::pack_carries()
 
             group.muxcys.push_back(muxcy);
             ++muxcy_count;
-            mux_ci = get_net_or_empty(muxcy, ctx->id("CI"));
-            NetInfo *mux_s = get_net_or_empty(muxcy, ctx->id("S"));
+            mux_ci = muxcy->getPort(ctx->id("CI"));
+            NetInfo *mux_s = muxcy->getPort(ctx->id("S"));
             group.xorcys.push_back(nullptr);
             if (mux_s != nullptr) {
                 for (auto &user : mux_s->users) {
                     if (user.cell->type == ctx->id("XORCY") && user.port == ctx->id("LI")) {
                         CellInfo *xorcy = user.cell;
-                        NetInfo *xor_ci = get_net_or_empty(xorcy, ctx->id("CI"));
+                        NetInfo *xor_ci = xorcy->getPort(ctx->id("CI"));
                         if (xor_ci == mux_ci) {
                             group.xorcys.back() = xorcy;
                             ++xorcy_count;
@@ -151,7 +151,7 @@ void XC7Packer::pack_carries()
                 }
             }
 
-            mux_ci = get_net_or_empty(muxcy, ctx->id("O"));
+            mux_ci = muxcy->getPort(ctx->id("O"));
             if (mux_ci == nullptr)
                 break;
             if (has_illegal_fanout(mux_ci))
@@ -167,18 +167,18 @@ void XC7Packer::pack_carries()
                 break;
         }
         if (mux_ci != nullptr) {
-            if (mux_ci->users.size() == 1 && mux_ci->users.at(0).cell->type == ctx->id("XORCY") &&
-                mux_ci->users.at(0).port == ctx->id("CI")) {
+            if (mux_ci->users.entries() == 1 && (*mux_ci->users.begin()).cell->type == ctx->id("XORCY") &&
+                (*mux_ci->users.begin()).port == ctx->id("CI")) {
                 // Trailing XORCY at end, can pack into chain.
-                CellInfo *xorcy = mux_ci->users.at(0).cell;
+                CellInfo *xorcy = (*mux_ci->users.begin()).cell;
                 std::unique_ptr<CellInfo> dummy_muxcy =
                         create_cell(ctx, ctx->id("MUXCY"), ctx->id(xorcy->name.str(ctx) + "$legal_muxcy$"));
-                connect_port(ctx, mux_ci, dummy_muxcy.get(), ctx->id("CI"));
-                connect_port(ctx, get_net_or_empty(xorcy, ctx->id("LI")), dummy_muxcy.get(), ctx->id("S"));
+                dummy_muxcy->connectPort(ctx->id("CI"), mux_ci);
+                dummy_muxcy->connectPort(ctx->id("S"), xorcy->getPort(ctx->id("LI")));
                 group.muxcys.push_back(dummy_muxcy.get());
                 group.xorcys.push_back(xorcy);
                 new_cells.push_back(std::move(dummy_muxcy));
-            } else if (mux_ci->users.size() > 0) {
+            } else if (mux_ci->users.entries() > 0) {
                 // Users other than a MUXCY
                 // Feed out with a zero-driving LUT and a XORCY
                 // (creating a zero-driver using Vcc and an inverter for now...)
@@ -192,14 +192,14 @@ void XC7Packer::pack_carries()
 
                 CellInfo *last_muxcy = mux_ci->driver.cell;
 
-                disconnect_port(ctx, last_muxcy, ctx->id("O"));
+                last_muxcy->disconnectPort(ctx->id("O"));
 
-                connect_ports(ctx, zero_lut.get(), ctx->id("O"), feed_xorcy.get(), ctx->id("LI"));
-                connect_ports(ctx, zero_lut.get(), ctx->id("O"), dummy_muxcy.get(), ctx->id("S"));
-                connect_ports(ctx, last_muxcy, ctx->id("O"), feed_xorcy.get(), ctx->id("CI"));
-                connect_ports(ctx, last_muxcy, ctx->id("O"), dummy_muxcy.get(), ctx->id("CI"));
+                zero_lut.get()->connectPorts(ctx->id("O"), feed_xorcy.get(), ctx->id("LI"));
+                zero_lut.get()->connectPorts(ctx->id("O"), dummy_muxcy.get(), ctx->id("S"));
+                last_muxcy->connectPorts(ctx->id("O"), feed_xorcy.get(), ctx->id("CI"));
+                last_muxcy->connectPorts(ctx->id("O"), dummy_muxcy.get(), ctx->id("CI"));
 
-                connect_port(ctx, mux_ci, feed_xorcy.get(), ctx->id("O"));
+                feed_xorcy->connectPort(ctx->id("O"), mux_ci);
 
                 group.muxcys.push_back(dummy_muxcy.get());
                 group.xorcys.push_back(feed_xorcy.get());
@@ -216,10 +216,10 @@ void XC7Packer::pack_carries()
     log_info("   Grouped %d MUXCYs and %d XORCYs into %d chains.\n", muxcy_count, xorcy_count, int(root_muxcys.size()));
 
     // N.B. LUT6 is not a valid type here, as CARRY requires dual outputs
-    std::unordered_set<IdString> lut_types{ctx->id("LUT1"), ctx->id("LUT2"), ctx->id("LUT3"), ctx->id("LUT4"),
+    pool<IdString> lut_types{ctx->id("LUT1"), ctx->id("LUT2"), ctx->id("LUT3"), ctx->id("LUT4"),
                                            ctx->id("LUT5")};
 
-    std::unordered_set<IdString> folded_nets;
+    pool<IdString> folded_nets;
 
     for (auto &grp : groups) {
         std::vector<std::unique_ptr<CellInfo>> carry4s;
@@ -237,7 +237,7 @@ void XC7Packer::pack_carries()
                 c4->constr_z = BEL_CARRY4;
             } else if (z == 0) {
                 // Constrain relative to the root carry4
-                c4->constr_parent = root;
+                c4->cluster = root->cluster;
                 root->constr_children.push_back(c4);
                 c4->constr_x = 0;
                 // Looks no CARRY4 on the tile of which grid_y is a multiple of 26. Skip them
@@ -247,52 +247,52 @@ void XC7Packer::pack_carries()
             }
             // Fold CI->CO connections into the CARRY4, except for those external ones every 8 units
             if (z == 0 && i == 0) {
-                replace_port(muxcy, ctx->id("CI"), c4, ctx->id("CYINIT"));
+                muxcy->movePortTo(ctx->id("CI"), c4, ctx->id("CYINIT"));
             } else if (z == 0 && i > 0) {
-                replace_port(muxcy, ctx->id("CI"), c4, ctx->id("CI"));
+                muxcy->movePortTo(ctx->id("CI"), c4, ctx->id("CI"));
             } else {
-                NetInfo *muxcy_ci = get_net_or_empty(muxcy, ctx->id("CI"));
+                NetInfo *muxcy_ci = muxcy->getPort(ctx->id("CI"));
                 if (muxcy_ci)
                     folded_nets.insert(muxcy_ci->name);
-                disconnect_port(ctx, muxcy, ctx->id("CI"));
+                muxcy->disconnectPort(ctx->id("CI"));
             }
             if (z == 3) {
-                replace_port(muxcy, ctx->id("O"), c4, ctx->id("CO[3]"));
+                muxcy->movePortTo(ctx->id("O"), c4, ctx->id("CO[3]"));
             } else {
-                NetInfo *muxcy_o = get_net_or_empty(muxcy, ctx->id("O"));
+                NetInfo *muxcy_o = muxcy->getPort(ctx->id("O"));
                 if (muxcy_o)
                     folded_nets.insert(muxcy_o->name);
-                disconnect_port(ctx, muxcy, ctx->id("O"));
+                muxcy->disconnectPort(ctx->id("O"));
             }
             // Replace connections into the MUXCY with external CARRY4 ports
-            replace_port(muxcy, ctx->id("S"), c4, ctx->id("S[" + std::to_string(z) + "]"));
-            replace_port(muxcy, ctx->id("DI"), c4, ctx->id("DI[" + std::to_string(z) + "]"));
+            muxcy->movePortTo(ctx->id("S"), c4, ctx->id("S[" + std::to_string(z) + "]"));
+            muxcy->movePortTo(ctx->id("DI"), c4, ctx->id("DI[" + std::to_string(z) + "]"));
             packed_cells.insert(muxcy->name);
             // Fold MUXCY->XORCY into the CARRY4, if there is a XORCY
             if (xorcy) {
                 // Replace XORCY output with external CARRY4 output
-                replace_port(xorcy, ctx->id("O"), c4, ctx->id("O[" + std::to_string(z) + "]"));
+                xorcy->movePortTo(ctx->id("O"), c4, ctx->id("O[" + std::to_string(z) + "]"));
                 // Disconnect internal XORCY connectivity
-                disconnect_port(ctx, xorcy, ctx->id("LI"));
-                disconnect_port(ctx, xorcy, ctx->id("DI"));
+                xorcy->disconnectPort(ctx->id("LI"));
+                xorcy->disconnectPort(ctx->id("DI"));
                 packed_cells.insert(xorcy->name);
             }
             // Check legality of LUTs driving CARRY4, making them legal if they aren't already
-            NetInfo *c4_s = get_net_or_empty(c4, ctx->id("S[" + std::to_string(z) + "]"));
-            NetInfo *c4_di = get_net_or_empty(c4, ctx->id("DI[" + std::to_string(z) + "]"));
+            NetInfo *c4_s = c4->getPort(ctx->id("S[" + std::to_string(z) + "]"));
+            NetInfo *c4_di = c4->getPort(ctx->id("DI[" + std::to_string(z) + "]"));
             // Keep track of the total LUT input count; cannot exceed five or the LUTs cannot be packed together
-            std::unordered_set<IdString> unique_lut_inputs;
+            pool<IdString> unique_lut_inputs;
             int s_inputs = 0, d_inputs = 0;
             // Check that S and DI are validy and unqiuely driven by LUTs
             // FIXME: in multiple fanout cases, cell duplication will probably be cheaper
             // than feed-throughs
             CellInfo *s_lut = nullptr, *di_lut = nullptr;
             if (c4_s) {
-                if (c4_s->users.size() == 1 && c4_s->driver.cell != nullptr &&
+                if (c4_s->users.entries() == 1 && c4_s->driver.cell != nullptr &&
                     lut_types.count(c4_s->driver.cell->type)) {
                     s_lut = c4_s->driver.cell;
                     for (int j = 0; j < 5; j++) {
-                        NetInfo *ix = get_net_or_empty(s_lut, ctx->id("I" + std::to_string(j)));
+                        NetInfo *ix = s_lut->getPort(ctx->id("I" + std::to_string(j)));
                         if (ix) {
                             unique_lut_inputs.insert(ix->name);
                             s_inputs++;
@@ -301,11 +301,11 @@ void XC7Packer::pack_carries()
                 }
             }
             if (c4_di) {
-                if (c4_di->users.size() == 1 && c4_di->driver.cell != nullptr &&
+                if (c4_di->users.entries() == 1 && c4_di->driver.cell != nullptr &&
                     lut_types.count(c4_di->driver.cell->type)) {
                     di_lut = c4_di->driver.cell;
                     for (int j = 0; j < 5; j++) {
-                        NetInfo *ix = get_net_or_empty(di_lut, ctx->id("I" + std::to_string(j)));
+                        NetInfo *ix = di_lut->getPort(ctx->id("I" + std::to_string(j)));
                         if (ix) {
                             unique_lut_inputs.insert(ix->name);
                             d_inputs++;
@@ -344,7 +344,7 @@ void XC7Packer::pack_carries()
             // Constrain LUTs relative to root CARRY4
             if (s_lut) {
                 root->constr_children.push_back(s_lut);
-                s_lut->constr_parent = root;
+                s_lut->cluster = root->cluster;
                 s_lut->constr_x = 0;
                 s_lut->constr_y = -(i / 4 + i / (4*25));
                 s_lut->constr_abs_z = true;
@@ -352,7 +352,7 @@ void XC7Packer::pack_carries()
             }
             if (di_lut) {
                 root->constr_children.push_back(di_lut);
-                di_lut->constr_parent = root;
+                di_lut->cluster = root->cluster;
                 di_lut->constr_x = 0;
                 di_lut->constr_y = -(i / 4 + i / (4*25));
                 di_lut->constr_abs_z = true;
@@ -376,7 +376,7 @@ void XC7Packer::pack_carries()
         else if (cell.second->type == ctx->id("XORCY"))
             ++remaining_xorcy;
     }
-    std::unordered_map<IdString, XFormRule> softlogic_rules;
+    dict<IdString, XFormRule> softlogic_rules;
     softlogic_rules[ctx->id("MUXCY")].new_type = ctx->id("LUT3");
     softlogic_rules[ctx->id("MUXCY")].port_xform[ctx->id("DI")] = ctx->id("I0");
     softlogic_rules[ctx->id("MUXCY")].port_xform[ctx->id("CI")] = ctx->id("I1");
@@ -401,12 +401,12 @@ void XC7Packer::pack_carries()
 
     // Finally, use generic_xform to remove the [] from bus ports; and set up the logical-physical mapping for
     // RapidWright
-    std::unordered_map<IdString, XFormRule> c4_rules;
+    dict<IdString, XFormRule> c4_rules;
     c4_rules[ctx->id("CARRY4")].new_type = ctx->id("CARRY4");
     c4_rules[ctx->id("CARRY4")].port_xform[ctx->id("CI")] = ctx->id("CIN");
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ci->type != ctx->id("CARRY4"))
             continue;
         xform_cell(c4_rules, ci);
