@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018-19  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2018-19  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -19,7 +19,6 @@
 
 #include <algorithm>
 #include <iterator>
-#include <unordered_set>
 #include "cells.h"
 #include "design_utils.h"
 #include "log.h"
@@ -32,16 +31,17 @@ static void pack_lut_lutffs(Context *ctx)
 {
     log_info("Packing LUT-FFs..\n");
 
-    std::unordered_set<IdString> packed_cells;
+    pool<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto &cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (ctx->verbose)
             log_info("cell '%s' is of type '%s'\n", ci->name.c_str(ctx), ci->type.c_str(ctx));
         if (is_lut(ctx, ci)) {
             std::unique_ptr<CellInfo> packed =
                     create_generic_cell(ctx, ctx->id("GENERIC_SLICE"), ci->name.str(ctx) + "_LC");
-            std::copy(ci->attrs.begin(), ci->attrs.end(), std::inserter(packed->attrs, packed->attrs.begin()));
+            for (auto &attr : ci->attrs)
+                packed->attrs[attr.first] = attr.second;
             packed_cells.insert(ci->name);
             if (ctx->verbose)
                 log_info("packed cell %s into %s\n", ci->name.c_str(ctx), packed->name.c_str(ctx));
@@ -88,15 +88,16 @@ static void pack_nonlut_ffs(Context *ctx)
 {
     log_info("Packing non-LUT FFs..\n");
 
-    std::unordered_set<IdString> packed_cells;
+    pool<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto &cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (is_ff(ctx, ci)) {
             std::unique_ptr<CellInfo> packed =
                     create_generic_cell(ctx, ctx->id("GENERIC_SLICE"), ci->name.str(ctx) + "_DFFLC");
-            std::copy(ci->attrs.begin(), ci->attrs.end(), std::inserter(packed->attrs, packed->attrs.begin()));
+            for (auto &attr : ci->attrs)
+                packed->attrs[attr.first] = attr.second;
             if (ctx->verbose)
                 log_info("packed cell %s into %s\n", ci->name.c_str(ctx), packed->name.c_str(ctx));
             packed_cells.insert(ci->name);
@@ -123,9 +124,10 @@ static void set_net_constant(const Context *ctx, NetInfo *orig, NetInfo *constne
                 log_info("%s user %s\n", orig->name.c_str(ctx), uc->name.c_str(ctx));
             if ((is_lut(ctx, uc) || is_lc(ctx, uc)) && (user.port.str(ctx).at(0) == 'I') && !constval) {
                 uc->ports[user.port].net = nullptr;
+                uc->ports[user.port].user_idx = {};
             } else {
                 uc->ports[user.port].net = constnet;
-                constnet->users.push_back(user);
+                uc->ports[user.port].user_idx = constnet->users.add(user);
             }
         }
     }
@@ -139,8 +141,7 @@ static void pack_constants(Context *ctx)
 
     std::unique_ptr<CellInfo> gnd_cell = create_generic_cell(ctx, ctx->id("GENERIC_SLICE"), "$PACKER_GND");
     gnd_cell->params[ctx->id("INIT")] = Property(0, 1 << ctx->args.K);
-    std::unique_ptr<NetInfo> gnd_net = std::unique_ptr<NetInfo>(new NetInfo);
-    gnd_net->name = ctx->id("$PACKER_GND_NET");
+    std::unique_ptr<NetInfo> gnd_net = std::make_unique<NetInfo>(ctx->id("$PACKER_GND_NET"));
     gnd_net->driver.cell = gnd_cell.get();
     gnd_net->driver.port = ctx->id("F");
     gnd_cell->ports.at(ctx->id("F")).net = gnd_net.get();
@@ -148,18 +149,17 @@ static void pack_constants(Context *ctx)
     std::unique_ptr<CellInfo> vcc_cell = create_generic_cell(ctx, ctx->id("GENERIC_SLICE"), "$PACKER_VCC");
     // Fill with 1s
     vcc_cell->params[ctx->id("INIT")] = Property(Property::S1).extract(0, (1 << ctx->args.K), Property::S1);
-    std::unique_ptr<NetInfo> vcc_net = std::unique_ptr<NetInfo>(new NetInfo);
-    vcc_net->name = ctx->id("$PACKER_VCC_NET");
+    std::unique_ptr<NetInfo> vcc_net = std::make_unique<NetInfo>(ctx->id("$PACKER_VCC_NET"));
     vcc_net->driver.cell = vcc_cell.get();
     vcc_net->driver.port = ctx->id("F");
     vcc_cell->ports.at(ctx->id("F")).net = vcc_net.get();
 
     std::vector<IdString> dead_nets;
 
-    bool gnd_used = false;
+    bool gnd_used = false, vcc_used = false;
 
-    for (auto net : sorted(ctx->nets)) {
-        NetInfo *ni = net.second;
+    for (auto &net : ctx->nets) {
+        NetInfo *ni = net.second.get();
         if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("GND")) {
             IdString drv_cell = ni->driver.cell->name;
             set_net_constant(ctx, ni, gnd_net.get(), false);
@@ -169,6 +169,7 @@ static void pack_constants(Context *ctx)
         } else if (ni->driver.cell != nullptr && ni->driver.cell->type == ctx->id("VCC")) {
             IdString drv_cell = ni->driver.cell->name;
             set_net_constant(ctx, ni, vcc_net.get(), true);
+            vcc_used = true;
             dead_nets.push_back(net.first);
             ctx->cells.erase(drv_cell);
         }
@@ -178,10 +179,11 @@ static void pack_constants(Context *ctx)
         ctx->cells[gnd_cell->name] = std::move(gnd_cell);
         ctx->nets[gnd_net->name] = std::move(gnd_net);
     }
-    // Vcc cell always inserted for now, as it may be needed during carry legalisation (TODO: trim later if actually
-    // never used?)
-    ctx->cells[vcc_cell->name] = std::move(vcc_cell);
-    ctx->nets[vcc_net->name] = std::move(vcc_net);
+
+    if (vcc_used) {
+        ctx->cells[vcc_cell->name] = std::move(vcc_cell);
+        ctx->nets[vcc_net->name] = std::move(vcc_net);
+    }
 
     for (auto dn : dead_nets) {
         ctx->nets.erase(dn);
@@ -199,14 +201,14 @@ static bool is_generic_iob(const Context *ctx, const CellInfo *cell) { return ce
 // Pack IO buffers
 static void pack_io(Context *ctx)
 {
-    std::unordered_set<IdString> packed_cells;
-    std::unordered_set<IdString> delete_nets;
+    pool<IdString> packed_cells;
+    pool<IdString> delete_nets;
 
     std::vector<std::unique_ptr<CellInfo>> new_cells;
     log_info("Packing IOs..\n");
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto &cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         if (is_nextpnr_iob(ctx, ci)) {
             CellInfo *iob = nullptr;
             if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf")) {
@@ -223,8 +225,8 @@ static void pack_io(Context *ctx)
                          ci->type.c_str(ctx), ci->name.c_str(ctx));
                 NetInfo *net = iob->ports.at(ctx->id("PAD")).net;
                 if (((ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf")) &&
-                     net->users.size() > 1) ||
-                    (ci->type == ctx->id("$nextpnr_obuf") && (net->users.size() > 2 || net->driver.cell != nullptr)))
+                     net->users.entries() > 1) ||
+                    (ci->type == ctx->id("$nextpnr_obuf") && (net->users.entries() > 2 || net->driver.cell != nullptr)))
                     log_error("PAD of %s '%s' connected to more than a single top level IO.\n", iob->type.c_str(ctx),
                               iob->name.c_str(ctx));
 
@@ -241,7 +243,7 @@ static void pack_io(Context *ctx)
             } else if (bool_or_default(ctx->settings, ctx->id("disable_iobs"))) {
                 // No IO buffer insertion; just remove nextpnr_[io]buf
                 for (auto &p : ci->ports)
-                    disconnect_port(ctx, ci, p.first);
+                    ci->disconnectPort(p.first);
             } else {
                 // Create a GENERIC_IOB buffer
                 std::unique_ptr<CellInfo> ice_cell =
@@ -252,7 +254,8 @@ static void pack_io(Context *ctx)
             }
             packed_cells.insert(ci->name);
             if (iob != nullptr)
-                std::copy(ci->attrs.begin(), ci->attrs.end(), std::inserter(iob->attrs, iob->attrs.begin()));
+                for (auto &attr : ci->attrs)
+                    iob->attrs[attr.first] = attr.second;
         }
     }
     for (auto pcell : packed_cells) {
@@ -272,12 +275,16 @@ bool Arch::pack()
     Context *ctx = getCtx();
     try {
         log_break();
-        pack_constants(ctx);
-        pack_io(ctx);
-        pack_lut_lutffs(ctx);
-        pack_nonlut_ffs(ctx);
-        ctx->settings[ctx->id("pack")] = 1;
+        if (uarch) {
+            uarch->pack();
+        } else {
+            pack_constants(ctx);
+            pack_io(ctx);
+            pack_lut_lutffs(ctx);
+            pack_nonlut_ffs(ctx);
+        }
         ctx->assignArchInfo();
+        ctx->settings[ctx->id("pack")] = 1;
         log_info("Checksum: 0x%08x\n", ctx->checksum());
         return true;
     } catch (log_execution_error_exception) {

@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2019  David Shah <dave@ds0.me>
+ *  Copyright (C) 2019  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -197,7 +197,7 @@ bool parse_json(std::istream &in, const std::string &filename, Context *ctx)
             log_error("JSON file '%s' doesn't look like a netlist (doesn't contain \"modules\" key)\n",
                       filename.c_str());
     }
-    GenericFrontend<JsonFrontendImpl>(ctx, JsonFrontendImpl(root))();
+    GenericFrontend<JsonFrontendImpl>(ctx, JsonFrontendImpl(root), /*split_io=*/true)();
     return true;
 }
 

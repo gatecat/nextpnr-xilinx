@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -17,40 +17,57 @@
  *
  */
 
-#ifndef NEXTPNR_H
-#error Include "archdefs.h" via "nextpnr.h" only.
-#endif
+#ifndef GENERIC_ARCHDEFS_H
+#define GENERIC_ARCHDEFS_H
+
+#include "base_clusterinfo.h"
+#include "hashlib.h"
+#include "idstringlist.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
 typedef float delay_t;
 
-struct DelayInfo
+struct BelId
 {
-    delay_t delay = 0;
+    BelId() : index(-1){};
+    explicit BelId(int32_t index) : index(index){};
+    int32_t index = -1;
 
-    delay_t minRaiseDelay() const { return delay; }
-    delay_t maxRaiseDelay() const { return delay; }
-
-    delay_t minFallDelay() const { return delay; }
-    delay_t maxFallDelay() const { return delay; }
-
-    delay_t minDelay() const { return delay; }
-    delay_t maxDelay() const { return delay; }
-
-    DelayInfo operator+(const DelayInfo &other) const
-    {
-        DelayInfo ret;
-        ret.delay = this->delay + other.delay;
-        return ret;
-    }
+    bool operator==(const BelId &other) const { return index == other.index; }
+    bool operator!=(const BelId &other) const { return index != other.index; }
+    bool operator<(const BelId &other) const { return index < other.index; }
+    unsigned int hash() const { return index; }
 };
 
-typedef IdString BelId;
-typedef IdString WireId;
-typedef IdString PipId;
-typedef IdString GroupId;
-typedef IdString DecalId;
+struct WireId
+{
+    WireId() : index(-1){};
+    explicit WireId(int32_t index) : index(index){};
+    int32_t index = -1;
+
+    bool operator==(const WireId &other) const { return index == other.index; }
+    bool operator!=(const WireId &other) const { return index != other.index; }
+    bool operator<(const WireId &other) const { return index < other.index; }
+    unsigned int hash() const { return index; }
+};
+
+struct PipId
+{
+    PipId() : index(-1){};
+    explicit PipId(int32_t index) : index(index){};
+    int32_t index = -1;
+
+    bool operator==(const PipId &other) const { return index == other.index; }
+    bool operator!=(const PipId &other) const { return index != other.index; }
+    bool operator<(const PipId &other) const { return index < other.index; }
+    unsigned int hash() const { return index; }
+};
+
+typedef IdStringList GroupId;
+typedef IdStringList DecalId;
+typedef IdString BelBucketId;
+typedef IdString ClusterId;
 
 struct ArchNetInfo
 {
@@ -58,7 +75,7 @@ struct ArchNetInfo
 
 struct NetInfo;
 
-struct ArchCellInfo
+struct ArchCellInfo : BaseClusterInfo
 {
     // Custom grouping set via "PACK_GROUP" attribute. All cells with the same group
     // value may share a tile (-1 = don't care, default if not set)
@@ -67,6 +84,12 @@ struct ArchCellInfo
     bool is_slice;
     // Only packing rule for slice type primitives is a single clock per tile
     const NetInfo *slice_clk;
+    // A flat index for cells; so viaduct uarches can have their own fast flat arrays of per-cell validity-related data
+    int flat_index;
+    // Cell to bel pin mapping
+    dict<IdString, std::vector<IdString>> bel_pins;
 };
 
 NEXTPNR_NAMESPACE_END
+
+#endif /* GENERIC_ARCHDEFS_H */

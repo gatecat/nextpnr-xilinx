@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2019  David Shah <dave@ds0.me>
+ *  Copyright (C) 2019  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -23,7 +23,7 @@
  * This is designed to make it possible to build frontends for parsing any format isomorphic to Yosys JSON [1]
  * with maximal inlining and minimal need for overhead such as runtime polymorphism or extra wrapper types.
  *
- * [1] http://www.clifford.at/yosys/cmd_write_json.html
+ * [1] https://yosyshq.net/yosys/cmd_write_json.html
  *
  * The frontend should implement a class referred to as FrontendType that defines the following type(def)s and
  * functions:
@@ -118,12 +118,12 @@ struct ModuleInfo
 {
     bool is_top = false, is_blackbox = false, is_whitebox = false;
     inline bool is_box() const { return is_blackbox || is_whitebox; }
-    std::unordered_set<IdString> instantiated_celltypes;
+    pool<IdString> instantiated_celltypes;
 };
 
 template <typename FrontendType> struct GenericFrontend
 {
-    GenericFrontend(Context *ctx, const FrontendType &impl) : ctx(ctx), impl(impl) {}
+    GenericFrontend(Context *ctx, const FrontendType &impl, bool split_io) : ctx(ctx), impl(impl), split_io(split_io) {}
     void operator()()
     {
         // Find which module is top
@@ -134,19 +134,22 @@ template <typename FrontendType> struct GenericFrontend
         m.path = top;
         ctx->top_module = top;
         // Do the actual import, starting from the top level module
-        import_module(m, top.str(ctx), top.str(ctx), mod_refs.at(top));
+        import_module(m, top.str(ctx), top.str(ctx), mod_refs.at(top.str(ctx)));
+
+        ctx->design_loaded = true;
     }
 
     Context *ctx;
     const FrontendType &impl;
+    const bool split_io;
     using mod_dat_t = typename FrontendType::ModuleDataType;
     using mod_port_dat_t = typename FrontendType::ModulePortDataType;
     using cell_dat_t = typename FrontendType::CellDataType;
     using netname_dat_t = typename FrontendType::NetnameDataType;
     using bitvector_t = typename FrontendType::BitVectorDataType;
 
-    std::unordered_map<IdString, ModuleInfo> mods;
-    std::unordered_map<IdString, const mod_dat_t &> mod_refs;
+    dict<IdString, ModuleInfo> mods;
+    std::unordered_map<std::string, const mod_dat_t> mod_refs;
     IdString top;
 
     // Process the list of modules and determine
@@ -156,7 +159,7 @@ template <typename FrontendType> struct GenericFrontend
         impl.foreach_module([&](const std::string &name, const mod_dat_t &mod) {
             IdString mod_id = ctx->id(name);
             auto &mi = mods[mod_id];
-            mod_refs.emplace(mod_id, mod);
+            mod_refs.emplace(name, mod);
             impl.foreach_attr(mod, [&](const std::string &name, const Property &value) {
                 if (name == "top")
                     mi.is_top = (value.intval != 0);
@@ -193,7 +196,7 @@ template <typename FrontendType> struct GenericFrontend
         }
         // Finally, attempt to autodetect the top module using hierarchy
         // (a module that is not a box and is not used as a cell by any other module)
-        std::unordered_set<IdString> candidate_top;
+        pool<IdString> candidate_top;
         for (auto &mod : mods)
             if (!mod.second.is_box())
                 candidate_top.insert(mod.first);
@@ -204,7 +207,7 @@ template <typename FrontendType> struct GenericFrontend
             if (candidate_top.size() == 0)
                 log_info("No candidate top level modules.\n");
             else
-                for (auto ctp : sorted(candidate_top))
+                for (auto ctp : candidate_top)
                     log_info("Candidate top module: '%s'\n", ctx->nameOf(ctp));
             log_error("Failed to autodetect top module, please specify using --top.\n");
         }
@@ -226,7 +229,7 @@ template <typename FrontendType> struct GenericFrontend
             }
             name = ctx->id(comb);
             incr++;
-        } while (is_net ? ctx->nets.count(name) : ctx->cells.count(name));
+        } while (is_net ? (ctx->nets.count(name) || ctx->net_aliases.count(name)) : ctx->cells.count(name));
         return name;
     }
 
@@ -253,7 +256,7 @@ template <typename FrontendType> struct GenericFrontend
                 index_to_net_flatindex.resize(idx + 1, -1);
             return index_to_net_flatindex.at(idx);
         }
-        std::unordered_map<IdString, std::vector<int>> port_to_bus;
+        dict<IdString, std::vector<int>> port_to_bus;
         // All of the names given to a net
         std::vector<std::vector<std::string>> net_names;
     };
@@ -342,6 +345,7 @@ template <typename FrontendType> struct GenericFrontend
             // Add to the flat index of nets
             net->udata = int(net_flatindex.size());
             net_flatindex.push_back(net);
+            net_old_indices.emplace_back();
             // Add to the module-level index of netsd
             midx = net->udata;
             // Create aliases for all possible names
@@ -449,7 +453,7 @@ template <typename FrontendType> struct GenericFrontend
         CellInfo *ci = ctx->createCell(inst_name, ctx->id(impl.get_cell_type(cd)));
         ci->hierpath = m.path;
         // Import port directions
-        std::unordered_map<IdString, PortType> port_dirs;
+        dict<IdString, PortType> port_dirs;
         impl.foreach_port_dir(cd, [&](const std::string &port, PortType dir) { port_dirs[ctx->id(port)] = dir; });
         // Import port connectivity
         impl.foreach_port_conn(cd, [&](const std::string &name, const bitvector_t &bits) {
@@ -480,7 +484,7 @@ template <typename FrontendType> struct GenericFrontend
                     log_error("Net '%s' is multiply driven by cell ports %s.%s and %s.%s\n", ctx->nameOf(net),
                               ctx->nameOf(net->driver.cell), ctx->nameOf(net->driver.port), ctx->nameOf(inst_name),
                               port_bit_name.c_str());
-                connect_port(ctx, net, ci, port_bit_ids);
+                ci->connectPort(port_bit_ids, net);
             }
         });
         // Import attributes and parameters
@@ -508,6 +512,7 @@ template <typename FrontendType> struct GenericFrontend
                                                         impl.get_vector_bit_constval(bits, i));
                     cnet->udata = int(net_flatindex.size());
                     net_flatindex.push_back(cnet);
+                    net_old_indices.emplace_back();
                     net_ref = cnet->udata;
                 } else {
                     // Otherwise, lookup (creating if needed) the net with given in-module index
@@ -526,7 +531,7 @@ template <typename FrontendType> struct GenericFrontend
         ctx->hierarchy[m.path].hier_cells[ctx->id(name)] = submod.path;
         // Do the submodule import
         auto type = impl.get_cell_type(cd);
-        import_module(submod, name, type, mod_refs.at(ctx->id(type)));
+        import_module(submod, name, type, mod_refs.at(type));
     }
 
     // Import the cells section of a module
@@ -573,30 +578,36 @@ template <typename FrontendType> struct GenericFrontend
             }
             NPNR_ASSERT(net->driver.cell == nullptr);
             // Connect IBUF output and net
-            connect_port(ctx, net, iobuf, ctx->id("O"));
+            iobuf->connectPort(ctx->id("O"), net);
         } else if (dir == PORT_OUT) {
             iobuf->type = ctx->id("$nextpnr_obuf");
             iobuf->addInput(ctx->id("I"));
             // Connect IBUF input and net
-            connect_port(ctx, net, iobuf, ctx->id("I"));
+            iobuf->connectPort(ctx->id("I"), net);
         } else if (dir == PORT_INOUT) {
             iobuf->type = ctx->id("$nextpnr_iobuf");
-            iobuf->addInput(ctx->id("I"));
-            iobuf->addOutput(ctx->id("O"));
-            // Need to bifurcate the net to avoid multiple drivers and split
-            // the input/output parts of an inout
-            // Create a new net connecting only the current net's driver and the IOBUF input
-            // Then use the IOBUF output to drive all of the current net's users
-            NetInfo *split_iobuf_i = ctx->createNet(unique_name("", "$" + name + "$iobuf_i", true));
-            auto drv = net->driver;
-            if (drv.cell != nullptr) {
-                disconnect_port(ctx, drv.cell, drv.port);
-                drv.cell->ports[drv.port].net = nullptr;
-                connect_port(ctx, split_iobuf_i, drv.cell, drv.port);
+
+            if (split_io) {
+                iobuf->addInput(ctx->id("I"));
+                iobuf->addOutput(ctx->id("O"));
+                // Need to bifurcate the net to avoid multiple drivers and split
+                // the input/output parts of an inout
+                // Create a new net connecting only the current net's driver and the IOBUF input
+                // Then use the IOBUF output to drive all of the current net's users
+                NetInfo *split_iobuf_i = ctx->createNet(unique_name("", "$" + name + "$iobuf_i", true));
+                auto drv = net->driver;
+                if (drv.cell != nullptr) {
+                    drv.cell->disconnectPort(drv.port);
+                    drv.cell->ports[drv.port].net = nullptr;
+                    drv.cell->connectPort(drv.port, split_iobuf_i);
+                }
+                iobuf->connectPort(ctx->id("I"), split_iobuf_i);
+                NPNR_ASSERT(net->driver.cell == nullptr);
+                iobuf->connectPort(ctx->id("O"), net);
+            } else {
+                iobuf->addInout(ctx->id("IO"));
+                iobuf->connectPort(ctx->id("IO"), net);
             }
-            connect_port(ctx, split_iobuf_i, iobuf, ctx->id("I"));
-            NPNR_ASSERT(net->driver.cell == nullptr);
-            connect_port(ctx, net, iobuf, ctx->id("O"));
         }
 
         PortInfo pinfo;
@@ -604,6 +615,7 @@ template <typename FrontendType> struct GenericFrontend
         pinfo.net = net;
         pinfo.type = dir;
         ctx->ports[pinfo.name] = pinfo;
+        ctx->port_cells[pinfo.name] = iobuf;
 
         return iobuf;
     }
@@ -657,7 +669,7 @@ template <typename FrontendType> struct GenericFrontend
         if (net->driver.cell != nullptr)
             log_error("Net '%s' is multiply driven by port %s.%s and constant '%c'\n", ctx->nameOf(net),
                       ctx->nameOf(net->driver.cell), ctx->nameOf(net->driver.port), constval);
-        connect_port(ctx, net, cc, ctx->id("Y"));
+        cc->connectPort(ctx->id("Y"), net);
     }
 
     // Merge two nets - e.g. if one net in a submodule bifurcates to two output bits and therefore two different
@@ -678,7 +690,7 @@ template <typename FrontendType> struct GenericFrontend
         // Combine users
         for (auto &usr : mergee->users) {
             usr.cell->ports[usr.port].net = base;
-            base->users.push_back(usr);
+            usr.cell->ports[usr.port].user_idx = base->users.add(usr);
         }
         // Point aliases to the new net
         for (IdString alias : mergee->aliases) {

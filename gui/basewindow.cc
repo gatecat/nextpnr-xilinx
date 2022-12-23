@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
- *  Copyright (C) 2018  Serge Bazanski <q3k@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
+ *  Copyright (C) 2018  Serge Bazanski <q3k@q3k.org>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -30,10 +30,12 @@
 #include <fstream>
 #include "designwidget.h"
 #include "fpgaviewwidget.h"
+#include "json_frontend.h"
 #include "jsonwrite.h"
 #include "log.h"
 #include "mainwindow.h"
 #include "pythontab.h"
+#include "version.h"
 
 static void initBasenameResource() { Q_INIT_RESOURCE(base); }
 
@@ -128,6 +130,15 @@ void BaseMainWindow::closeTab(int index) { delete centralTabWidget->widget(index
 
 void BaseMainWindow::writeInfo(std::string text) { console->info(text); }
 
+void BaseMainWindow::about()
+{
+    QString msg;
+    QTextStream out(&msg);
+    out << "nextpnr-" << NPNR_STRINGIFY_MACRO(ARCHNAME) << "\n";
+    out << "Version " << GIT_DESCRIBE_STR;
+    QMessageBox::information(this, "About nextpnr", msg);
+}
+
 void BaseMainWindow::createMenusAndBars()
 {
     // File menu / project toolbar actions
@@ -139,6 +150,7 @@ void BaseMainWindow::createMenusAndBars()
 
     // Help menu actions
     QAction *actionAbout = new QAction("About", this);
+    connect(actionAbout, &QAction::triggered, this, &BaseMainWindow::about);
 
     // Gile menu options
     actionNew = new QAction("New", this);
@@ -168,7 +180,7 @@ void BaseMainWindow::createMenusAndBars()
 
     actionAssignBudget = new QAction("Assign Budget", this);
     actionAssignBudget->setIcon(QIcon(":/icons/resources/time_add.png"));
-    actionAssignBudget->setStatusTip("Assign time budget for current design");
+    actionAssignBudget->setStatusTip("Assign timing budget for current design");
     actionAssignBudget->setEnabled(false);
     connect(actionAssignBudget, &QAction::triggered, this, &BaseMainWindow::budget);
 
@@ -266,6 +278,11 @@ void BaseMainWindow::createMenusAndBars()
     actionMovie->setChecked(false);
     connect(actionMovie, &QAction::triggered, this, &BaseMainWindow::saveMovie);
 
+    actionSaveSVG = new QAction("Save SVG", this);
+    actionSaveSVG->setIcon(QIcon(":/icons/resources/save_svg.png"));
+    actionSaveSVG->setStatusTip("Saving a SVG");
+    connect(actionSaveSVG, &QAction::triggered, this, &BaseMainWindow::saveSVG);
+
     // set initial state
     fpgaView->enableDisableDecals(actionDisplayBel->isChecked(), actionDisplayWire->isChecked(),
                                   actionDisplayPip->isChecked(), actionDisplayGroups->isChecked());
@@ -334,6 +351,7 @@ void BaseMainWindow::createMenusAndBars()
     deviceViewToolBar->addSeparator();
     deviceViewToolBar->addAction(actionScreenshot);
     deviceViewToolBar->addAction(actionMovie);
+    deviceViewToolBar->addAction(actionSaveSVG);
 
     // Add status bar with progress bar
     statusBar = new QStatusBar();
@@ -358,8 +376,12 @@ void BaseMainWindow::open_json()
     QString fileName = QFileDialog::getOpenFileName(this, QString("Open JSON"), QString(), QString("*.json"));
     if (!fileName.isEmpty()) {
         disableActions();
-        ctx = handler->load_json(fileName.toStdString());
-        Q_EMIT contextChanged(ctx.get());
+        if (ctx->settings.find(ctx->id("synth")) == ctx->settings.end()) {
+            ArchArgs chipArgs = ctx->getArchArgs();
+            ctx = std::unique_ptr<Context>(new Context(chipArgs));
+            Q_EMIT contextChanged(ctx.get());
+        }
+        handler->load_json(ctx.get(), fileName.toStdString());
         Q_EMIT updateTreeView();
         log("Loading design successful.\n");
         updateActions();
@@ -416,6 +438,27 @@ void BaseMainWindow::saveMovie()
         fpgaView->movieStop();
     }
 }
+
+void BaseMainWindow::saveSVG()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, QString("Save SVG"), QString(), QString("*.svg"));
+    if (!fileName.isEmpty()) {
+        if (!fileName.endsWith(".svg"))
+            fileName += ".svg";
+        bool ok;
+        QString options =
+                QInputDialog::getText(this, "Save SVG", tr("Save options:"), QLineEdit::Normal, "scale=500", &ok);
+        if (ok) {
+            try {
+                ctx->writeSVG(fileName.toStdString(), options.toStdString());
+                log("Saving SVG successful.\n");
+            } catch (const log_execution_error_exception &ex) {
+                log("Saving SVG failed.\n");
+            }
+        }
+    }
+}
+
 void BaseMainWindow::pack_finished(bool status)
 {
     disableActions();

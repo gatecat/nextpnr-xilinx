@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -17,34 +17,17 @@
  *
  */
 
-#ifndef NEXTPNR_H
-#error Include "archdefs.h" via "nextpnr.h" only.
-#endif
+#ifndef ICE40_ARCHDEFS_H
+#define ICE40_ARCHDEFS_H
+
+#include "base_clusterinfo.h"
+#include "hashlib.h"
+#include "idstring.h"
+#include "nextpnr_namespaces.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
 typedef int delay_t;
-
-struct DelayInfo
-{
-    delay_t delay = 0;
-
-    delay_t minRaiseDelay() const { return delay; }
-    delay_t maxRaiseDelay() const { return delay; }
-
-    delay_t minFallDelay() const { return delay; }
-    delay_t maxFallDelay() const { return delay; }
-
-    delay_t minDelay() const { return delay; }
-    delay_t maxDelay() const { return delay; }
-
-    DelayInfo operator+(const DelayInfo &other) const
-    {
-        DelayInfo ret;
-        ret.delay = this->delay + other.delay;
-        return ret;
-    }
-};
 
 // -----------------------------------------------------------------------
 
@@ -71,6 +54,7 @@ struct BelId
     bool operator==(const BelId &other) const { return index == other.index; }
     bool operator!=(const BelId &other) const { return index != other.index; }
     bool operator<(const BelId &other) const { return index < other.index; }
+    unsigned int hash() const { return index; }
 };
 
 struct WireId
@@ -80,6 +64,7 @@ struct WireId
     bool operator==(const WireId &other) const { return index == other.index; }
     bool operator!=(const WireId &other) const { return index != other.index; }
     bool operator<(const WireId &other) const { return index < other.index; }
+    unsigned int hash() const { return index; }
 };
 
 struct PipId
@@ -89,6 +74,7 @@ struct PipId
     bool operator==(const PipId &other) const { return index == other.index; }
     bool operator!=(const PipId &other) const { return index != other.index; }
     bool operator<(const PipId &other) const { return index < other.index; }
+    unsigned int hash() const { return index; }
 };
 
 struct GroupId
@@ -111,7 +97,8 @@ struct GroupId
     int8_t x = 0, y = 0;
 
     bool operator==(const GroupId &other) const { return (type == other.type) && (x == other.x) && (y == other.y); }
-    bool operator!=(const GroupId &other) const { return (type != other.type) || (x != other.x) || (y == other.y); }
+    bool operator!=(const GroupId &other) const { return (type != other.type) || (x != other.x) || (y != other.y); }
+    unsigned int hash() const { return mkhash(mkhash(x, y), int(type)); }
 };
 
 struct DecalId
@@ -129,6 +116,7 @@ struct DecalId
 
     bool operator==(const DecalId &other) const { return (type == other.type) && (index == other.index); }
     bool operator!=(const DecalId &other) const { return (type != other.type) || (index != other.index); }
+    unsigned int hash() const { return mkhash(index, int(type)); }
 };
 
 struct ArchNetInfo
@@ -139,7 +127,7 @@ struct ArchNetInfo
 
 struct NetInfo;
 
-struct ArchCellInfo
+struct ArchCellInfo : BaseClusterInfo
 {
     union
     {
@@ -149,6 +137,7 @@ struct ArchCellInfo
             bool carryEnable;
             bool negClk;
             int inputCount;
+            unsigned lutInputMask;
             const NetInfo *clk, *cen, *sr;
         } lcInfo;
         struct
@@ -170,47 +159,9 @@ struct ArchCellInfo
     };
 };
 
+typedef IdString BelBucketId;
+typedef IdString ClusterId;
+
 NEXTPNR_NAMESPACE_END
 
-namespace std {
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX BelId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX BelId &bel) const noexcept { return hash<int>()(bel.index); }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX WireId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX WireId &wire) const noexcept
-    {
-        return hash<int>()(wire.index);
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX PipId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX PipId &pip) const noexcept { return hash<int>()(pip.index); }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX GroupId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX GroupId &group) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(group.type));
-        boost::hash_combine(seed, hash<int>()(group.x));
-        boost::hash_combine(seed, hash<int>()(group.y));
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX DecalId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX DecalId &decal) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(decal.type));
-        boost::hash_combine(seed, hash<int>()(decal.index));
-        return seed;
-    }
-};
-} // namespace std
+#endif /* ICE40_ARCHDEFS_H */

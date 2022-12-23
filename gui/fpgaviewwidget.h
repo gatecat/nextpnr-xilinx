@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Serge Bazanski <q3k@symbioticeda.com>
+ *  Copyright (C) 2018  Serge Bazanski <q3k@q3k.org>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -201,6 +201,8 @@ class FPGAViewWidget : public QOpenGLWidget, protected QOpenGLFunctions
                 NPNR_ASSERT_FALSE("Invalid ElementType");
             }
         }
+
+        PickedElement &operator=(const PickedElement &other) = default;
 
         DecalXY decal(Context *ctx) const
         {

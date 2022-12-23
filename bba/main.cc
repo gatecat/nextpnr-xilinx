@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -36,8 +36,7 @@ enum TokenType : int8_t
     TOK_REF,
     TOK_U8,
     TOK_U16,
-    TOK_U32,
-    TOK_ALIGN
+    TOK_U32
 };
 
 struct Stream
@@ -53,7 +52,7 @@ std::vector<Stream> streams;
 std::map<std::string, int> streamIndex;
 std::vector<int> streamStack;
 
-std::vector<int64_t> labels;
+std::vector<int> labels;
 std::vector<std::string> labelNames;
 std::map<std::string, int> labelIndex;
 
@@ -74,7 +73,6 @@ int main(int argc, char **argv)
     bool verbose = false;
     bool bigEndian;
     bool writeC = false;
-    bool offset32 = false;
     bool writeE = false;
     char buffer[512];
 
@@ -145,10 +143,6 @@ int main(int argc, char **argv)
 
     while (fgets(buffer, 512, fileIn) != nullptr) {
         std::string cmd = strtok(buffer, " \t\r\n");
-        if (cmd == "offset32") {
-            offset32 = true;
-            continue;
-        }
 
         if (cmd == "pre") {
             const char *p = skipWhitespace(strtok(nullptr, "\r\n"));
@@ -206,15 +200,6 @@ int main(int argc, char **argv)
             continue;
         }
 
-        if (cmd == "align") {
-            Stream &s = streams.at(streamStack.back());
-            s.tokenTypes.push_back(TOK_ALIGN);
-            s.tokenValues.push_back(0);
-            if (debug)
-                s.tokenComments.push_back("");
-            continue;
-        }
-
         if (cmd == "str") {
             const char *value = skipWhitespace(strtok(nullptr, "\r\n"));
             assert(*value != 0);
@@ -235,12 +220,6 @@ int main(int argc, char **argv)
             s.tokenValues.push_back(labelIndex.at(label));
             if (debug)
                 s.tokenComments.push_back(comment);
-
-            stringStream.tokenTypes.push_back(TOK_ALIGN);
-            stringStream.tokenValues.push_back(0);
-            if (debug)
-                stringStream.tokenComments.push_back("");
-
             stringStream.tokenTypes.push_back(TOK_LABEL);
             stringStream.tokenValues.push_back(labelIndex.at(label));
             stringStream.tokenComments.push_back("");
@@ -266,7 +245,7 @@ int main(int argc, char **argv)
     if (verbose) {
         printf("Constructed %d streams:\n", int(streams.size()));
         for (auto &s : streams)
-            printf("    stream '%s' with %d tokens\n", s.name.c_str(), int64_t(s.tokenTypes.size()));
+            printf("    stream '%s' with %d tokens\n", s.name.c_str(), int(s.tokenTypes.size()));
     }
 
     assert(!streams.empty());
@@ -277,13 +256,11 @@ int main(int argc, char **argv)
     streams.back().tokenValues.swap(stringStream.tokenValues);
     streams.back().tokenComments.swap(stringStream.tokenComments);
 
-    int64_t cursor = 0;
+    int cursor = 0;
     for (auto &s : streams) {
-        for (int64_t i = 0; i < int64_t(s.tokenTypes.size()); i++) {
+        for (int i = 0; i < int(s.tokenTypes.size()); i++) {
             switch (s.tokenTypes[i]) {
             case TOK_LABEL:
-                if (offset32)
-                    assert(cursor % 4 == 0);
                 labels[s.tokenValues[i]] = cursor;
                 break;
             case TOK_REF:
@@ -299,10 +276,6 @@ int main(int argc, char **argv)
             case TOK_U32:
                 assert(cursor % 4 == 0);
                 cursor += 4;
-                break;
-            case TOK_ALIGN:
-                if (cursor % 4 != 0)
-                    cursor += 4 - (cursor % 4);
                 break;
             default:
                 assert(0);
@@ -330,9 +303,7 @@ int main(int argc, char **argv)
             case TOK_LABEL:
                 break;
             case TOK_REF:
-                assert(labels[value] % 4 == 0);
-                assert(cursor % 4 == 0);
-                value = (labels[value] - cursor) / 4;
+                value = labels[value] - cursor;
                 numBytes = 4;
                 break;
             case TOK_U8:
@@ -344,10 +315,6 @@ int main(int argc, char **argv)
             case TOK_U32:
                 numBytes = 4;
                 break;
-            case TOK_ALIGN:
-                if (cursor % 4 != 0)
-                    numBytes = 4 - (cursor % 4);
-                break;
             default:
                 assert(0);
             }
@@ -356,8 +323,6 @@ int main(int argc, char **argv)
                 switch (numBytes) {
                 case 4:
                     data[cursor++] = value >> 24;
-                /* fall-through */
-                case 3:
                     data[cursor++] = value >> 16;
                 /* fall-through */
                 case 2:
@@ -375,8 +340,6 @@ int main(int argc, char **argv)
                 switch (numBytes) {
                 case 4:
                     data[cursor + 3] = value >> 24;
-                /* fall-through */
-                case 3:
                     data[cursor + 2] = value >> 16;
                 /* fall-through */
                 case 2:
@@ -440,16 +403,16 @@ int main(int argc, char **argv)
         }
     }
 
-    assert(cursor == int64_t(data.size()));
+    assert(cursor == int(data.size()));
 
     if (writeC) {
         for (auto &s : preText)
             fprintf(fileOut, "%s\n", s.c_str());
 
-        fprintf(fileOut, "const char %s[%d] =\n\"", streams[0].name.c_str(), int64_t(data.size()) + 1);
+        fprintf(fileOut, "const char %s[%d] =\n\"", streams[0].name.c_str(), int(data.size()) + 1);
 
         cursor = 1;
-        for (int64_t i = 0; i < int64_t(data.size()); i++) {
+        for (int i = 0; i < int(data.size()); i++) {
             auto d = data[i];
             if (cursor > 70) {
                 fputc('\"', fileOut);
@@ -461,7 +424,7 @@ int main(int argc, char **argv)
                 cursor = 1;
             }
             if (d < 32 || d >= 127) {
-                if (i + 1 < int64_t(data.size()) && (data[i + 1] < '0' || '9' < data[i + 1]))
+                if (i + 1 < int(data.size()) && (data[i + 1] < '0' || '9' < data[i + 1]))
                     cursor += fprintf(fileOut, "\\%o", int(d));
                 else
                     cursor += fprintf(fileOut, "\\%03o", int(d));
@@ -495,7 +458,7 @@ int main(int argc, char **argv)
         fwrite(data.data(), int(data.size()), 1, fileBin);
         fclose(fileBin);
     } else {
-        fwrite(data.data(), int64_t(data.size()), 1, fileOut);
+        fwrite(data.data(), int(data.size()), 1, fileOut);
     }
 
     return 0;

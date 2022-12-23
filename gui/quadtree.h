@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Serge Bazanski <q3k@symbioticeda.com>
+ *  Copyright (C) 2018  Serge Bazanski <q3k@q3k.org>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -20,7 +20,7 @@
 #ifndef QUADTREE_H
 #define QUADTREE_H
 
-// This file implements a quad tree used for comitting 2D axis aligned
+// This file implements a quad tree used for committing 2D axis aligned
 // bounding boxes and then retrieving them by 2D point.
 
 NEXTPNR_NAMESPACE_BEGIN
@@ -51,8 +51,6 @@ template <typename CoordinateT, typename ElementT> class QuadTreeNode
         }
 
         BoundingBox() : x0_(pinf), y0_(pinf), x1_(ninf), y1_(ninf) {}
-
-        BoundingBox(const BoundingBox &other) : x0_(other.x0_), y0_(other.y0_), x1_(other.x1_), y1_(other.y1_) {}
 
         // Whether a bounding box contains a given points.
         // A point is defined to be in a bounding box when it's not lesser than
@@ -382,17 +380,17 @@ template <typename CoordinateT, typename ElementT> class QuadTree
 
     // Standard constructor.
     //
-    // @param b Bounding box of the entire tree - all comitted elements must
+    // @param b Bounding box of the entire tree - all committed elements must
     //          fit within in.
     QuadTree(BoundingBox b) : root_(b, 0) {}
 
     // Inserts a new value at a given bounding box.e
     // BoundingBoxes are not deduplicated - if two are pushed with the same
-    // coordinates, the first one will take precendence.
+    // coordinates, the first one will take precedence.
     //
     // @param k Bounding box at which to store value.
     // @param v Value at a given bounding box.
-    // @returns Whether the insert was succesful.
+    // @returns Whether the insert was successful.
     bool insert(BoundingBox k, ElementT v)
     {
         k.fixup();

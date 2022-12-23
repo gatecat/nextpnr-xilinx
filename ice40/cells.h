@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2018  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -30,90 +30,74 @@ NEXTPNR_NAMESPACE_BEGIN
 std::unique_ptr<CellInfo> create_ice_cell(Context *ctx, IdString type, std::string name = "");
 
 // Return true if a cell is a LUT
-inline bool is_lut(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_LUT4"); }
+inline bool is_lut(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_LUT4; }
 
 // Return true if a cell is a flipflop
 inline bool is_ff(const BaseCtx *ctx, const CellInfo *cell)
 {
-    return cell->type == ctx->id("SB_DFF") || cell->type == ctx->id("SB_DFFE") || cell->type == ctx->id("SB_DFFSR") ||
-           cell->type == ctx->id("SB_DFFR") || cell->type == ctx->id("SB_DFFSS") || cell->type == ctx->id("SB_DFFS") ||
-           cell->type == ctx->id("SB_DFFESR") || cell->type == ctx->id("SB_DFFER") ||
-           cell->type == ctx->id("SB_DFFESS") || cell->type == ctx->id("SB_DFFES") ||
-           cell->type == ctx->id("SB_DFFN") || cell->type == ctx->id("SB_DFFNE") ||
-           cell->type == ctx->id("SB_DFFNSR") || cell->type == ctx->id("SB_DFFNR") ||
-           cell->type == ctx->id("SB_DFFNSS") || cell->type == ctx->id("SB_DFFNS") ||
-           cell->type == ctx->id("SB_DFFNESR") || cell->type == ctx->id("SB_DFFNER") ||
-           cell->type == ctx->id("SB_DFFNESS") || cell->type == ctx->id("SB_DFFNES");
+    return cell->type.in(id_SB_DFF, id_SB_DFFE, id_SB_DFFSR, id_SB_DFFR, id_SB_DFFSS, id_SB_DFFS, id_SB_DFFESR,
+                         id_SB_DFFER, id_SB_DFFESS, id_SB_DFFES, id_SB_DFFN, id_SB_DFFNE, id_SB_DFFNSR, id_SB_DFFNR,
+                         id_SB_DFFNSS, id_SB_DFFNS, id_SB_DFFNESR, id_SB_DFFNER, id_SB_DFFNESS, id_SB_DFFNES);
 }
 
-inline bool is_carry(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_CARRY"); }
+inline bool is_carry(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_CARRY; }
 
-inline bool is_lc(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("ICESTORM_LC"); }
+inline bool is_lc(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_ICESTORM_LC; }
 
 // Return true if a cell is a SB_IO
-inline bool is_sb_io(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_IO"); }
+inline bool is_sb_io(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_IO; }
 
 // Return true if a cell is a SB_GB_IO
-inline bool is_sb_gb_io(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_GB_IO"); }
+inline bool is_sb_gb_io(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_GB_IO; }
 
 // Return true if a cell is a global buffer
-inline bool is_gbuf(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_GB"); }
+inline bool is_gbuf(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_GB; }
 
 // Return true if a cell is a RAM
 inline bool is_ram(const BaseCtx *ctx, const CellInfo *cell)
 {
-    return cell->type == ctx->id("SB_RAM40_4K") || cell->type == ctx->id("SB_RAM40_4KNR") ||
-           cell->type == ctx->id("SB_RAM40_4KNW") || cell->type == ctx->id("SB_RAM40_4KNRNW");
+    return cell->type.in(id_SB_RAM40_4K, id_SB_RAM40_4KNR, id_SB_RAM40_4KNW, id_SB_RAM40_4KNRNW);
 }
 
-inline bool is_sb_lfosc(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_LFOSC"); }
+inline bool is_sb_lfosc(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_LFOSC; }
 
-inline bool is_sb_hfosc(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_HFOSC"); }
+inline bool is_sb_hfosc(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_HFOSC; }
 
-inline bool is_sb_spram(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_SPRAM256KA"); }
+inline bool is_sb_spram(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_SPRAM256KA; }
 
-inline bool is_sb_mac16(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_MAC16"); }
+inline bool is_sb_mac16(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_MAC16; }
 
-inline bool is_sb_rgba_drv(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_RGBA_DRV"); }
+inline bool is_sb_rgba_drv(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_RGBA_DRV; }
 
-inline bool is_sb_rgb_drv(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_RGB_DRV"); }
+inline bool is_sb_rgb_drv(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_RGB_DRV; }
 
-inline bool is_sb_led_drv_cur(const BaseCtx *ctx, const CellInfo *cell)
-{
-    return cell->type == ctx->id("SB_LED_DRV_CUR");
-}
+inline bool is_sb_led_drv_cur(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_LED_DRV_CUR; }
 
-inline bool is_sb_ledda_ip(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_LEDDA_IP"); }
+inline bool is_sb_ledda_ip(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_LEDDA_IP; }
 
-inline bool is_sb_i2c(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_I2C"); }
+inline bool is_sb_i2c(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_I2C; }
 
-inline bool is_sb_spi(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == ctx->id("SB_SPI"); }
+inline bool is_sb_spi(const BaseCtx *ctx, const CellInfo *cell) { return cell->type == id_SB_SPI; }
 
 inline bool is_sb_pll40(const BaseCtx *ctx, const CellInfo *cell)
 {
-    return cell->type == ctx->id("SB_PLL40_PAD") || cell->type == ctx->id("SB_PLL40_2_PAD") ||
-           cell->type == ctx->id("SB_PLL40_2F_PAD") || cell->type == ctx->id("SB_PLL40_CORE") ||
-           cell->type == ctx->id("SB_PLL40_2F_CORE");
+    return cell->type.in(id_SB_PLL40_PAD, id_SB_PLL40_2_PAD, id_SB_PLL40_2F_PAD, id_SB_PLL40_CORE, id_SB_PLL40_2F_CORE);
 }
 
 inline bool is_sb_pll40_pad(const BaseCtx *ctx, const CellInfo *cell)
 {
-    return cell->type == ctx->id("SB_PLL40_PAD") || cell->type == ctx->id("SB_PLL40_2_PAD") ||
-           cell->type == ctx->id("SB_PLL40_2F_PAD") ||
-           (cell->type == ctx->id("ICESTORM_PLL") &&
-            (cell->attrs.at(ctx->id("TYPE")).as_string() == "SB_PLL40_PAD" ||
-             cell->attrs.at(ctx->id("TYPE")).as_string() == "SB_PLL40_2_PAD" ||
-             cell->attrs.at(ctx->id("TYPE")).as_string() == "SB_PLL40_2F_PAD"));
+    return cell->type.in(id_SB_PLL40_PAD, id_SB_PLL40_2_PAD, id_SB_PLL40_2F_PAD) ||
+           (cell->type == id_ICESTORM_PLL && (cell->attrs.at(id_TYPE).as_string() == "SB_PLL40_PAD" ||
+                                              cell->attrs.at(id_TYPE).as_string() == "SB_PLL40_2_PAD" ||
+                                              cell->attrs.at(id_TYPE).as_string() == "SB_PLL40_2F_PAD"));
 }
 
 inline bool is_sb_pll40_dual(const BaseCtx *ctx, const CellInfo *cell)
 {
-    return cell->type == ctx->id("SB_PLL40_2_PAD") || cell->type == ctx->id("SB_PLL40_2F_PAD") ||
-           cell->type == ctx->id("SB_PLL40_2F_CORE") ||
-           (cell->type == ctx->id("ICESTORM_PLL") &&
-            (cell->attrs.at(ctx->id("TYPE")).as_string() == "SB_PLL40_2_PAD" ||
-             cell->attrs.at(ctx->id("TYPE")).as_string() == "SB_PLL40_2F_PAD" ||
-             cell->attrs.at(ctx->id("TYPE")).as_string() == "SB_PLL40_2F_CORE"));
+    return cell->type.in(id_SB_PLL40_2_PAD, id_SB_PLL40_2F_PAD, id_SB_PLL40_2F_CORE) ||
+           (cell->type == id_ICESTORM_PLL && (cell->attrs.at(id_TYPE).as_string() == "SB_PLL40_2_PAD" ||
+                                              cell->attrs.at(id_TYPE).as_string() == "SB_PLL40_2F_PAD" ||
+                                              cell->attrs.at(id_TYPE).as_string() == "SB_PLL40_2F_CORE"));
 }
 
 uint8_t sb_pll40_type(const BaseCtx *ctx, const CellInfo *cell);
@@ -130,7 +114,7 @@ void lut_to_lc(const Context *ctx, CellInfo *lut, CellInfo *lc, bool no_dff = tr
 void dff_to_lc(const Context *ctx, CellInfo *dff, CellInfo *lc, bool pass_thru_lut = false);
 
 // Convert a nextpnr IO buffer to a SB_IO
-void nxio_to_sb(Context *ctx, CellInfo *nxio, CellInfo *sbio, std::unordered_set<IdString> &todelete_cells);
+void nxio_to_sb(Context *ctx, CellInfo *nxio, CellInfo *sbio, pool<IdString> &todelete_cells);
 
 // Return true if a port is a clock port
 bool is_clock_port(const BaseCtx *ctx, const PortRef &port);

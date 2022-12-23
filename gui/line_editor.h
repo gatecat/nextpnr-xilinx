@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *  Copyright (C) 2018  Alex Tsui
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
@@ -47,6 +47,7 @@ class LineEditor : public QLineEdit
     void keyPressEvent(QKeyEvent *) Q_DECL_OVERRIDE;
     bool focusNextPrevChild(bool next) Q_DECL_OVERRIDE;
     void autocomplete();
+    void addLineToHistory(QString line);
 
   private:
     int index;

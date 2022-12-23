@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2018  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,7 @@
 #include <boost/range/adaptor/reversed.hpp>
 #include <cmath>
 #include <cstring>
+#include "embed.h"
 #include "gfx.h"
 #include "globals.h"
 #include "log.h"
@@ -35,17 +36,6 @@
 #include "util.h"
 
 NEXTPNR_NAMESPACE_BEGIN
-
-static std::tuple<int, int, std::string> split_identifier_name(const std::string &name)
-{
-    size_t first_slash = name.find('/');
-    NPNR_ASSERT(first_slash != std::string::npos);
-    size_t second_slash = name.find('/', first_slash + 1);
-    NPNR_ASSERT(second_slash != std::string::npos);
-    return std::make_tuple(std::stoi(name.substr(1, first_slash)),
-                           std::stoi(name.substr(first_slash + 2, second_slash - first_slash)),
-                           name.substr(second_slash + 1));
-};
 
 // -----------------------------------------------------------------------
 
@@ -60,71 +50,52 @@ void IdString::initialize_arch(const BaseCtx *ctx)
 
 // -----------------------------------------------------------------------
 
-static const ChipInfoPOD *get_chip_info(const RelPtr<ChipInfoPOD> *ptr) { return ptr->get(); }
-
-#if defined(_MSC_VER)
-void load_chipdb();
-#endif
-
-#if defined(EXTERNAL_CHIPDB_ROOT)
-const char *chipdb_blob_25k = nullptr;
-const char *chipdb_blob_45k = nullptr;
-const char *chipdb_blob_85k = nullptr;
-
-boost::iostreams::mapped_file_source blob_files[3];
-
-const char *mmap_file(int index, const char *filename)
+static const ChipInfoPOD *get_chip_info(ArchArgs::ArchArgsTypes chip)
 {
-    try {
-        blob_files[index].open(filename);
-        if (!blob_files[index].is_open())
-            log_error("Unable to read chipdb %s\n", filename);
-        return (const char *)blob_files[index].data();
-    } catch (...) {
-        log_error("Unable to read chipdb %s\n", filename);
+    std::string chipdb;
+    if (chip == ArchArgs::LFE5U_12F || chip == ArchArgs::LFE5U_25F || chip == ArchArgs::LFE5UM_25F ||
+        chip == ArchArgs::LFE5UM5G_25F) {
+        chipdb = "ecp5/chipdb-25k.bin";
+    } else if (chip == ArchArgs::LFE5U_45F || chip == ArchArgs::LFE5UM_45F || chip == ArchArgs::LFE5UM5G_45F) {
+        chipdb = "ecp5/chipdb-45k.bin";
+    } else if (chip == ArchArgs::LFE5U_85F || chip == ArchArgs::LFE5UM_85F || chip == ArchArgs::LFE5UM5G_85F) {
+        chipdb = "ecp5/chipdb-85k.bin";
+    } else {
+        log_error("Unknown chip\n");
     }
+
+    auto ptr = reinterpret_cast<const RelPtr<ChipInfoPOD> *>(get_chipdb(chipdb));
+    if (ptr == nullptr)
+        return nullptr;
+    return ptr->get();
 }
 
-void load_chipdb()
+bool Arch::is_available(ArchArgs::ArchArgsTypes chip) { return get_chip_info(chip) != nullptr; }
+
+std::vector<std::string> Arch::get_supported_packages(ArchArgs::ArchArgsTypes chip)
 {
-    chipdb_blob_25k = mmap_file(0, EXTERNAL_CHIPDB_ROOT "/ecp5/chipdb-25k.bin");
-    chipdb_blob_45k = mmap_file(1, EXTERNAL_CHIPDB_ROOT "/ecp5/chipdb-45k.bin");
-    chipdb_blob_85k = mmap_file(2, EXTERNAL_CHIPDB_ROOT "/ecp5/chipdb-85k.bin");
+    const ChipInfoPOD *chip_info = get_chip_info(chip);
+    std::vector<std::string> packages;
+    for (auto &pkg : chip_info->package_info)
+        packages.push_back(pkg.name.get());
+    return packages;
 }
-#endif
-//#define LFE5U_45F_ONLY
+
+// -----------------------------------------------------------------------
 
 Arch::Arch(ArchArgs args) : args(args)
 {
-#if defined(_MSC_VER) || defined(EXTERNAL_CHIPDB_ROOT)
-    load_chipdb();
-#endif
-#ifdef LFE5U_45F_ONLY
-    if (args.type == ArchArgs::LFE5U_45F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_45k));
-    } else {
+    chip_info = get_chip_info(args.type);
+    if (chip_info == nullptr)
         log_error("Unsupported ECP5 chip type.\n");
-    }
-#else
-    if (args.type == ArchArgs::LFE5U_25F || args.type == ArchArgs::LFE5UM_25F || args.type == ArchArgs::LFE5UM5G_25F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_25k));
-    } else if (args.type == ArchArgs::LFE5U_45F || args.type == ArchArgs::LFE5UM_45F ||
-               args.type == ArchArgs::LFE5UM5G_45F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_45k));
-    } else if (args.type == ArchArgs::LFE5U_85F || args.type == ArchArgs::LFE5UM_85F ||
-               args.type == ArchArgs::LFE5UM5G_85F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_85k));
-    } else {
-        log_error("Unsupported ECP5 chip type.\n");
-    }
-#endif
     if (chip_info->const_id_count != DB_CONST_ID_COUNT)
         log_error("Chip database 'bba' and nextpnr code are out of sync; please rebuild (or contact distribution "
                   "maintainer)!\n");
+
     package_info = nullptr;
-    for (int i = 0; i < chip_info->num_packages; i++) {
-        if (args.package == chip_info->package_info[i].name.get()) {
-            package_info = &(chip_info->package_info[i]);
+    for (auto &pkg : chip_info->package_info) {
+        if (args.package == pkg.name.get()) {
+            package_info = &pkg;
             break;
         }
     }
@@ -132,14 +103,70 @@ Arch::Arch(ArchArgs args) : args(args)
     if (!package_info)
         log_error("Unsupported package '%s' for '%s'.\n", args.package.c_str(), getChipName().c_str());
 
-    bel_to_cell.resize(chip_info->height * chip_info->width * max_loc_bels, nullptr);
+    tile_status.resize(chip_info->num_tiles);
+    for (int i = 0; i < chip_info->num_tiles; i++) {
+        auto &ts = tile_status.at(i);
+        auto &tile_data = chip_info->tile_info[i];
+        ts.boundcells.resize(chip_info->locations[chip_info->location_type[i]].bel_data.size(), nullptr);
+        for (auto &name : tile_data.tile_names) {
+            if (strcmp(chip_info->tiletype_names[name.type_idx].get(), "PLC2") == 0) {
+                // Is a logic tile
+                ts.lts = new LogicTileStatus();
+                break;
+            }
+        }
+    }
+
+    BaseArch::init_cell_types();
+    BaseArch::init_bel_buckets();
+
+    for (int i = 0; i < chip_info->width; i++)
+        x_ids.push_back(idf("X%d", i));
+    for (int i = 0; i < chip_info->height; i++)
+        y_ids.push_back(idf("Y%d", i));
+
+    for (int i = 0; i < chip_info->width; i++) {
+        IdString x_id = idf("X%d", i);
+        x_ids.push_back(x_id);
+        id_to_x[x_id] = i;
+    }
+    for (int i = 0; i < chip_info->height; i++) {
+        IdString y_id = idf("Y%d", i);
+        y_ids.push_back(y_id);
+        id_to_y[y_id] = i;
+    }
+
+    wire_tile_vecidx.resize(chip_info->num_tiles, -1);
+    int n_wires = 0;
+    for (auto e : getWires()) {
+        if (e.index == 0) {
+            wire_tile_vecidx.at(e.location.y * chip_info->width + e.location.x) = n_wires;
+        }
+        n_wires++;
+    }
+    wire2net.resize(n_wires, nullptr);
+    wire_fanout.resize(n_wires, 0);
+
+    pip_tile_vecidx.resize(chip_info->num_tiles, -1);
+    int n_pips = 0;
+    for (auto e : getPips()) {
+        if (e.index == 0) {
+            pip_tile_vecidx.at(e.location.y * chip_info->width + e.location.x) = n_pips;
+        }
+        n_pips++;
+    }
+    pip2net.resize(n_pips, nullptr);
+
+    lutperm_allowed.resize(chip_info->width * chip_info->height * 4);
 }
 
 // -----------------------------------------------------------------------
 
 std::string Arch::getChipName() const
 {
-    if (args.type == ArchArgs::LFE5U_25F) {
+    if (args.type == ArchArgs::LFE5U_12F) {
+        return "LFE5U-12F";
+    } else if (args.type == ArchArgs::LFE5U_25F) {
         return "LFE5U-25F";
     } else if (args.type == ArchArgs::LFE5U_45F) {
         return "LFE5U-45F";
@@ -162,7 +189,7 @@ std::string Arch::getChipName() const
     }
 }
 
-std::string Arch::getFullChipName() const
+std::string Arch::get_full_chip_name() const
 {
     std::string name = getChipName();
     name += "-";
@@ -186,50 +213,48 @@ std::string Arch::getFullChipName() const
 
 IdString Arch::archArgsToId(ArchArgs args) const
 {
+    if (args.type == ArchArgs::LFE5U_12F)
+        return id_lfe5u_12f;
     if (args.type == ArchArgs::LFE5U_25F)
-        return id("lfe5u_25f");
+        return id_lfe5u_25f;
     if (args.type == ArchArgs::LFE5U_45F)
-        return id("lfe5u_45f");
+        return id_lfe5u_45f;
     if (args.type == ArchArgs::LFE5U_85F)
-        return id("lfe5u_85f");
+        return id_lfe5u_85f;
     if (args.type == ArchArgs::LFE5UM_25F)
-        return id("lfe5um_25f");
+        return id_lfe5um_25f;
     if (args.type == ArchArgs::LFE5UM_45F)
-        return id("lfe5um_45f");
+        return id_lfe5um_45f;
     if (args.type == ArchArgs::LFE5UM_85F)
-        return id("lfe5um_85f");
+        return id_lfe5um_85f;
     if (args.type == ArchArgs::LFE5UM5G_25F)
-        return id("lfe5um5g_25f");
+        return id_lfe5um5g_25f;
     if (args.type == ArchArgs::LFE5UM5G_45F)
-        return id("lfe5um5g_45f");
+        return id_lfe5um5g_45f;
     if (args.type == ArchArgs::LFE5UM5G_85F)
-        return id("lfe5um5g_85f");
+        return id_lfe5um5g_85f;
     return IdString();
 }
 
 // -----------------------------------------------------------------------
 
-BelId Arch::getBelByName(IdString name) const
+BelId Arch::getBelByName(IdStringList name) const
 {
+    if (name.size() != 3)
+        return BelId();
     BelId ret;
-    auto it = bel_by_name.find(name);
-    if (it != bel_by_name.end())
-        return it->second;
-
     Location loc;
-    std::string basename;
-    std::tie(loc.x, loc.y, basename) = split_identifier_name(name.str(this));
+    loc.x = id_to_x.at(name[0]);
+    loc.y = id_to_y.at(name[1]);
     ret.location = loc;
-    const LocationTypePOD *loci = locInfo(ret);
-    for (int i = 0; i < loci->num_bels; i++) {
-        if (std::strcmp(loci->bel_data[i].name.get(), basename.c_str()) == 0) {
+    const LocationTypePOD *loci = loc_info(ret);
+    for (int i = 0; i < loci->bel_data.ssize(); i++) {
+        if (std::strcmp(loci->bel_data[i].name.get(), name[2].c_str(this)) == 0) {
             ret.index = i;
-            break;
+            return ret;
         }
     }
-    if (ret.index >= 0)
-        bel_by_name[name] = ret;
-    return ret;
+    return BelId();
 }
 
 BelRange Arch::getBelsByTile(int x, int y) const
@@ -239,7 +264,7 @@ BelRange Arch::getBelsByTile(int x, int y) const
     br.b.cursor_tile = y * chip_info->width + x;
     br.e.cursor_tile = y * chip_info->width + x;
     br.b.cursor_index = 0;
-    br.e.cursor_index = chip_info->locations[chip_info->location_type[br.b.cursor_tile]].num_bels - 1;
+    br.e.cursor_index = chip_info->locations[chip_info->location_type[br.b.cursor_tile]].bel_data.ssize() - 1;
     br.b.chip = chip_info;
     br.e.chip = chip_info;
     if (br.e.cursor_index == -1)
@@ -255,12 +280,10 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
 
     NPNR_ASSERT(bel != BelId());
 
-    int num_bel_wires = locInfo(bel)->bel_data[bel.index].num_bel_wires;
-    const BelWirePOD *bel_wires = locInfo(bel)->bel_data[bel.index].bel_wires.get();
-    for (int i = 0; i < num_bel_wires; i++)
-        if (bel_wires[i].port == pin.index) {
-            ret.location = bel.location + bel_wires[i].rel_wire_loc;
-            ret.index = bel_wires[i].wire_index;
+    for (auto &bw : loc_info(bel)->bel_data[bel.index].bel_wires)
+        if (bw.port == pin.index) {
+            ret.location = bel.location + bw.rel_wire_loc;
+            ret.index = bw.wire_index;
             break;
         }
 
@@ -271,48 +294,40 @@ PortType Arch::getBelPinType(BelId bel, IdString pin) const
 {
     NPNR_ASSERT(bel != BelId());
 
-    int num_bel_wires = locInfo(bel)->bel_data[bel.index].num_bel_wires;
-    const BelWirePOD *bel_wires = locInfo(bel)->bel_data[bel.index].bel_wires.get();
-
-    for (int i = 0; i < num_bel_wires; i++)
-        if (bel_wires[i].port == pin.index)
-            return PortType(bel_wires[i].type);
+    for (auto &bw : loc_info(bel)->bel_data[bel.index].bel_wires)
+        if (bw.port == pin.index)
+            return PortType(bw.type);
 
     return PORT_INOUT;
 }
 
 // -----------------------------------------------------------------------
 
-WireId Arch::getWireByName(IdString name) const
+WireId Arch::getWireByName(IdStringList name) const
 {
+    if (name.size() != 3)
+        return WireId();
     WireId ret;
-    auto it = wire_by_name.find(name);
-    if (it != wire_by_name.end())
-        return it->second;
-
     Location loc;
-    std::string basename;
-    std::tie(loc.x, loc.y, basename) = split_identifier_name(name.str(this));
+    loc.x = id_to_x.at(name[0]);
+    loc.y = id_to_y.at(name[1]);
     ret.location = loc;
-    const LocationTypePOD *loci = locInfo(ret);
-    for (int i = 0; i < loci->num_wires; i++) {
-        if (std::strcmp(loci->wire_data[i].name.get(), basename.c_str()) == 0) {
+    const LocationTypePOD *loci = loc_info(ret);
+    for (int i = 0; i < loci->wire_data.ssize(); i++) {
+        if (std::strcmp(loci->wire_data[i].name.get(), name[2].c_str(this)) == 0) {
             ret.index = i;
-            ret.location = loc;
-            break;
+            return ret;
         }
     }
-    if (ret.index >= 0)
-        wire_by_name[name] = ret;
-    else
-        ret.location = Location();
-    return ret;
+    return WireId();
 }
 
 // -----------------------------------------------------------------------
 
-PipId Arch::getPipByName(IdString name) const
+PipId Arch::getPipByName(IdStringList name) const
 {
+    if (name.size() != 3)
+        return PipId();
     auto it = pip_by_name.find(name);
     if (it != pip_by_name.end())
         return it->second;
@@ -320,77 +335,76 @@ PipId Arch::getPipByName(IdString name) const
     PipId ret;
     Location loc;
     std::string basename;
-    std::tie(loc.x, loc.y, basename) = split_identifier_name(name.str(this));
+    loc.x = id_to_x.at(name[0]);
+    loc.y = id_to_y.at(name[1]);
     ret.location = loc;
-    const LocationTypePOD *loci = locInfo(ret);
-    for (int i = 0; i < loci->num_pips; i++) {
+    const LocationTypePOD *loci = loc_info(ret);
+    for (int i = 0; i < loci->pip_data.ssize(); i++) {
         PipId curr;
         curr.location = loc;
         curr.index = i;
         pip_by_name[getPipName(curr)] = curr;
     }
     if (pip_by_name.find(name) == pip_by_name.end())
-        NPNR_ASSERT_FALSE_STR("no pip named " + name.str(this));
+        NPNR_ASSERT_FALSE_STR("no pip named " + name.str(getCtx()));
     return pip_by_name[name];
 }
 
-IdString Arch::getPipName(PipId pip) const
+IdStringList Arch::getPipName(PipId pip) const
 {
     NPNR_ASSERT(pip != PipId());
 
-    int x = pip.location.x;
-    int y = pip.location.y;
+    // TODO: can we improve how pip names are stored/built?
+    auto &pip_data = loc_info(pip)->pip_data[pip.index];
+    WireId src = getPipSrcWire(pip), dst = getPipDstWire(pip);
+    std::string pip_name = stringf("%d_%d_%s->%d_%d_%s", pip_data.rel_src_loc.x, pip_data.rel_src_loc.y,
+                                   get_wire_basename(src).c_str(this), pip_data.rel_dst_loc.x, pip_data.rel_dst_loc.y,
+                                   get_wire_basename(dst).c_str(this));
 
-    std::string src_name = getWireName(getPipSrcWire(pip)).str(this);
-    std::replace(src_name.begin(), src_name.end(), '/', '.');
-
-    std::string dst_name = getWireName(getPipDstWire(pip)).str(this);
-    std::replace(dst_name.begin(), dst_name.end(), '/', '.');
-
-    return id("X" + std::to_string(x) + "/Y" + std::to_string(y) + "/" + src_name + ".->." + dst_name);
+    std::array<IdString, 3> ids{x_ids.at(pip.location.x), y_ids.at(pip.location.y), id(pip_name)};
+    return IdStringList(ids);
 }
 
 // -----------------------------------------------------------------------
 
-BelId Arch::getPackagePinBel(const std::string &pin) const
+BelId Arch::get_package_pin_bel(const std::string &pin) const
 {
-    for (int i = 0; i < package_info->num_pins; i++) {
-        if (package_info->pin_data[i].name.get() == pin) {
+    for (auto &ppin : package_info->pin_data) {
+        if (ppin.name.get() == pin) {
             BelId bel;
-            bel.location = package_info->pin_data[i].abs_loc;
-            bel.index = package_info->pin_data[i].bel_index;
+            bel.location = ppin.abs_loc;
+            bel.index = ppin.bel_index;
             return bel;
         }
     }
     return BelId();
 }
 
-std::string Arch::getBelPackagePin(BelId bel) const
+std::string Arch::get_bel_package_pin(BelId bel) const
 {
-    for (int i = 0; i < package_info->num_pins; i++) {
-        if (Location(package_info->pin_data[i].abs_loc) == bel.location &&
-            package_info->pin_data[i].bel_index == bel.index) {
-            return package_info->pin_data[i].name.get();
+    for (auto &ppin : package_info->pin_data) {
+        if (Location(ppin.abs_loc) == bel.location && ppin.bel_index == bel.index) {
+            return ppin.name.get();
         }
     }
     return "";
 }
 
-int Arch::getPioBelBank(BelId bel) const
+int Arch::get_pio_bel_bank(BelId bel) const
 {
-    for (int i = 0; i < chip_info->num_pios; i++) {
-        if (Location(chip_info->pio_info[i].abs_loc) == bel.location && chip_info->pio_info[i].bel_index == bel.index) {
-            return chip_info->pio_info[i].bank;
+    for (auto &pio : chip_info->pio_info) {
+        if (Location(pio.abs_loc) == bel.location && pio.bel_index == bel.index) {
+            return pio.bank;
         }
     }
     NPNR_ASSERT_FALSE("failed to find PIO");
 }
 
-std::string Arch::getPioFunctionName(BelId bel) const
+std::string Arch::get_pio_function_name(BelId bel) const
 {
-    for (int i = 0; i < chip_info->num_pios; i++) {
-        if (Location(chip_info->pio_info[i].abs_loc) == bel.location && chip_info->pio_info[i].bel_index == bel.index) {
-            const char *func = chip_info->pio_info[i].function_name.get();
+    for (auto &pio : chip_info->pio_info) {
+        if (Location(pio.abs_loc) == bel.location && pio.bel_index == bel.index) {
+            const char *func = pio.function_name.get();
             if (func == nullptr)
                 return "";
             else
@@ -400,14 +414,14 @@ std::string Arch::getPioFunctionName(BelId bel) const
     NPNR_ASSERT_FALSE("failed to find PIO");
 }
 
-BelId Arch::getPioByFunctionName(const std::string &name) const
+BelId Arch::get_pio_by_function_name(const std::string &name) const
 {
-    for (int i = 0; i < chip_info->num_pios; i++) {
-        const char *func = chip_info->pio_info[i].function_name.get();
+    for (auto &pio : chip_info->pio_info) {
+        const char *func = pio.function_name.get();
         if (func != nullptr && func == name) {
             BelId bel;
-            bel.location = chip_info->pio_info[i].abs_loc;
-            bel.index = chip_info->pio_info[i].bel_index;
+            bel.location = pio.abs_loc;
+            bel.index = pio.bel_index;
             return bel;
         }
     }
@@ -419,12 +433,9 @@ std::vector<IdString> Arch::getBelPins(BelId bel) const
     std::vector<IdString> ret;
     NPNR_ASSERT(bel != BelId());
 
-    int num_bel_wires = locInfo(bel)->bel_data[bel.index].num_bel_wires;
-    const BelWirePOD *bel_wires = locInfo(bel)->bel_data[bel.index].bel_wires.get();
-
-    for (int i = 0; i < num_bel_wires; i++) {
+    for (auto &bw : loc_info(bel)->bel_data[bel.index].bel_wires) {
         IdString id;
-        id.index = bel_wires[i].port;
+        id.index = bw.port;
         ret.push_back(id);
     }
 
@@ -436,7 +447,7 @@ BelId Arch::getBelByLocation(Loc loc) const
     if (loc.x >= chip_info->width || loc.y >= chip_info->height)
         return BelId();
     const LocationTypePOD &locI = chip_info->locations[chip_info->location_type[loc.y * chip_info->width + loc.x]];
-    for (int i = 0; i < locI.num_bels; i++) {
+    for (int i = 0; i < locI.bel_data.ssize(); i++) {
         if (locI.bel_data[i].z == loc.z) {
             BelId bi;
             bi.location.x = loc.x;
@@ -452,7 +463,7 @@ BelId Arch::getBelByLocation(Loc loc) const
 
 delay_t Arch::estimateDelay(WireId src, WireId dst) const
 {
-    int num_uh = locInfo(dst)->wire_data[dst.index].num_uphill;
+    int num_uh = loc_info(dst)->wire_data[dst.index].pips_uphill.size();
     if (num_uh < 6) {
         for (auto uh : getPipsUphill(dst)) {
             if (getPipSrcWire(uh) == src)
@@ -461,17 +472,17 @@ delay_t Arch::estimateDelay(WireId src, WireId dst) const
     }
 
     auto est_location = [&](WireId w) -> std::pair<int, int> {
-        const auto &wire = locInfo(w)->wire_data[w.index];
+        const auto &wire = loc_info(w)->wire_data[w.index];
         if (w == gsrclk_wire) {
             auto phys_wire = getPipSrcWire(*(getPipsUphill(w).begin()));
             return std::make_pair(int(phys_wire.location.x), int(phys_wire.location.y));
-        } else if (wire.num_bel_pins > 0) {
+        } else if (wire.bel_pins.size() > 0) {
             return std::make_pair(w.location.x + wire.bel_pins[0].rel_bel_loc.x,
                                   w.location.y + wire.bel_pins[0].rel_bel_loc.y);
-        } else if (wire.num_downhill > 0) {
+        } else if (wire.pips_downhill.size() > 0) {
             return std::make_pair(w.location.x + wire.pips_downhill[0].rel_loc.x,
                                   w.location.y + wire.pips_downhill[0].rel_loc.y);
-        } else if (wire.num_uphill > 0) {
+        } else if (wire.pips_uphill.size() > 0) {
             return std::make_pair(w.location.x + wire.pips_uphill[0].rel_loc.x,
                                   w.location.y + wire.pips_uphill[0].rel_loc.y);
         } else {
@@ -493,9 +504,9 @@ delay_t Arch::estimateDelay(WireId src, WireId dst) const
            (6 + std::max(dx - 5, 0) + std::max(dy - 5, 0) + 2 * (std::min(dx, 5) + std::min(dy, 5)));
 }
 
-ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
+BoundingBox Arch::getRouteBoundingBox(WireId src, WireId dst) const
 {
-    ArcBounds bb;
+    BoundingBox bb;
 
     bb.x0 = src.location.x;
     bb.y0 = src.location.y;
@@ -510,17 +521,17 @@ ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
     };
 
     auto est_location = [&](WireId w) -> std::pair<int, int> {
-        const auto &wire = locInfo(w)->wire_data[w.index];
+        const auto &wire = loc_info(w)->wire_data[w.index];
         if (w == gsrclk_wire) {
             auto phys_wire = getPipSrcWire(*(getPipsUphill(w).begin()));
             return std::make_pair(int(phys_wire.location.x), int(phys_wire.location.y));
-        } else if (wire.num_bel_pins > 0) {
+        } else if (wire.bel_pins.size() > 0) {
             return std::make_pair(w.location.x + wire.bel_pins[0].rel_bel_loc.x,
                                   w.location.y + wire.bel_pins[0].rel_bel_loc.y);
-        } else if (wire.num_downhill > 0) {
+        } else if (wire.pips_downhill.size() > 0) {
             return std::make_pair(w.location.x + wire.pips_downhill[0].rel_loc.x,
                                   w.location.y + wire.pips_downhill[0].rel_loc.y);
-        } else if (wire.num_uphill > 0) {
+        } else if (wire.pips_uphill.size() > 0) {
             return std::make_pair(w.location.x + wire.pips_uphill[0].rel_loc.x,
                                   w.location.y + wire.pips_uphill[0].rel_loc.y);
         } else {
@@ -544,33 +555,31 @@ ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
     return bb;
 }
 
-delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
+delay_t Arch::predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdString dst_pin) const
 {
-    const auto &driver = net_info->driver;
-    if ((driver.port == id_FCO && sink.port == id_FCI) || sink.port == id_FXA || sink.port == id_FXB)
+    if ((src_pin == id_FCO && dst_pin == id_FCI) || dst_pin.in(id_FXA, id_FXB) || (src_pin == id_F && dst_pin == id_DI))
         return 0;
-    auto driver_loc = getBelLocation(driver.cell->bel);
-    auto sink_loc = getBelLocation(sink.cell->bel);
+    auto driver_loc = getBelLocation(src_bel);
+    auto sink_loc = getBelLocation(dst_bel);
     // Encourage use of direct interconnect
+    //   exact LUT input doesn't matter as they can be permuted by the router...
     if (driver_loc.x == sink_loc.x && driver_loc.y == sink_loc.y) {
-        if ((sink.port == id_A0 || sink.port == id_A1) && (driver.port == id_F1) &&
-            (driver_loc.z == 2 || driver_loc.z == 3))
-            return 0;
-        if ((sink.port == id_B0 || sink.port == id_B1) && (driver.port == id_F1) &&
-            (driver_loc.z == 0 || driver_loc.z == 1))
-            return 0;
-        if ((sink.port == id_C0 || sink.port == id_C1) && (driver.port == id_F0) &&
-            (driver_loc.z == 2 || driver_loc.z == 3))
-            return 0;
-        if ((sink.port == id_D0 || sink.port == id_D1) && (driver.port == id_F0) &&
-            (driver_loc.z == 0 || driver_loc.z == 1))
-            return 0;
+        if (dst_pin.in(id_A, id_B, id_C, id_D) && src_pin == id_Q) {
+            int lut = (sink_loc.z >> lc_idx_shift), ff = (driver_loc.z >> lc_idx_shift);
+            if (lut == ff)
+                return 0;
+        }
+        if (dst_pin.in(id_A, id_B, id_C, id_D) && src_pin == id_F) {
+            int l0 = (driver_loc.z >> lc_idx_shift);
+            if (l0 != 1 && l0 != 6)
+                return 0;
+        }
     }
 
     int dx = abs(driver_loc.x - sink_loc.x), dy = abs(driver_loc.y - sink_loc.y);
 
     return (120 - 22 * args.speed) *
-           (6 + std::max(dx - 5, 0) + std::max(dy - 5, 0) + 2 * (std::min(dx, 5) + std::min(dy, 5)));
+           (3 + std::max(dx - 5, 0) + std::max(dy - 5, 0) + 2 * (std::min(dx, 5) + std::min(dy, 5)));
 }
 
 bool Arch::getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay_t &budget) const
@@ -578,7 +587,7 @@ bool Arch::getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay
     if (net_info->driver.port == id_FCO && sink.port == id_FCI) {
         budget = 0;
         return true;
-    } else if (sink.port == id_FXA || sink.port == id_FXB) {
+    } else if (sink.port.in(id_FXA, id_FXB)) {
         budget = 0;
         return true;
     } else {
@@ -592,12 +601,25 @@ delay_t Arch::getRipupDelayPenalty() const { return 400; }
 
 bool Arch::place()
 {
-    std::string placer = str_or_default(settings, id("placer"), defaultPlacer);
+    std::string placer = str_or_default(settings, id_placer, defaultPlacer);
 
     if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
         cfg.criticalityExponent = 4;
         cfg.ioBufTypes.insert(id_TRELLIS_IO);
+
+        cfg.cellGroups.emplace_back();
+        cfg.cellGroups.back().insert(id_MULT18X18D);
+        cfg.cellGroups.back().insert(id_ALU54B);
+
+        cfg.cellGroups.emplace_back();
+        cfg.cellGroups.back().insert(id_TRELLIS_COMB);
+        cfg.cellGroups.back().insert(id_TRELLIS_FF);
+        cfg.cellGroups.back().insert(id_TRELLIS_RAMW);
+        cfg.placeAllAtOnce = true;
+
+        cfg.beta = 0.75;
+
         if (!placer_heap(getCtx(), cfg))
             return false;
     } else if (placer == "sa") {
@@ -606,14 +628,13 @@ bool Arch::place()
     } else {
         log_error("ECP5 architecture does not support placer '%s'\n", placer.c_str());
     }
-    permute_luts();
 
     // In out-of-context mode, create a locked macro
     if (bool_or_default(settings, id("arch.ooc")))
         for (auto &cell : cells)
             cell.second->belStrength = STRENGTH_LOCKED;
 
-    getCtx()->settings[getCtx()->id("place")] = 1;
+    getCtx()->settings[id_place] = 1;
 
     archInfoToAttributes();
     return true;
@@ -621,9 +642,11 @@ bool Arch::place()
 
 bool Arch::route()
 {
-    std::string router = str_or_default(settings, id("router"), defaultRouter);
+    std::string router = str_or_default(settings, id_router, defaultRouter);
 
-    setupWireLocations();
+    disable_router_lutperm = getCtx()->setting<bool>("arch.disable_router_lutperm", false);
+
+    setup_wire_locations();
     route_ecp5_globals(getCtx());
     assignArchInfo();
     assign_budget(getCtx(), true);
@@ -638,32 +661,7 @@ bool Arch::route()
         log_error("ECP5 architecture does not support router '%s'\n", router.c_str());
     }
 
-#if 0
-    std::vector<std::pair<WireId, int>> fanout_vector;
-    std::copy(wire_fanout.begin(), wire_fanout.end(), std::back_inserter(fanout_vector));
-    std::sort(fanout_vector.begin(), fanout_vector.end(), [](const std::pair<WireId, int> &a, const std::pair<WireId, int> &b) {
-        return a.second > b.second;
-    });
-    for (size_t i = 0; i < std::min(size_t(20), fanout_vector.size()); i++)
-        log_info("    fanout %s = %d\n", getWireName(fanout_vector[i].first).c_str(this), fanout_vector[i].second);
-    log_break();
-    PipId slowest_pip;
-    delay_t slowest_pipdelay = 0;
-    for (auto pip : pip_to_net) {
-        if (pip.second) {
-            delay_t dly = getPipDelay(pip.first).maxDelay();
-            if (dly > slowest_pipdelay) {
-                slowest_pip = pip.first;
-                slowest_pipdelay = dly;
-            }
-        }
-    }
-    log_info("    slowest pip %s = %.02f ns\n", getPipName(slowest_pip).c_str(this), getDelayNS(slowest_pipdelay));
-    log_info("       fanout %d\n", wire_fanout[getPipSrcWire(slowest_pip)]);
-    log_info("       base %d adder %d\n", speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_base_delay,
-             speed_grade->pip_classes[locInfo(slowest_pip)->pip_data[slowest_pip.index].timing_class].max_fanout_adder);
-#endif
-    getCtx()->settings[getCtx()->id("route")] = 1;
+    getCtx()->settings[id_route] = 1;
     archInfoToAttributes();
     return result;
 }
@@ -698,7 +696,7 @@ std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const
         int x = decal.location.x;
         int y = decal.location.y;
         GraphicElement::style_t style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_INACTIVE;
-        GfxTileWireId tilewire = GfxTileWireId(locInfo(wire)->wire_data[wire.index].tile_wire);
+        GfxTileWireId tilewire = GfxTileWireId(loc_info(wire)->wire_data[wire.index].tile_wire);
         gfxTileWire(ret, x, y, chip_info->width, chip_info->height, wire_type, tilewire, style);
     } else if (decal.type == DecalId::TYPE_PIP) {
         PipId pip;
@@ -708,8 +706,8 @@ std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const
         WireId dst_wire = getPipDstWire(pip);
         int x = decal.location.x;
         int y = decal.location.y;
-        GfxTileWireId src_id = GfxTileWireId(locInfo(src_wire)->wire_data[src_wire.index].tile_wire);
-        GfxTileWireId dst_id = GfxTileWireId(locInfo(dst_wire)->wire_data[dst_wire.index].tile_wire);
+        GfxTileWireId src_id = GfxTileWireId(loc_info(src_wire)->wire_data[src_wire.index].tile_wire);
+        GfxTileWireId dst_id = GfxTileWireId(loc_info(dst_wire)->wire_data[dst_wire.index].tile_wire);
         GraphicElement::style_t style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_HIDDEN;
         gfxTilePip(ret, x, y, chip_info->width, chip_info->height, src_wire, getWireType(src_wire), src_id, dst_wire,
                    getWireType(dst_wire), dst_id, style);
@@ -720,7 +718,7 @@ std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const
         auto bel_type = getBelType(bel);
         int x = decal.location.x;
         int y = decal.location.y;
-        int z = locInfo(bel)->bel_data[bel.index].z;
+        int z = loc_info(bel)->bel_data[bel.index].z;
         GraphicElement::style_t style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_INACTIVE;
         gfxTileBel(ret, x, y, z, chip_info->width, chip_info->height, bel_type, style);
     }
@@ -734,7 +732,7 @@ DecalXY Arch::getBelDecal(BelId bel) const
     decalxy.decal.type = DecalId::TYPE_BEL;
     decalxy.decal.location = bel.location;
     decalxy.decal.z = bel.index;
-    decalxy.decal.active = (bel_to_cell.at(getBelFlatIndex(bel)) != nullptr);
+    decalxy.decal.active = getBoundBelCell(bel) != nullptr;
     return decalxy;
 }
 
@@ -770,40 +768,35 @@ DecalXY Arch::getGroupDecal(GroupId group) const
 
 // -----------------------------------------------------------------------
 
-bool Arch::getDelayFromTimingDatabase(IdString tctype, IdString from, IdString to, DelayInfo &delay) const
+bool Arch::get_delay_from_tmg_db(IdString tctype, IdString from, IdString to, DelayQuad &delay) const
 {
     auto fnd_dk = celldelay_cache.find({tctype, from, to});
     if (fnd_dk != celldelay_cache.end()) {
         delay = fnd_dk->second.second;
         return fnd_dk->second.first;
     }
-    for (int i = 0; i < speed_grade->num_cell_timings; i++) {
-        const auto &tc = speed_grade->cell_timings[i];
+    for (auto &tc : speed_grade->cell_timings) {
         if (tc.cell_type == tctype.index) {
-            for (int j = 0; j < tc.num_prop_delays; j++) {
-                const auto &dly = tc.prop_delays[j];
+            for (auto &dly : tc.prop_delays) {
                 if (dly.from_port == from.index && dly.to_port == to.index) {
-                    delay.max_delay = dly.max_delay;
-                    delay.min_delay = dly.min_delay;
+                    delay = DelayQuad(dly.min_delay, dly.max_delay);
                     celldelay_cache[{tctype, from, to}] = std::make_pair(true, delay);
                     return true;
                 }
             }
-            celldelay_cache[{tctype, from, to}] = std::make_pair(false, DelayInfo());
+            celldelay_cache[{tctype, from, to}] = std::make_pair(false, DelayQuad());
             return false;
         }
     }
     NPNR_ASSERT_FALSE("failed to find timing cell in db");
 }
 
-void Arch::getSetupHoldFromTimingDatabase(IdString tctype, IdString clock, IdString port, DelayInfo &setup,
-                                          DelayInfo &hold) const
+void Arch::get_setuphold_from_tmg_db(IdString tctype, IdString clock, IdString port, DelayPair &setup,
+                                     DelayPair &hold) const
 {
-    for (int i = 0; i < speed_grade->num_cell_timings; i++) {
-        const auto &tc = speed_grade->cell_timings[i];
+    for (auto &tc : speed_grade->cell_timings) {
         if (tc.cell_type == tctype.index) {
-            for (int j = 0; j < tc.num_setup_holds; j++) {
-                const auto &sh = tc.setup_holds[j];
+            for (auto &sh : tc.setup_holds) {
                 if (sh.clock_port == clock.index && sh.sig_port == port.index) {
                     setup.max_delay = sh.max_setup;
                     setup.min_delay = sh.min_setup;
@@ -817,44 +810,53 @@ void Arch::getSetupHoldFromTimingDatabase(IdString tctype, IdString clock, IdStr
     NPNR_ASSERT_FALSE("failed to find timing cell in db");
 }
 
-bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const
+bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayQuad &delay) const
 {
     // Data for -8 grade
-    if (cell->type == id_TRELLIS_SLICE) {
-        bool has_carry = cell->sliceInfo.is_carry;
-        if (fromPort == id_A0 || fromPort == id_B0 || fromPort == id_C0 || fromPort == id_D0 || fromPort == id_A1 ||
-            fromPort == id_B1 || fromPort == id_C1 || fromPort == id_D1 || fromPort == id_M0 || fromPort == id_M1 ||
-            fromPort == id_FXA || fromPort == id_FXB || fromPort == id_FCI) {
-            return getDelayFromTimingDatabase(has_carry ? id_SCCU2C : id_SLOGICB, fromPort, toPort, delay);
-        }
-
+    if (cell->type == id_TRELLIS_COMB) {
+        bool has_carry = cell->combInfo.flags & ArchCellInfo::COMB_CARRY;
+        IdString tmg_type = has_carry ? (((cell->constr_z >> Arch::lc_idx_shift) % 2) ? id_TRELLIS_COMB_CARRY1
+                                                                                      : id_TRELLIS_COMB_CARRY0)
+                                      : id_TRELLIS_COMB;
+        if (fromPort.in(id_A, id_B, id_C, id_D, id_M, id_F1, id_FXA, id_FXB, id_FCI))
+            return get_delay_from_tmg_db(tmg_type, fromPort, toPort, delay);
+        else
+            return false;
+    } else if (cell->type == id_TRELLIS_FF) {
+        return false;
+    } else if (cell->type == id_TRELLIS_RAMW) {
         if ((fromPort == id_A0 && toPort == id_WADO3) || (fromPort == id_A1 && toPort == id_WDO1) ||
             (fromPort == id_B0 && toPort == id_WADO1) || (fromPort == id_B1 && toPort == id_WDO3) ||
             (fromPort == id_C0 && toPort == id_WADO2) || (fromPort == id_C1 && toPort == id_WDO0) ||
             (fromPort == id_D0 && toPort == id_WADO0) || (fromPort == id_D1 && toPort == id_WDO2)) {
-            delay.min_delay = 0;
-            delay.max_delay = 0;
+            delay = DelayQuad(0);
             return true;
         }
         return false;
     } else if (cell->type == id_DCCA) {
         if (fromPort == id_CLKI && toPort == id_CLKO) {
-            delay.min_delay = 0;
-            delay.max_delay = 0;
+            delay = DelayQuad(0);
+            return true;
+        }
+        return false;
+    } else if (cell->type == id_DCSC) {
+        if ((fromPort.in(id_CLK0, id_CLK1)) && toPort == id_DCSOUT) {
+            delay = DelayQuad(0);
             return true;
         }
         return false;
     } else if (cell->type == id_DP16KD) {
         return false;
     } else if (cell->type == id_MULT18X18D) {
+        if (cell->multInfo.is_clocked)
+            return false;
         std::string fn = fromPort.str(this), tn = toPort.str(this);
         if (fn.size() > 1 && (fn.front() == 'A' || fn.front() == 'B') && std::isdigit(fn.at(1))) {
             if (tn.size() > 1 && tn.front() == 'P' && std::isdigit(tn.at(1)))
-                return getDelayFromTimingDatabase(id_MULT18X18D_REGS_NONE, id(std::string("") + fn.front()), id_P,
-                                                  delay);
+                return get_delay_from_tmg_db(cell->multInfo.timing_id, id(std::string("") + fn.front()), id_P, delay);
         }
         return false;
-    } else if (cell->type == id_IOLOGIC || cell->type == id_SIOLOGIC) {
+    } else if (cell->type.in(id_IOLOGIC, id_SIOLOGIC)) {
         return false;
     } else {
         return false;
@@ -865,47 +867,44 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
 {
     auto disconnected = [cell](IdString p) { return !cell->ports.count(p) || cell->ports.at(p).net == nullptr; };
     clockInfoCount = 0;
-    if (cell->type == id_TRELLIS_SLICE) {
-        int sd0 = cell->sliceInfo.sd0, sd1 = cell->sliceInfo.sd1;
-        if (port == id_CLK || port == id_WCK)
+    if (cell->type == id_TRELLIS_COMB) {
+        if (port == id_WCK)
             return TMG_CLOCK_INPUT;
-        if (port == id_A0 || port == id_A1 || port == id_B0 || port == id_B1 || port == id_C0 || port == id_C1 ||
-            port == id_D0 || port == id_D1 || port == id_FCI || port == id_FXA || port == id_FXB)
+        if (port.in(id_A, id_B, id_C, id_D, id_FCI, id_FXA, id_FXB, id_F1))
             return TMG_COMB_INPUT;
-        if (port == id_F0 && disconnected(id_A0) && disconnected(id_B0) && disconnected(id_C0) && disconnected(id_D0) &&
+        if (port == id_F && disconnected(id_A) && disconnected(id_B) && disconnected(id_C) && disconnected(id_D) &&
             disconnected(id_FCI))
             return TMG_IGNORE; // LUT with no inputs is a constant
-        if (port == id_F1 && disconnected(id_A1) && disconnected(id_B1) && disconnected(id_C1) && disconnected(id_D1) &&
-            disconnected(id_FCI))
-            return TMG_IGNORE; // LUT with no inputs is a constant
-
-        if (port == id_F0 || port == id_F1 || port == id_FCO || port == id_OFX0 || port == id_OFX1)
+        if (port.in(id_F, id_FCO, id_OFX))
             return TMG_COMB_OUTPUT;
-        if (port == id_DI0 || port == id_DI1 || port == id_CE || port == id_LSR || (sd0 == 1 && port == id_M0) ||
-            (sd1 == 1 && port == id_M1)) {
+        if (port == id_M)
+            return TMG_COMB_INPUT;
+        if (port.in(id_WD, id_WAD0, id_WAD1, id_WAD2, id_WAD3, id_WRE)) {
             clockInfoCount = 1;
             return TMG_REGISTER_INPUT;
         }
-        if (port == id_M0 || port == id_M1)
-            return TMG_COMB_INPUT;
-        if (port == id_Q0 || port == id_Q1) {
+        return TMG_IGNORE;
+    } else if (cell->type == id_TRELLIS_FF) {
+        bool using_m = (cell->ffInfo.flags & ArchCellInfo::FF_M_USED);
+        if (port == id_CLK)
+            return TMG_CLOCK_INPUT;
+        if (port == id_DI || (using_m && (port == id_M)) || port.in(id_CE, id_LSR)) {
+            clockInfoCount = 1;
+            return TMG_REGISTER_INPUT;
+        }
+        if (port == id_Q) {
             clockInfoCount = 1;
             return TMG_REGISTER_OUTPUT;
         }
-
-        if (port == id_WDO0 || port == id_WDO1 || port == id_WDO2 || port == id_WDO3 || port == id_WADO0 ||
-            port == id_WADO1 || port == id_WADO2 || port == id_WADO3)
+        return TMG_IGNORE;
+    } else if (cell->type == id_TRELLIS_RAMW) {
+        if (port.in(id_A0, id_A1, id_B0, id_B1, id_C0, id_C1, id_D0, id_D1))
+            return TMG_COMB_INPUT;
+        if (port.in(id_WDO0, id_WDO1, id_WDO2, id_WDO3, id_WADO0, id_WADO1, id_WADO2, id_WADO3))
             return TMG_COMB_OUTPUT;
-
-        if (port == id_WD0 || port == id_WD1 || port == id_WAD0 || port == id_WAD1 || port == id_WAD2 ||
-            port == id_WAD3 || port == id_WRE) {
-            clockInfoCount = 1;
-            return TMG_REGISTER_INPUT;
-        }
-
-        NPNR_ASSERT_FALSE_STR("no timing type for slice port '" + port.str(this) + "'");
+        return TMG_IGNORE;
     } else if (cell->type == id_TRELLIS_IO) {
-        if (port == id_T || port == id_I)
+        if (port.in(id_T, id_I))
             return TMG_ENDPOINT;
         if (port == id_O)
             return TMG_STARTPOINT;
@@ -916,8 +915,14 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
         if (port == id_CLKO)
             return TMG_COMB_OUTPUT;
         return TMG_IGNORE;
+    } else if (cell->type == id_DCSC) {
+        if (port.in(id_CLK0, id_CLK1))
+            return TMG_COMB_INPUT;
+        if (port == id_DCSOUT)
+            return TMG_COMB_OUTPUT;
+        return TMG_IGNORE;
     } else if (cell->type == id_DP16KD) {
-        if (port == id_CLKA || port == id_CLKB)
+        if (port.in(id_CLKA, id_CLKB))
             return TMG_CLOCK_INPUT;
         std::string port_name = port.str(this);
         for (auto c : boost::adaptors::reverse(port_name)) {
@@ -931,23 +936,42 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
         }
         NPNR_ASSERT_FALSE_STR("no timing type for RAM port '" + port.str(this) + "'");
     } else if (cell->type == id_MULT18X18D) {
-        if (port == id_CLK0 || port == id_CLK1 || port == id_CLK2 || port == id_CLK3)
+        if (port.in(id_CLK0, id_CLK1, id_CLK2, id_CLK3))
             return TMG_CLOCK_INPUT;
+        if (port.in(id_CE0, id_CE1, id_CE2, id_CE3, id_RST0, id_RST1, id_RST2, id_RST3, id_SIGNEDA, id_SIGNEDB)) {
+            if (cell->multInfo.is_clocked) {
+                clockInfoCount = 1;
+                return TMG_REGISTER_INPUT;
+            } else {
+                return TMG_COMB_INPUT;
+            }
+        }
         std::string pname = port.str(this);
         if (pname.size() > 1) {
-            if ((pname.front() == 'A' || pname.front() == 'B') && std::isdigit(pname.at(1)))
-                return TMG_COMB_INPUT;
-            if (pname.front() == 'P' && std::isdigit(pname.at(1)))
-                return TMG_COMB_OUTPUT;
+            if ((pname.front() == 'A' || pname.front() == 'B') && std::isdigit(pname.at(1))) {
+                if (cell->multInfo.is_clocked) {
+                    clockInfoCount = 1;
+                    return TMG_REGISTER_INPUT;
+                } else {
+                    return TMG_COMB_INPUT;
+                }
+            }
+            if ((pname.front() == 'P') && std::isdigit(pname.at(1))) {
+                if (cell->multInfo.is_clocked) {
+                    clockInfoCount = 1;
+                    return TMG_REGISTER_OUTPUT;
+                } else {
+                    return TMG_COMB_OUTPUT;
+                }
+            }
         }
         return TMG_IGNORE;
     } else if (cell->type == id_ALU54B) {
         return TMG_IGNORE; // FIXME
     } else if (cell->type == id_EHXPLLL) {
         return TMG_IGNORE;
-    } else if (cell->type == id_DCUA || cell->type == id_EXTREFB || cell->type == id_PCSCLKDIV) {
-        if (port == id_CH0_FF_TXI_CLK || port == id_CH0_FF_RXI_CLK || port == id_CH1_FF_TXI_CLK ||
-            port == id_CH1_FF_RXI_CLK)
+    } else if (cell->type.in(id_DCUA, id_EXTREFB, id_PCSCLKDIV)) {
+        if (port.in(id_CH0_FF_TXI_CLK, id_CH0_FF_RXI_CLK, id_CH1_FF_TXI_CLK, id_CH1_FF_RXI_CLK))
             return TMG_CLOCK_INPUT;
         std::string prefix = port.str(this).substr(0, 9);
         if (prefix == "CH0_FF_TX" || prefix == "CH0_FF_RX" || prefix == "CH1_FF_TX" || prefix == "CH1_FF_RX") {
@@ -955,18 +979,16 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
             return (cell->ports.at(port).type == PORT_OUT) ? TMG_REGISTER_OUTPUT : TMG_REGISTER_INPUT;
         }
         return TMG_IGNORE;
-    } else if (cell->type == id_IOLOGIC || cell->type == id_SIOLOGIC) {
-        if (port == id_CLK || port == id_ECLK) {
+    } else if (cell->type.in(id_IOLOGIC, id_SIOLOGIC)) {
+        if (port.in(id_CLK, id_ECLK)) {
             return TMG_CLOCK_INPUT;
-        } else if (port == id_IOLDO || port == id_IOLDOI || port == id_IOLDOD || port == id_IOLTO || port == id_PADDI ||
-                   port == id_DQSR90 || port == id_DQSW || port == id_DQSW270) {
+        } else if (port.in(id_IOLDO, id_IOLDOI, id_IOLDOD, id_IOLTO, id_PADDI, id_DQSR90, id_DQSW, id_DQSW270)) {
             return TMG_IGNORE;
         } else {
             clockInfoCount = 1;
             return (cell->ports.at(port).type == PORT_OUT) ? TMG_REGISTER_OUTPUT : TMG_REGISTER_INPUT;
         }
-    } else if (cell->type == id_DTR || cell->type == id_USRMCLK || cell->type == id_SEDGA || cell->type == id_GSR ||
-               cell->type == id_JTAGG) {
+    } else if (cell->type.in(id_DTR, id_USRMCLK, id_SEDGA, id_GSR, id_JTAGG)) {
         return (cell->ports.at(port).type == PORT_OUT) ? TMG_STARTPOINT : TMG_ENDPOINT;
     } else if (cell->type == id_OSCG) {
         if (port == id_OSC)
@@ -976,22 +998,22 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
     } else if (cell->type == id_CLKDIVF) {
         if (port == id_CLKI)
             return TMG_CLOCK_INPUT;
-        else if (port == id_RST || port == id_ALIGNWD)
+        else if (port.in(id_RST, id_ALIGNWD))
             return TMG_ENDPOINT;
         else if (port == id_CDIVX)
             return TMG_GEN_CLOCK;
         else
             NPNR_ASSERT_FALSE("bad clkdiv port");
     } else if (cell->type == id_DQSBUFM) {
-        if (port == id_READ0 || port == id_READ1) {
+        if (port.in(id_READ0, id_READ1)) {
             clockInfoCount = 1;
             return TMG_REGISTER_INPUT;
         } else if (port == id_DATAVALID) {
             clockInfoCount = 1;
             return TMG_REGISTER_OUTPUT;
-        } else if (port == id_SCLK || port == id_ECLK || port == id_DQSI) {
+        } else if (port.in(id_SCLK, id_ECLK, id_DQSI)) {
             return TMG_CLOCK_INPUT;
-        } else if (port == id_DQSR90 || port == id_DQSW || port == id_DQSW270) {
+        } else if (port.in(id_DQSR90, id_DQSW, id_DQSW270)) {
             return TMG_GEN_CLOCK;
         }
         return (cell->ports.at(port).type == PORT_OUT) ? TMG_STARTPOINT : TMG_ENDPOINT;
@@ -1018,26 +1040,33 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
 TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port, int index) const
 {
     TimingClockingInfo info;
-    info.setup = getDelayFromNS(0);
-    info.hold = getDelayFromNS(0);
-    info.clockToQ = getDelayFromNS(0);
-    if (cell->type == id_TRELLIS_SLICE) {
-        int sd0 = cell->sliceInfo.sd0, sd1 = cell->sliceInfo.sd1;
-        if (port == id_WD0 || port == id_WD1 || port == id_WAD0 || port == id_WAD1 || port == id_WAD2 ||
-            port == id_WAD3 || port == id_WRE) {
-            info.edge = RISING_EDGE;
+    info.setup = DelayPair(0);
+    info.hold = DelayPair(0);
+    info.clockToQ = DelayQuad(0);
+    if (cell->type == id_TRELLIS_COMB) {
+        if (port.in(id_WD, id_WAD0, id_WAD1, id_WAD2, id_WAD3, id_WRE)) {
+            if (port == id_WD)
+                port = id_WD0;
+            info.edge = (cell->combInfo.flags & ArchCellInfo::COMB_RAM_WCKINV) ? FALLING_EDGE : RISING_EDGE;
             info.clock_port = id_WCK;
-            getSetupHoldFromTimingDatabase(id_SDPRAME, id_WCK, port, info.setup, info.hold);
-        } else if (port == id_DI0 || port == id_DI1 || port == id_CE || port == id_LSR || (sd0 == 1 && port == id_M0) ||
-                   (sd1 == 1 && port == id_M1)) {
-            info.edge = cell->sliceInfo.clkmux == id("INV") ? FALLING_EDGE : RISING_EDGE;
+            get_setuphold_from_tmg_db(id_SDPRAME, id_WCK, port, info.setup, info.hold);
+        }
+    } else if (cell->type == id_TRELLIS_FF) {
+        bool using_m = (cell->ffInfo.flags & ArchCellInfo::FF_M_USED);
+        if (port.in(id_DI, id_CE, id_LSR) || (using_m && port == id_M)) {
+            if (port == id_DI)
+                port = id_DI0;
+            if (port == id_M)
+                port = id_M0;
+            info.edge = (cell->ffInfo.flags & ArchCellInfo::FF_CLKINV) ? FALLING_EDGE : RISING_EDGE;
             info.clock_port = id_CLK;
-            getSetupHoldFromTimingDatabase(id_SLOGICB, id_CLK, port, info.setup, info.hold);
-
+            get_setuphold_from_tmg_db(id_SLOGICB, id_CLK, port, info.setup, info.hold);
         } else {
-            info.edge = cell->sliceInfo.clkmux == id("INV") ? FALLING_EDGE : RISING_EDGE;
+            NPNR_ASSERT(port == id_Q);
+            port = id_Q0;
+            info.edge = (cell->ffInfo.flags & ArchCellInfo::FF_CLKINV) ? FALLING_EDGE : RISING_EDGE;
             info.clock_port = id_CLK;
-            bool is_path = getDelayFromTimingDatabase(id_SLOGICB, id_CLK, port, info.clockToQ);
+            bool is_path = get_delay_from_tmg_db(id_SLOGICB, id_CLK, port, info.clockToQ);
             NPNR_ASSERT(is_path);
         }
     } else if (cell->type == id_DP16KD) {
@@ -1058,26 +1087,22 @@ TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port
         if (cell->ramInfo.is_pdp) {
             bool is_output = cell->ports.at(port).type == PORT_OUT;
             // In PDP mode, all read signals are in CLKB domain and write signals in CLKA domain
-            if (is_output || port == id_OCEB || port == id_CEB || port == id_ADB5 || port == id_ADB6 ||
-                port == id_ADB7 || port == id_ADB8 || port == id_ADB9 || port == id_ADB10 || port == id_ADB11 ||
-                port == id_ADB12 || port == id_ADB13)
+            if (is_output || port.in(id_OCEB, id_CEB, id_ADB5, id_ADB6, id_ADB7, id_ADB8, id_ADB9, id_ADB10, id_ADB11,
+                                     id_ADB12, id_ADB13))
                 info.clock_port = id_CLKB;
             else
                 info.clock_port = id_CLKA;
         } else {
             info.clock_port = half_clock;
         }
-        info.edge = (str_or_default(cell->params, info.clock_port == id_CLKB ? id("CLKBMUX") : id("CLKAMUX"), "CLK") ==
-                     "INV")
+        info.edge = (str_or_default(cell->params, info.clock_port == id_CLKB ? id_CLKBMUX : id_CLKAMUX, "CLK") == "INV")
                             ? FALLING_EDGE
                             : RISING_EDGE;
         if (cell->ports.at(port).type == PORT_OUT) {
-            bool is_path = getDelayFromTimingDatabase(id_DP16KD_REGMODE_A_NOREG_REGMODE_B_NOREG, half_clock, port,
-                                                      info.clockToQ);
+            bool is_path = get_delay_from_tmg_db(cell->ramInfo.regmode_timing_id, half_clock, port, info.clockToQ);
             NPNR_ASSERT(is_path);
         } else {
-            getSetupHoldFromTimingDatabase(id_DP16KD_REGMODE_A_NOREG_REGMODE_B_NOREG, half_clock, port, info.setup,
-                                           info.hold);
+            get_setuphold_from_tmg_db(cell->ramInfo.regmode_timing_id, half_clock, port, info.setup, info.hold);
         }
     } else if (cell->type == id_DCUA) {
         std::string prefix = port.str(this).substr(0, 9);
@@ -1091,55 +1116,92 @@ TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port
         else if (prefix == "CH1_FF_RX")
             info.clock_port = id_CH1_FF_RXI_CLK;
         if (cell->ports.at(port).type == PORT_OUT) {
-            info.clockToQ = getDelayFromNS(0.7);
+            info.clockToQ = DelayQuad(getDelayFromNS(0.7));
         } else {
-            info.setup = getDelayFromNS(1);
-            info.hold = getDelayFromNS(0);
+            info.setup = DelayPair(getDelayFromNS(1));
+            info.hold = DelayPair(getDelayFromNS(0));
         }
-    } else if (cell->type == id_IOLOGIC || cell->type == id_SIOLOGIC) {
+    } else if (cell->type.in(id_IOLOGIC, id_SIOLOGIC)) {
         info.clock_port = id_CLK;
+        info.edge = RISING_EDGE;
         if (cell->ports.at(port).type == PORT_OUT) {
-            info.clockToQ = getDelayFromNS(0.5);
+            info.clockToQ = DelayQuad(getDelayFromNS(0.5));
         } else {
-            info.setup = getDelayFromNS(0.1);
-            info.hold = getDelayFromNS(0);
+            info.setup = DelayPair(getDelayFromNS(0.1));
+            info.hold = DelayPair(getDelayFromNS(0));
         }
     } else if (cell->type == id_DQSBUFM) {
         info.clock_port = id_SCLK;
+        info.edge = RISING_EDGE;
         if (port == id_DATAVALID) {
-            info.clockToQ = getDelayFromNS(0.2);
-        } else if (port == id_READ0 || port == id_READ1) {
-            info.setup = getDelayFromNS(0.5);
-            info.hold = getDelayFromNS(-0.4);
+            info.clockToQ = DelayQuad(getDelayFromNS(0.2));
+        } else if (port.in(id_READ0, id_READ1)) {
+            info.setup = DelayPair(getDelayFromNS(0.5));
+            info.hold = DelayPair(getDelayFromNS(-0.4));
         } else {
             NPNR_ASSERT_FALSE("unknown DQSBUFM register port");
+        }
+    } else if (cell->type == id_MULT18X18D) {
+        std::string port_name = port.str(this);
+        // To keep the timing DB small, like signals (e.g. P[35:0] have been
+        // grouped. To look up the timing, we therefore need to map this port
+        // to the enclosing port group.
+        auto has_prefix = [](std::string base, std::string prefix) {
+            return base.compare(0, prefix.size(), prefix) == 0;
+        };
+        IdString port_group;
+        if (has_prefix(port_name, "A")) {
+            port_group = id_A;
+        } else if (has_prefix(port_name, "B")) {
+            port_group = id_B;
+        } else if (has_prefix(port_name, "P")) {
+            port_group = id_P;
+        } else if (has_prefix(port_name, "CE")) {
+            port_group = id_CE0;
+        } else if (has_prefix(port_name, "RST")) {
+            port_group = id_RST0;
+        } else if (has_prefix(port_name, "SIGNED")) {
+            // Both SIGNEDA and SIGNEDB exist in the DB, so can directly use these here
+            port_group = port;
+        } else {
+            NPNR_ASSERT_FALSE("Unknown MULT18X18D register port");
+        }
+
+        // If this port is clocked at all, it must be clocked from CLK0
+        IdString clock_id = id_CLK0;
+        info.clock_port = clock_id;
+        info.edge = RISING_EDGE;
+        if (cell->ports.at(port).type == PORT_OUT) {
+            bool is_path = get_delay_from_tmg_db(cell->multInfo.timing_id, clock_id, port_group, info.clockToQ);
+            NPNR_ASSERT(is_path);
+        } else {
+            get_setuphold_from_tmg_db(cell->multInfo.timing_id, clock_id, port_group, info.setup, info.hold);
         }
     }
     return info;
 }
 
-std::vector<std::pair<std::string, std::string>> Arch::getTilesAtLocation(int row, int col)
+std::vector<std::pair<std::string, std::string>> Arch::get_tiles_at_loc(int row, int col)
 {
     std::vector<std::pair<std::string, std::string>> ret;
     auto &tileloc = chip_info->tile_info[row * chip_info->width + col];
-    for (int i = 0; i < tileloc.num_tiles; i++) {
-        ret.push_back(std::make_pair(tileloc.tile_names[i].name.get(),
-                                     chip_info->tiletype_names[tileloc.tile_names[i].type_idx].get()));
+    for (auto &tn : tileloc.tile_names) {
+        ret.push_back(std::make_pair(tn.name.get(), chip_info->tiletype_names[tn.type_idx].get()));
     }
     return ret;
 }
 
-GlobalInfoPOD Arch::globalInfoAtLoc(Location loc)
+GlobalInfoPOD Arch::global_info_at_loc(Location loc)
 {
     int locidx = loc.y * chip_info->width + loc.x;
     return chip_info->location_glbinfo[locidx];
 }
 
-bool Arch::getPIODQSGroup(BelId pio, bool &dqsright, int &dqsrow)
+bool Arch::get_pio_dqs_group(BelId pio, bool &dqsright, int &dqsrow)
 {
-    for (int i = 0; i < chip_info->num_pios; i++) {
-        if (Location(chip_info->pio_info[i].abs_loc) == pio.location && chip_info->pio_info[i].bel_index == pio.index) {
-            int dqs = chip_info->pio_info[i].dqsgroup;
+    for (auto &ppio : chip_info->pio_info) {
+        if (Location(ppio.abs_loc) == pio.location && ppio.bel_index == pio.index) {
+            int dqs = ppio.dqsgroup;
             if (dqs == -1)
                 return false;
             else {
@@ -1152,13 +1214,13 @@ bool Arch::getPIODQSGroup(BelId pio, bool &dqsright, int &dqsrow)
     NPNR_ASSERT_FALSE("failed to find PIO");
 }
 
-BelId Arch::getDQSBUF(bool dqsright, int dqsrow)
+BelId Arch::get_dqsbuf(bool dqsright, int dqsrow)
 {
     BelId bel;
     bel.location.y = dqsrow;
     bel.location.x = (dqsright ? (chip_info->width - 1) : 0);
-    for (int i = 0; i < locInfo(bel)->num_bels; i++) {
-        auto &bd = locInfo(bel)->bel_data[i];
+    for (int i = 0; i < loc_info(bel)->bel_data.ssize(); i++) {
+        auto &bd = loc_info(bel)->bel_data[i];
         if (bd.type == id_DQSBUFM.index) {
             bel.index = i;
             return bel;
@@ -1167,9 +1229,9 @@ BelId Arch::getDQSBUF(bool dqsright, int dqsrow)
     NPNR_ASSERT_FALSE("failed to find DQSBUF");
 }
 
-WireId Arch::getBankECLK(int bank, int eclk)
+WireId Arch::get_bank_eclk(int bank, int eclk)
 {
-    return getWireByLocAndBasename(Location(0, 0), "G_BANK" + std::to_string(bank) + "ECLK" + std::to_string(eclk));
+    return get_wire_by_loc_basename(Location(0, 0), "G_BANK" + std::to_string(bank) + "ECLK" + std::to_string(eclk));
 }
 
 #ifdef WITH_HEAP
@@ -1189,7 +1251,7 @@ const std::vector<std::string> Arch::availableRouters = {"router1", "router2"};
 
 // -----------------------------------------------------------------------
 
-GroupId Arch::getGroupByName(IdString name) const
+GroupId Arch::getGroupByName(IdStringList name) const
 {
     for (auto g : getGroups())
         if (getGroupName(g) == name)
@@ -1197,7 +1259,7 @@ GroupId Arch::getGroupByName(IdString name) const
     return GroupId();
 }
 
-IdString Arch::getGroupName(GroupId group) const
+IdStringList Arch::getGroupName(GroupId group) const
 {
     std::string suffix;
 
@@ -1206,10 +1268,11 @@ IdString Arch::getGroupName(GroupId group) const
         suffix = "switchbox";
         break;
     default:
-        return IdString();
+        return IdStringList();
     }
 
-    return id("X" + std::to_string(group.location.x) + "/Y" + std::to_string(group.location.y) + "/" + suffix);
+    std::array<IdString, 3> ids{x_ids.at(group.location.x), y_ids.at(group.location.y), id(suffix)};
+    return IdStringList(ids);
 }
 
 std::vector<GroupId> Arch::getGroups() const
@@ -1257,9 +1320,9 @@ std::vector<GroupId> Arch::getGroupGroups(GroupId group) const
 std::vector<std::pair<IdString, std::string>> Arch::getWireAttrs(WireId wire) const
 {
     std::vector<std::pair<IdString, std::string>> ret;
-    auto &wi = locInfo(wire)->wire_data[wire.index];
+    auto &wi = loc_info(wire)->wire_data[wire.index];
 
-    ret.push_back(std::make_pair(id("TILE_WIRE_ID"), stringf("%d", wi.tile_wire)));
+    ret.push_back(std::make_pair(id_TILE_WIRE_ID, stringf("%d", wi.tile_wire)));
 
     return ret;
 }

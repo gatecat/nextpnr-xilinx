@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2019  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2019  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -24,44 +24,33 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-void add_port(const Context *ctx, CellInfo *cell, std::string name, PortType dir)
-{
-    IdString id = ctx->id(name);
-    NPNR_ASSERT(cell->ports.count(id) == 0);
-    cell->ports[id] = PortInfo{id, nullptr, dir};
-}
-
 std::unique_ptr<CellInfo> create_generic_cell(Context *ctx, IdString type, std::string name)
 {
     static int auto_idx = 0;
-    std::unique_ptr<CellInfo> new_cell = std::unique_ptr<CellInfo>(new CellInfo());
-    if (name.empty()) {
-        new_cell->name = ctx->id("$nextpnr_" + type.str(ctx) + "_" + std::to_string(auto_idx++));
-    } else {
-        new_cell->name = ctx->id(name);
-    }
-    new_cell->type = type;
+    IdString name_id =
+            name.empty() ? ctx->id("$nextpnr_" + type.str(ctx) + "_" + std::to_string(auto_idx++)) : ctx->id(name);
+    auto new_cell = std::make_unique<CellInfo>(ctx, name_id, type);
     if (type == ctx->id("GENERIC_SLICE")) {
         new_cell->params[ctx->id("K")] = ctx->args.K;
         new_cell->params[ctx->id("INIT")] = 0;
         new_cell->params[ctx->id("FF_USED")] = 0;
 
         for (int i = 0; i < ctx->args.K; i++)
-            add_port(ctx, new_cell.get(), "I[" + std::to_string(i) + "]", PORT_IN);
+            new_cell->addInput(ctx->id("I[" + std::to_string(i) + "]"));
 
-        add_port(ctx, new_cell.get(), "CLK", PORT_IN);
+        new_cell->addInput(ctx->id("CLK"));
 
-        add_port(ctx, new_cell.get(), "F", PORT_OUT);
-        add_port(ctx, new_cell.get(), "Q", PORT_OUT);
+        new_cell->addOutput(ctx->id("F"));
+        new_cell->addOutput(ctx->id("Q"));
     } else if (type == ctx->id("GENERIC_IOB")) {
         new_cell->params[ctx->id("INPUT_USED")] = 0;
         new_cell->params[ctx->id("OUTPUT_USED")] = 0;
         new_cell->params[ctx->id("ENABLE_USED")] = 0;
 
-        add_port(ctx, new_cell.get(), "PAD", PORT_INOUT);
-        add_port(ctx, new_cell.get(), "I", PORT_IN);
-        add_port(ctx, new_cell.get(), "EN", PORT_IN);
-        add_port(ctx, new_cell.get(), "O", PORT_OUT);
+        new_cell->addInout(ctx->id("PAD"));
+        new_cell->addInput(ctx->id("I"));
+        new_cell->addInput(ctx->id("EN"));
+        new_cell->addOutput(ctx->id("O"));
     } else {
         log_error("unable to create generic cell of type %s", type.c_str(ctx));
     }
@@ -77,19 +66,19 @@ void lut_to_lc(const Context *ctx, CellInfo *lut, CellInfo *lc, bool no_dff)
 
     for (int i = 0; i < lut_k; i++) {
         IdString port = ctx->id("I[" + std::to_string(i) + "]");
-        replace_port(lut, port, lc, port);
+        lut->movePortTo(port, lc, port);
     }
 
     if (no_dff) {
         lc->params[ctx->id("FF_USED")] = 0;
-        replace_port(lut, ctx->id("Q"), lc, ctx->id("F"));
+        lut->movePortTo(ctx->id("Q"), lc, ctx->id("F"));
     }
 }
 
 void dff_to_lc(const Context *ctx, CellInfo *dff, CellInfo *lc, bool pass_thru_lut)
 {
     lc->params[ctx->id("FF_USED")] = 1;
-    replace_port(dff, ctx->id("CLK"), lc, ctx->id("CLK"));
+    dff->movePortTo(ctx->id("CLK"), lc, ctx->id("CLK"));
 
     if (pass_thru_lut) {
         // Fill LUT with alternating 10
@@ -100,26 +89,26 @@ void dff_to_lc(const Context *ctx, CellInfo *dff, CellInfo *lc, bool pass_thru_l
             init.append("10");
         lc->params[ctx->id("INIT")] = Property::from_string(init);
 
-        replace_port(dff, ctx->id("D"), lc, ctx->id("I[0]"));
+        dff->movePortTo(ctx->id("D"), lc, ctx->id("I[0]"));
     }
 
-    replace_port(dff, ctx->id("Q"), lc, ctx->id("Q"));
+    dff->movePortTo(ctx->id("Q"), lc, ctx->id("Q"));
 }
 
-void nxio_to_iob(Context *ctx, CellInfo *nxio, CellInfo *iob, std::unordered_set<IdString> &todelete_cells)
+void nxio_to_iob(Context *ctx, CellInfo *nxio, CellInfo *iob, pool<IdString> &todelete_cells)
 {
     if (nxio->type == ctx->id("$nextpnr_ibuf")) {
         iob->params[ctx->id("INPUT_USED")] = 1;
-        replace_port(nxio, ctx->id("O"), iob, ctx->id("O"));
+        nxio->movePortTo(ctx->id("O"), iob, ctx->id("O"));
     } else if (nxio->type == ctx->id("$nextpnr_obuf")) {
         iob->params[ctx->id("OUTPUT_USED")] = 1;
-        replace_port(nxio, ctx->id("I"), iob, ctx->id("I"));
+        nxio->movePortTo(ctx->id("I"), iob, ctx->id("I"));
     } else if (nxio->type == ctx->id("$nextpnr_iobuf")) {
         // N.B. tristate will be dealt with below
         iob->params[ctx->id("INPUT_USED")] = 1;
         iob->params[ctx->id("OUTPUT_USED")] = 1;
-        replace_port(nxio, ctx->id("I"), iob, ctx->id("I"));
-        replace_port(nxio, ctx->id("O"), iob, ctx->id("O"));
+        nxio->movePortTo(ctx->id("I"), iob, ctx->id("I"));
+        nxio->movePortTo(ctx->id("O"), iob, ctx->id("O"));
     } else {
         NPNR_ASSERT(false);
     }
@@ -129,10 +118,10 @@ void nxio_to_iob(Context *ctx, CellInfo *nxio, CellInfo *iob, std::unordered_set
             ctx->id("Y"));
     if (tbuf) {
         iob->params[ctx->id("ENABLE_USED")] = 1;
-        replace_port(tbuf, ctx->id("A"), iob, ctx->id("I"));
-        replace_port(tbuf, ctx->id("E"), iob, ctx->id("EN"));
+        tbuf->movePortTo(ctx->id("A"), iob, ctx->id("I"));
+        tbuf->movePortTo(ctx->id("E"), iob, ctx->id("EN"));
 
-        if (donet->users.size() > 1) {
+        if (donet->users.entries() > 1) {
             for (auto user : donet->users)
                 log_info("     remaining tristate user: %s.%s\n", user.cell->name.c_str(ctx), user.port.c_str(ctx));
             log_error("unsupported tristate IO pattern for IO buffer '%s', "

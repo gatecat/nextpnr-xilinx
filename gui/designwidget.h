@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -71,7 +71,7 @@ class DesignWidget : public QWidget
     int getElementIndex(ElementType type);
     void updateButtons();
     void addToHistory(int tab, QModelIndex item);
-    std::vector<DecalXY> getDecals(ElementType type, IdString value);
+    std::vector<DecalXY> getDecals(ElementType type, IdStringList value);
     void updateHighlightGroup(QList<TreeModel::Item *> item, int group);
     void clearAllSelectionModels();
   Q_SIGNALS:

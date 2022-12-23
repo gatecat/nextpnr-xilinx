@@ -28,8 +28,6 @@ SOFTWARE.
 #include <memory>
 #include "pyredirector.h"
 
-static PyThreadState *MainThreadState = NULL;
-
 static PyThreadState *m_threadState = NULL;
 static PyObject *glb = NULL;
 static PyObject *loc = NULL;
@@ -82,19 +80,29 @@ const std::list<std::string> &pyinterpreter_suggest(const std::string &hint)
     PyEval_AcquireThread(m_threadState);
     m_suggestions.clear();
     int i = 0;
-    std::string command = string_format("sys.completer.complete('%s', %d)\n", hint.c_str(), i);
+    std::string escaped;
+    for (char c : hint) {
+        if (c == '\'' || c == '\\')
+            escaped += '\\';
+        escaped += c;
+    }
+    std::string command = string_format("sys.completer.complete('%s', %d)\n", escaped.c_str(), i);
     std::string res;
     do {
         PyObject *py_result;
         PyObject *dum;
         py_result = Py_CompileString(command.c_str(), "<stdin>", Py_single_input);
+        if (py_result == nullptr)
+            break;
         dum = PyEval_EvalCode(py_result, glb, loc);
+        if (dum == nullptr)
+            break;
         Py_XDECREF(dum);
         Py_XDECREF(py_result);
         res = redirector_take_output(m_threadState);
 
         ++i;
-        command = string_format("sys.completer.complete('%s', %d)\n", hint.c_str(), i);
+        command = string_format("sys.completer.complete('%s', %d)\n", escaped.c_str(), i);
         if (res.size()) {
             // throw away the newline
             res = res.substr(1, res.size() - 3);
@@ -114,18 +122,21 @@ void pyinterpreter_preinit()
 
 void pyinterpreter_initialize()
 {
+#if PY_VERSION_HEX < 0x03090000
     PyEval_InitThreads();
-    MainThreadState = PyEval_SaveThread();
-    PyEval_AcquireThread(MainThreadState);
-    m_threadState = Py_NewInterpreter();
+#endif
+    m_threadState = PyEval_SaveThread();
+    PyEval_AcquireThread(m_threadState);
 
     PyObject *module = PyImport_ImportModule("__main__");
     loc = glb = PyModule_GetDict(module);
 
     PyRun_SimpleString("import sys\n"
                        "import redirector\n"
+                       "import tempfile\n"
                        "sys.path.insert(0, \".\")\n" // add current path
                        "sys.stdout = redirector.redirector()\n"
+                       "sys.stdin = tempfile.TemporaryFile(mode='r')\n"
                        "sys.stderr = sys.stdout\n"
                        "import rlcompleter\n"
                        "sys.completer = rlcompleter.Completer()\n");
@@ -137,11 +148,7 @@ void pyinterpreter_finalize()
 {
     m_suggestions.clear();
 
-    PyEval_AcquireThread(m_threadState);
-    Py_EndInterpreter(m_threadState);
-    PyEval_ReleaseLock();
-
-    PyEval_RestoreThread(MainThreadState);
+    PyEval_RestoreThread(m_threadState);
 }
 
 void pyinterpreter_aquire()

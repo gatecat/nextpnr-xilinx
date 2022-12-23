@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -85,6 +85,9 @@ class BaseMainWindow : public QMainWindow
 
     void screenshot();
     void saveMovie();
+    void saveSVG();
+
+    void about();
 
   Q_SIGNALS:
     void contextChanged(Context *ctx);
@@ -134,6 +137,7 @@ class BaseMainWindow : public QMainWindow
 
     QAction *actionScreenshot;
     QAction *actionMovie;
+    QAction *actionSaveSVG;
 };
 
 NEXTPNR_NAMESPACE_END

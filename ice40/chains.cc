@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2018  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -53,9 +53,9 @@ class ChainConstrainer
                 tile.clear();
                 chains.emplace_back();
                 start_of_chain = false;
-                if (cell->ports.at(ctx->id("CIN")).net) {
+                if (cell->ports.at(id_CIN).net) {
                     // CIN is not constant and not part of a chain. Must feed in from fabric
-                    CellInfo *feedin = make_carry_feed_in(cell, cell->ports.at(ctx->id("CIN")));
+                    CellInfo *feedin = make_carry_feed_in(cell, cell->ports.at(id_CIN));
                     chains.back().cells.push_back(feedin);
                     tile.push_back(feedin);
                     ++feedio_lcs;
@@ -63,36 +63,36 @@ class ChainConstrainer
             }
             tile.push_back(cell);
             chains.back().cells.push_back(cell);
-            bool split_chain = (!ctx->logicCellsCompatible(tile.data(), tile.size())) ||
+            bool split_chain = (!ctx->logic_cells_compatible(tile.data(), tile.size())) ||
                                (int(chains.back().cells.size()) > max_length);
             if (split_chain) {
-                CellInfo *passout = make_carry_pass_out((*(curr_cell - 1))->ports.at(ctx->id("COUT")));
+                CellInfo *passout = make_carry_pass_out((*(curr_cell - 1))->ports.at(id_COUT));
                 tile.pop_back();
                 chains.back().cells.back() = passout;
                 start_of_chain = true;
             } else {
-                NetInfo *carry_net = cell->ports.at(ctx->id("COUT")).net;
+                NetInfo *carry_net = cell->ports.at(id_COUT).net;
                 bool at_end = (curr_cell == carryc.cells.end() - 1);
-                if (carry_net != nullptr && (carry_net->users.size() > 1 || at_end)) {
-                    if (carry_net->users.size() > 2 ||
-                        (net_only_drives(ctx, carry_net, is_lc, ctx->id("I3"), false) !=
-                         net_only_drives(ctx, carry_net, is_lc, ctx->id("CIN"), false)) ||
-                        (at_end && !net_only_drives(ctx, carry_net, is_lc, ctx->id("I3"), true))) {
+                if (carry_net != nullptr && (carry_net->users.entries() > 1 || at_end)) {
+                    if (carry_net->users.entries() > 2 ||
+                        (net_only_drives(ctx, carry_net, is_lc, id_I3, false) !=
+                         net_only_drives(ctx, carry_net, is_lc, id_CIN, false)) ||
+                        (at_end && !net_only_drives(ctx, carry_net, is_lc, id_I3, true))) {
                         if (ctx->debug)
                             log_info("      inserting feed-%s\n", at_end ? "out" : "out-in");
                         CellInfo *passout;
                         if (!at_end) {
                             // See if we need to split chain anyway
                             tile.push_back(*(curr_cell + 1));
-                            bool split_chain_next = (!ctx->logicCellsCompatible(tile.data(), tile.size())) ||
+                            bool split_chain_next = (!ctx->logic_cells_compatible(tile.data(), tile.size())) ||
                                                     (int(chains.back().cells.size()) > max_length);
                             tile.pop_back();
                             if (split_chain_next)
                                 start_of_chain = true;
-                            passout = make_carry_pass_out(cell->ports.at(ctx->id("COUT")),
+                            passout = make_carry_pass_out(cell->ports.at(id_COUT),
                                                           split_chain_next ? nullptr : *(curr_cell + 1));
                         } else {
-                            passout = make_carry_pass_out(cell->ports.at(ctx->id("COUT")), nullptr);
+                            passout = make_carry_pass_out(cell->ports.at(id_COUT), nullptr);
                         }
 
                         chains.back().cells.push_back(passout);
@@ -110,70 +110,44 @@ class ChainConstrainer
     CellInfo *make_carry_pass_out(PortInfo &cout_port, CellInfo *cin_cell = nullptr)
     {
         NPNR_ASSERT(cout_port.net != nullptr);
-        std::unique_ptr<CellInfo> lc = create_ice_cell(ctx, ctx->id("ICESTORM_LC"));
-        lc->params[ctx->id("LUT_INIT")] = Property(65280, 16); // 0xff00: O = I3
-        lc->params[ctx->id("CARRY_ENABLE")] = Property::State::S1;
+        std::unique_ptr<CellInfo> lc = create_ice_cell(ctx, id_ICESTORM_LC);
+        lc->params[id_LUT_INIT] = Property(65280, 16); // 0xff00: O = I3
+        lc->params[id_CARRY_ENABLE] = Property::State::S1;
         lc->ports.at(id_O).net = cout_port.net;
-        std::unique_ptr<NetInfo> co_i3_net(new NetInfo());
-        co_i3_net->name = ctx->id(lc->name.str(ctx) + "$I3");
+        NetInfo *co_i3_net = ctx->createNet(ctx->id(lc->name.str(ctx) + "$I3"));
         co_i3_net->driver = cout_port.net->driver;
-        PortRef i3_r;
-        i3_r.port = id_I3;
-        i3_r.cell = lc.get();
-        co_i3_net->users.push_back(i3_r);
+        lc->connectPort(id_I3, co_i3_net);
         PortRef o_r;
         o_r.port = id_O;
         o_r.cell = lc.get();
         cout_port.net->driver = o_r;
-        lc->ports.at(id_I3).net = co_i3_net.get();
-        cout_port.net = co_i3_net.get();
-
-        IdString co_i3_name = co_i3_net->name;
-        NPNR_ASSERT(ctx->nets.find(co_i3_name) == ctx->nets.end());
-        ctx->nets[co_i3_name] = std::move(co_i3_net);
+        cout_port.net = co_i3_net;
 
         // If COUT also connects to a CIN; preserve the carry chain
         if (cin_cell) {
-            std::unique_ptr<NetInfo> co_cin_net(new NetInfo());
-            co_cin_net->name = ctx->id(lc->name.str(ctx) + "$COUT");
+            NetInfo *co_cin_net = ctx->createNet(ctx->id(lc->name.str(ctx) + "$COUT"));
 
             // Connect I1 to 1 to preserve carry chain
             NetInfo *vcc = ctx->nets.at(ctx->id("$PACKER_VCC_NET")).get();
-            lc->ports.at(id_I1).net = vcc;
-            PortRef i1_r;
-            i1_r.port = id_I1;
-            i1_r.cell = lc.get();
-            vcc->users.push_back(i1_r);
+            lc->connectPort(id_I1, vcc);
 
             // Connect co_cin_net to the COUT of the LC
-            PortRef co_r;
-            co_r.port = id_COUT;
-            co_r.cell = lc.get();
-            co_cin_net->driver = co_r;
-            lc->ports.at(id_COUT).net = co_cin_net.get();
+            lc->connectPort(id_COUT, co_cin_net);
 
             // Find the user corresponding to the next CIN
             int replaced_ports = 0;
             if (ctx->debug)
                 log_info("cell: %s\n", cin_cell->name.c_str(ctx));
             for (auto port : {id_CIN, id_I3}) {
-                auto &usr = lc->ports.at(id_O).net->users;
-                if (ctx->debug)
-                    for (auto user : usr)
-                        log_info("%s.%s\n", user.cell->name.c_str(ctx), user.port.c_str(ctx));
-                auto fnd_user = std::find_if(usr.begin(), usr.end(),
-                                             [&](const PortRef &pr) { return pr.cell == cin_cell && pr.port == port; });
-                if (fnd_user != usr.end()) {
-                    co_cin_net->users.push_back(*fnd_user);
-                    usr.erase(fnd_user);
-                    cin_cell->ports.at(port).net = co_cin_net.get();
+                NetInfo *out_net = lc->ports.at(id_O).net;
+                auto &cin_p = cin_cell->ports.at(port);
+                if (cin_p.net == out_net) {
+                    cin_cell->disconnectPort(port);
+                    cin_cell->connectPort(port, co_cin_net);
                     ++replaced_ports;
                 }
             }
             NPNR_ASSERT(replaced_ports > 0);
-            IdString co_cin_name = co_cin_net->name;
-            NPNR_ASSERT(ctx->nets.find(co_cin_name) == ctx->nets.end());
-            ctx->nets[co_cin_name] = std::move(co_cin_net);
         }
 
         IdString name = lc->name;
@@ -186,39 +160,20 @@ class ChainConstrainer
     CellInfo *make_carry_feed_in(CellInfo *cin_cell, PortInfo &cin_port)
     {
         NPNR_ASSERT(cin_port.net != nullptr);
-        std::unique_ptr<CellInfo> lc = create_ice_cell(ctx, ctx->id("ICESTORM_LC"));
-        lc->params[ctx->id("CARRY_ENABLE")] = Property::State::S1;
-        lc->params[ctx->id("CIN_CONST")] = Property::State::S1;
-        lc->params[ctx->id("CIN_SET")] = Property::State::S1;
-        lc->ports.at(ctx->id("I1")).net = cin_port.net;
-        cin_port.net->users.erase(std::remove_if(cin_port.net->users.begin(), cin_port.net->users.end(),
-                                                 [cin_cell, cin_port](const PortRef &usr) {
-                                                     return usr.cell == cin_cell && usr.port == cin_port.name;
-                                                 }));
+        std::unique_ptr<CellInfo> lc = create_ice_cell(ctx, id_ICESTORM_LC);
+        lc->params[id_CARRY_ENABLE] = Property::State::S1;
+        lc->params[id_CIN_CONST] = Property::State::S1;
+        lc->params[id_CIN_SET] = Property::State::S1;
 
-        PortRef i1_ref;
-        i1_ref.cell = lc.get();
-        i1_ref.port = ctx->id("I1");
-        lc->ports.at(ctx->id("I1")).net->users.push_back(i1_ref);
+        lc->connectPort(id_I1, cin_port.net);
+        cin_port.net->users.remove(cin_port.user_idx);
 
-        std::unique_ptr<NetInfo> out_net(new NetInfo());
-        out_net->name = ctx->id(lc->name.str(ctx) + "$O");
+        NetInfo *out_net = ctx->createNet(ctx->id(lc->name.str(ctx) + "$O"));
 
-        PortRef drv_ref;
-        drv_ref.port = ctx->id("COUT");
-        drv_ref.cell = lc.get();
-        out_net->driver = drv_ref;
-        lc->ports.at(ctx->id("COUT")).net = out_net.get();
+        lc->connectPort(id_COUT, out_net);
 
-        PortRef usr_ref;
-        usr_ref.port = cin_port.name;
-        usr_ref.cell = cin_cell;
-        out_net->users.push_back(usr_ref);
-        cin_cell->ports.at(cin_port.name).net = out_net.get();
-
-        IdString out_net_name = out_net->name;
-        NPNR_ASSERT(ctx->nets.find(out_net_name) == ctx->nets.end());
-        ctx->nets[out_net_name] = std::move(out_net);
+        cin_port.net = nullptr;
+        cin_cell->connectPort(cin_port.name, out_net);
 
         IdString name = lc->name;
         ctx->assignCellInfo(lc.get());
@@ -228,46 +183,54 @@ class ChainConstrainer
 
     void process_carries()
     {
-        std::vector<CellChain> carry_chains = find_chains(
-                ctx, [](const Context *ctx, const CellInfo *cell) { return is_lc(ctx, cell); },
-                [](const Context *ctx, const
-
-                   CellInfo *cell) {
-                    CellInfo *carry_prev =
-                            net_driven_by(ctx, cell->ports.at(ctx->id("CIN")).net, is_lc, ctx->id("COUT"));
-                    if (carry_prev != nullptr)
-                        return carry_prev;
-                    CellInfo *i3_prev = net_driven_by(ctx, cell->ports.at(ctx->id("I3")).net, is_lc, ctx->id("COUT"));
-                    if (i3_prev != nullptr)
-                        return i3_prev;
-                    return (CellInfo *)nullptr;
-                },
-                [](const Context *ctx, const CellInfo *cell) {
-                    CellInfo *carry_next =
-                            net_only_drives(ctx, cell->ports.at(ctx->id("COUT")).net, is_lc, ctx->id("CIN"), false);
-                    if (carry_next != nullptr)
-                        return carry_next;
-                    CellInfo *i3_next =
-                            net_only_drives(ctx, cell->ports.at(ctx->id("COUT")).net, is_lc, ctx->id("I3"), false);
-                    if (i3_next != nullptr)
-                        return i3_next;
-                    return (CellInfo *)nullptr;
-                });
-        std::unordered_set<IdString> chained;
-        for (auto &base_chain : carry_chains) {
-            for (auto c : base_chain.cells)
-                chained.insert(c->name);
+        // Find carry roots
+        std::vector<CellChain> carry_chains;
+        pool<IdString> processed;
+        for (auto &cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
+            if (is_lc(ctx, ci) && bool_or_default(ci->params, id_CARRY_ENABLE)) {
+                // possibly a non-root if CIN or I3 driven by another cout
+                NetInfo *cin = ci->getPort(id_CIN);
+                if (cin && cin->driver.cell && is_lc(ctx, cin->driver.cell) && cin->driver.port == id_COUT) {
+                    continue;
+                }
+                carry_chains.emplace_back();
+                auto &cc = carry_chains.back();
+                CellInfo *cursor = ci;
+                while (cursor) {
+                    cc.cells.push_back(cursor);
+                    processed.insert(cursor->name);
+                    NetInfo *cout = cursor->getPort(id_COUT);
+                    if (!cout)
+                        break;
+                    cursor = nullptr;
+                    // look for CIN connectivity
+                    for (auto &usr : cout->users) {
+                        if (is_lc(ctx, usr.cell) && usr.port == id_CIN && !processed.count(usr.cell->name)) {
+                            cursor = usr.cell;
+                            break;
+                        }
+                    }
+                    // look for I3 connectivity - only to a top cell with no further chaining
+                    if (cursor)
+                        continue;
+                    for (auto &usr : cout->users) {
+                        if (is_lc(ctx, usr.cell) && usr.port == id_I3 && !processed.count(usr.cell->name) &&
+                            !usr.cell->getPort(id_COUT)) {
+                            cursor = usr.cell;
+                            break;
+                        }
+                    }
+                }
+            }
         }
-        // Any cells not in chains, but with carry enabled, must also be put in a single-carry chain
-        // for correct processing
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
-            if (chained.find(cell.first) == chained.end() && is_lc(ctx, ci) &&
-                bool_or_default(ci->params, ctx->id("CARRY_ENABLE"))) {
-                CellChain sChain;
-                sChain.cells.push_back(ci);
-                chained.insert(cell.first);
-                carry_chains.push_back(sChain);
+        // anything left behind....
+        for (auto &cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
+            if (is_lc(ctx, ci) && bool_or_default(ci->params, id_CARRY_ENABLE) && !processed.count(ci->name)) {
+                carry_chains.emplace_back();
+                carry_chains.back().cells.push_back(ci);
+                processed.insert(ci->name);
             }
         }
         std::vector<CellChain> all_chains;
@@ -292,12 +255,14 @@ class ChainConstrainer
             // Place carry chain
             chain.cells.at(0)->constr_abs_z = true;
             chain.cells.at(0)->constr_z = 0;
+            chain.cells.at(0)->cluster = chain.cells.at(0)->name;
+
             for (int i = 1; i < int(chain.cells.size()); i++) {
                 chain.cells.at(i)->constr_x = 0;
                 chain.cells.at(i)->constr_y = (i / 8);
                 chain.cells.at(i)->constr_z = i % 8;
                 chain.cells.at(i)->constr_abs_z = true;
-                chain.cells.at(i)->constr_parent = chain.cells.at(0);
+                chain.cells.at(i)->cluster = chain.cells.at(0)->name;
                 chain.cells.at(0)->constr_children.push_back(chain.cells.at(i));
             }
         }

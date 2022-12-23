@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
+ *  Copyright (C) 2018  gatecat <gatecat@ds0.me>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -18,37 +18,17 @@
  *
  */
 
-#ifndef NEXTPNR_H
-#error Include "archdefs.h" via "nextpnr.h" only.
-#endif
+#ifndef ECP5_ARCHDEFS_H
+#define ECP5_ARCHDEFS_H
 
-#include <boost/functional/hash.hpp>
+#include "base_clusterinfo.h"
+#include "hashlib.h"
+#include "idstring.h"
+#include "nextpnr_namespaces.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
 typedef int delay_t;
-
-struct DelayInfo
-{
-    delay_t min_delay = 0, max_delay = 0;
-
-    delay_t minRaiseDelay() const { return min_delay; }
-    delay_t maxRaiseDelay() const { return max_delay; }
-
-    delay_t minFallDelay() const { return min_delay; }
-    delay_t maxFallDelay() const { return max_delay; }
-
-    delay_t minDelay() const { return min_delay; }
-    delay_t maxDelay() const { return max_delay; }
-
-    DelayInfo operator+(const DelayInfo &other) const
-    {
-        DelayInfo ret;
-        ret.min_delay = this->min_delay + other.min_delay;
-        ret.max_delay = this->max_delay + other.max_delay;
-        return ret;
-    }
-};
 
 // -----------------------------------------------------------------------
 
@@ -78,11 +58,11 @@ struct Location
     Location() : x(-1), y(-1){};
     Location(int16_t x, int16_t y) : x(x), y(y){};
     Location(const LocationPOD &pod) : x(pod.x), y(pod.y){};
-    Location(const Location &loc) : x(loc.x), y(loc.y){};
 
     bool operator==(const Location &other) const { return x == other.x && y == other.y; }
     bool operator!=(const Location &other) const { return x != other.x || y != other.y; }
     bool operator<(const Location &other) const { return y == other.y ? x < other.x : y < other.y; }
+    unsigned int hash() const { return mkhash(x, y); }
 };
 
 inline Location operator+(const Location &a, const Location &b) { return Location(a.x + b.x, a.y + b.y); }
@@ -98,6 +78,7 @@ struct BelId
     {
         return location == other.location ? index < other.index : location < other.location;
     }
+    unsigned int hash() const { return mkhash(location.hash(), index); }
 };
 
 struct WireId
@@ -111,6 +92,7 @@ struct WireId
     {
         return location == other.location ? index < other.index : location < other.location;
     }
+    unsigned int hash() const { return mkhash(location.hash(), index); }
 };
 
 struct PipId
@@ -124,7 +106,10 @@ struct PipId
     {
         return location == other.location ? index < other.index : location < other.location;
     }
+    unsigned int hash() const { return mkhash(location.hash(), index); }
 };
+
+typedef IdString BelBucketId;
 
 struct GroupId
 {
@@ -137,6 +122,7 @@ struct GroupId
 
     bool operator==(const GroupId &other) const { return (type == other.type) && (location == other.location); }
     bool operator!=(const GroupId &other) const { return (type != other.type) || (location != other.location); }
+    unsigned int hash() const { return mkhash(location.hash(), int(type)); }
 };
 
 struct DecalId
@@ -160,6 +146,7 @@ struct DecalId
     {
         return type != other.type || location != other.location || z != other.z || active != other.active;
     }
+    unsigned int hash() const { return mkhash(location.hash(), mkhash(z, int(type))); }
 };
 
 struct ArchNetInfo
@@ -167,87 +154,65 @@ struct ArchNetInfo
     bool is_global = false;
 };
 
-struct ArchCellInfo
+typedef IdString ClusterId;
+
+struct CellInfo;
+struct NetInfo;
+
+struct ArchCellInfo : BaseClusterInfo
 {
+    enum CombFlags : uint8_t
+    {
+        COMB_NONE = 0x00,
+        COMB_CARRY = 0x01,
+        COMB_LUTRAM = 0x02,
+        COMB_MUX5 = 0x04,
+        COMB_MUX6 = 0x08,
+        COMB_RAM_WCKINV = 0x10,
+        COMB_RAM_WREINV = 0x20,
+        COMB_RAMW_BLOCK = 0x40,
+    };
+
+    enum FFFlags : uint8_t
+    {
+        FF_NONE = 0x00,
+        FF_CLKINV = 0x01,
+        FF_CEINV = 0x02,
+        FF_CECONST = 0x04,
+        FF_LSRINV = 0x08,
+        FF_GSREN = 0x10,
+        FF_ASYNC = 0x20,
+        FF_M_USED = 0x40,
+    };
+
     struct
     {
-        bool using_dff;
-        bool has_l6mux;
-        bool is_carry;
-        IdString clk_sig, lsr_sig, clkmux, lsrmux, srmode;
-        int sd0, sd1;
-    } sliceInfo;
+        uint8_t flags;
+        IdString ram_wck, ram_wre;
+        CellInfo *mux_fxad;
+    } combInfo;
+    struct
+    {
+        uint8_t flags;
+        IdString clk_sig, lsr_sig, ce_sig, di_sig;
+    } ffInfo;
     struct
     {
         bool is_pdp;
+        // Are the outputs from a DP16KD registered (OUTREG)
+        // or non-registered (NOREG)
+        bool is_output_a_registered;
+        bool is_output_b_registered;
+        // Which timing information to use for a DP16KD. Depends on registering
+        // configuration.
+        IdString regmode_timing_id;
     } ramInfo;
+    struct
+    {
+        bool is_clocked;
+        IdString timing_id;
+    } multInfo;
 };
 
 NEXTPNR_NAMESPACE_END
-
-namespace std {
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX Location>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX Location &loc) const noexcept
-    {
-        std::size_t seed = std::hash<int>()(loc.x);
-        seed ^= std::hash<int>()(loc.y) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX BelId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX BelId &bel) const noexcept
-    {
-        std::size_t seed = std::hash<NEXTPNR_NAMESPACE_PREFIX Location>()(bel.location);
-        seed ^= std::hash<int>()(bel.index) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX WireId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX WireId &wire) const noexcept
-    {
-        std::size_t seed = std::hash<NEXTPNR_NAMESPACE_PREFIX Location>()(wire.location);
-        seed ^= std::hash<int>()(wire.index) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX PipId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX PipId &pip) const noexcept
-    {
-        std::size_t seed = std::hash<NEXTPNR_NAMESPACE_PREFIX Location>()(pip.location);
-        seed ^= std::hash<int>()(pip.index) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX GroupId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX GroupId &group) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(group.type));
-        boost::hash_combine(seed, hash<NEXTPNR_NAMESPACE_PREFIX Location>()(group.location));
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX DecalId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX DecalId &decal) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(decal.type));
-        boost::hash_combine(seed, hash<NEXTPNR_NAMESPACE_PREFIX Location>()(decal.location));
-        boost::hash_combine(seed, hash<int>()(decal.z));
-        boost::hash_combine(seed, hash<bool>()(decal.active));
-        return seed;
-    }
-};
-
-} // namespace std
+#endif /* ECP5_ARCHDEFS_H */
