@@ -1559,7 +1559,7 @@ struct Arch : BaseArch<ArchRanges>
         IdString belTileType = getBelTileType(bel);
         return belTileType == id_BRAM || belTileType == id_BRAM_L || belTileType == id_BRAM_R;
     }
-    bool isLogicTile(WireId wire) const
+    /*bool isLogicTile(WireId wire) const
     {
         if (wire.tile == -1)
             return false;
@@ -1567,7 +1567,7 @@ struct Arch : BaseArch<ArchRanges>
         return (wireTileType == id_CLEL_L || wireTileType == id_CLEL_R || wireTileType == id_CLEM ||
                 wireTileType == id_CLEM_R || wireTileType == id_CLBLL_L || wireTileType == id_CLBLL_R ||
                 wireTileType == id_CLBLM_L || wireTileType == id_CLBLM_R);
-    }
+    }*/
 
     Loc getSiteLocInTile(BelId bel) const
     {
