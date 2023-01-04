@@ -184,18 +184,27 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
 
     NPNR_ASSERT(bel != BelId());
 
+    const bool debug_this = false;
+
     int num_bel_wires = locInfo(bel).bel_data[bel.index].num_bel_wires;
     const BelWirePOD *bel_wires = locInfo(bel).bel_data[bel.index].bel_wires.get();
-    for (int i = 0; i < num_bel_wires; i++)
-        if (bel_wires[i].port == pin.index) {
-#if 0
+
+    if (debug_this) log_info("looking for pin %s in bel %s\n", pin.c_str(this), getBelName(bel).c_str(this));
+    for (int i = 0; i < num_bel_wires; i++) {
+        const char *wire_name;
+        if (debug_this) {
             WireId tmp;
             tmp.tile = bel.tile;
             tmp.index = bel_wires[i].wire_index;
-            log_info("%s\n", getWireName(tmp).c_str(this));
-#endif
+            wire_name = getWireName(tmp).c_str(this);
+            log_info("check wire %s\n", wire_name);
+        }
+
+        if (bel_wires[i].port == pin.index) {
+            if (debug_this) log_info("got wire %s\n", wire_name);
             return canonicalWireId(chip_info, bel.tile, bel_wires[i].wire_index);
         }
+    }
 
     return ret;
 }
