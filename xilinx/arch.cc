@@ -736,37 +736,47 @@ void Arch::routeClock()
     log_info("Routing global clocks...\n");
     // Special pass for faster routing of global clock psuedo-net
     for (auto net : sorted(nets)) {
-        NetInfo *ni = net.second;
-        if (ni->driver.cell == nullptr)
+        NetInfo *clk_net = net.second;
+        if (clk_net->driver.cell == nullptr)
             continue;
+
+        // check if we have a global clock net, skip otherwise
         bool is_global = false;
-        if ((ni->driver.cell->type == id_BUFGCTRL || ni->driver.cell->type == id_BUFCE_BUFG_PS ||
-             ni->driver.cell->type == id_BUFCE_BUFCE || ni->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
-            ni->driver.port == id("O"))
+        if ((clk_net->driver.cell->type == id_BUFGCTRL || clk_net->driver.cell->type == id_BUFCE_BUFG_PS ||
+             clk_net->driver.cell->type == id_BUFCE_BUFCE || clk_net->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
+            clk_net->driver.port == id("O"))
             is_global = true;
-        else if (ni->driver.cell->type == id("PLLE2_ADV_PLLE2_ADV") && ni->users.size() == 1 &&
-                 (ni->users.front().cell->type == id_BUFGCTRL || ni->users.front().cell->type == id_BUFCE_BUFCE ||
-                  ni->users.front().cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
+        else if (clk_net->driver.cell->type == id("PLLE2_ADV_PLLE2_ADV") && clk_net->users.size() == 1 &&
+                 (clk_net->users.front().cell->type == id_BUFGCTRL || clk_net->users.front().cell->type == id_BUFCE_BUFCE ||
+                  clk_net->users.front().cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
             is_global = true;
-        else if (ni->users.size() == 1 && ni->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
-                 ni->users.front().port == id("CLKIN1"))
+        else if (clk_net->users.size() == 1 && clk_net->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
+                 clk_net->users.front().port == id("CLKIN1"))
             is_global = true;
         if (!is_global)
             continue;
-        log_info("    routing clock '%s'\n", ni->name.c_str(this));
-        bindWire(getCtx()->getNetinfoSourceWire(ni), ni, STRENGTH_LOCKED);
-        for (auto &usr : ni->users) {
+
+        log_info("    routing clock '%s'\n", clk_net->name.c_str(this));
+        bindWire(getCtx()->getNetinfoSourceWire(clk_net), clk_net, STRENGTH_LOCKED);
+
+        for (auto &usr : clk_net->users) {
             std::queue<WireId> visit;
             std::unordered_map<WireId, PipId> backtrace;
             WireId dest = WireId();
-            if (getCtx()->debug)
-                log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this),
-                         nameOfWire(getCtx()->getNetinfoSinkWire(ni, usr)));
-            visit.push(getCtx()->getNetinfoSinkWire(ni, usr));
+
+            auto sink_wire = getCtx()->getNetinfoSinkWire(clk_net, usr);
+            if (getCtx()->debug) {
+                auto sink_wire_name = "(uninitialized)";
+                if (sink_wire != WireId())
+                    sink_wire_name = nameOfWire(sink_wire);
+                log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this), sink_wire_name);
+            }
+
+            visit.push(sink_wire);
             while (!visit.empty()) {
                 WireId curr = visit.front();
                 visit.pop();
-                if (getBoundWireNet(curr) == ni) {
+                if (getBoundWireNet(curr) == clk_net) {
                     dest = curr;
                     break;
                 }
@@ -784,7 +794,7 @@ void Arch::routeClock()
                         intent == ID_SINGLE || intent == ID_VLONG || intent == ID_VLONG12 || intent == ID_VQUAD ||
                         intent == ID_PINBOUNCE)
                         continue;
-                    if (!checkWireAvail(src) && getBoundWireNet(src) != ni)
+                    if (!checkWireAvail(src) && getBoundWireNet(src) != clk_net)
                         continue;
                     backtrace[src] = uh;
                     visit.push(src);
@@ -792,17 +802,17 @@ void Arch::routeClock()
             }
             if (dest == WireId()) {
                 log_info("            failed to find a route using dedicated resources.\n");
-                if (ni->users.size() == 1 && ni->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
-                    ni->users.front().port == id("CLKIN1")) {
+                if (clk_net->users.size() == 1 && clk_net->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
+                    clk_net->users.front().port == id("CLKIN1")) {
                     // Due to some missing pips, currently special case more lenient solution
                     std::queue<WireId> empty;
                     std::swap(visit, empty);
                     backtrace.clear();
-                    visit.push(getCtx()->getNetinfoSinkWire(ni, usr));
+                    visit.push(sink_wire);
                     while (!visit.empty()) {
                         WireId curr = visit.front();
                         visit.pop();
-                        if (getBoundWireNet(curr) == ni) {
+                        if (getBoundWireNet(curr) == clk_net) {
                             dest = curr;
                             break;
                         }
@@ -812,7 +822,7 @@ void Arch::routeClock()
                             WireId src = getPipSrcWire(uh);
                             if (backtrace.count(src))
                                 continue;
-                            if (!checkWireAvail(src) && getBoundWireNet(src) != ni)
+                            if (!checkWireAvail(src) && getBoundWireNet(src) != clk_net)
                                 continue;
                             backtrace[src] = uh;
                             visit.push(src);
@@ -829,8 +839,8 @@ void Arch::routeClock()
                 dest = getPipDstWire(uh);
                 if (getCtx()->debug)
                     log_info("            bind pip %s --> %s\n", nameOfPip(uh), nameOfWire(dest));
-                bindWire(dest, ni, STRENGTH_LOCKED);
-                bindPip(uh, ni, STRENGTH_LOCKED);
+                bindWire(dest, clk_net, STRENGTH_LOCKED);
+                bindPip(uh, clk_net, STRENGTH_LOCKED);
             }
         }
     }
