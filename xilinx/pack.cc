@@ -920,7 +920,7 @@ bool Arch::pack()
         packer.pack_constants();
         packer.pack_inverters();
         packer.pack_io();
-        packer.prepare_iologic();
+        //packer.prepare_iologic();
         packer.prepare_clocking();
         packer.pack_constants();
         packer.pack_iologic();

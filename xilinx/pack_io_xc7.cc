@@ -557,8 +557,6 @@ void XC7Packer::fold_inverter(CellInfo *cell, std::string port)
     }
 }
 
-void XC7Packer::prepare_iologic() { }
-
 void XC7Packer::pack_iologic()
 {
     std::unordered_map<IdString, BelId> iodelay_to_io;
