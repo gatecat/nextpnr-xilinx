@@ -329,9 +329,9 @@ void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unorder
     invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("PSINCDEC"));
     invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("PWRDWN"));
     invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("ODDR")].insert(ctx->id("C"));
-    // invertible_pins[ctx->id("ODDR")].insert(ctx->id("D1"));
-    // invertible_pins[ctx->id("ODDR")].insert(ctx->id("D2"));
+    invertible_pins[ctx->id("ODDR")].insert(ctx->id("CK"));
+    invertible_pins[ctx->id("ODDR")].insert(ctx->id("D1"));
+    invertible_pins[ctx->id("ODDR")].insert(ctx->id("D2"));
     invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("C"));
     // invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("ODATAIN"));
     invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("CLKDIV"));
@@ -458,7 +458,10 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         tied_pins[uram][ctx->id("SLEEP")] = false;
     }
 
-    // IDDR/ODDR primitives
+    // IO logic primitives
+    tied_pins[ctx->id("ODDR")][ctx->id("SR")] = false;
+    tied_pins[ctx->id("ODDR")][ctx->id("CE")] = true;
+
     tied_pins[ctx->id("IDDRE1")][ctx->id("R")] = false;
     tied_pins[ctx->id("ODDRE1")][ctx->id("SR")] = false;
 

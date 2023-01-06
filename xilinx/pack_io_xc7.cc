@@ -557,31 +557,17 @@ void XC7Packer::fold_inverter(CellInfo *cell, std::string port)
     }
 }
 
-void XC7Packer::prepare_iologic()
-{
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
-        // ODDR must be transformed to an OSERDESE2
-        if (ci->type == ctx->id("ODDR")) {
-            ci->type = ctx->id("OSERDESE2");
-            ci->params[ctx->id("DATA_RATE_OQ")] = std::string("DDR");
-            rename_port(ctx, ci, ctx->id("C"), ctx->id("CLK"));
-            rename_port(ctx, ci, ctx->id("R"), ctx->id("RST"));
-            rename_port(ctx, ci, ctx->id("Q"), ctx->id("OQ"));
-            rename_port(ctx, ci, ctx->id("CE"), ctx->id("OCE"));
-            tie_port(ci, "TCE", true);
-
-            // TODO: implement set port functionality
-            disconnect_port(ctx, ci, ctx->id("S"));
-            ci->ports.erase(ctx->id("S"));
-        }
-    }
-}
+void XC7Packer::prepare_iologic() { }
 
 void XC7Packer::pack_iologic()
 {
     std::unordered_map<IdString, BelId> iodelay_to_io;
     std::unordered_map<IdString, XFormRule> iologic_rules;
+    iologic_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE3_OUTFF");
+    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("C")] = ctx->id("CK");
+    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("S")] = ctx->id("SR");
+    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("R")] = ctx->id("SR");
+
     iologic_rules[ctx->id("OSERDESE2")].new_type = ctx->id("OSERDESE2_OSERDESE2");
     iologic_rules[ctx->id("IDELAYE2")].new_type = ctx->id("IDELAYE2_IDELAYE2");
     iologic_rules[ctx->id("ISERDESE2")].new_type = ctx->id("ISERDESE2_ISERDESE2");
@@ -625,7 +611,19 @@ void XC7Packer::pack_iologic()
 
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
-        if (ci->type == ctx->id("OSERDESE2")) {
+        if (ci->type == ctx->id("ODDR")) {
+            NetInfo *q = get_net_or_empty(ci, ctx->id("Q"));
+            if (q == nullptr || q->users.empty())
+                log_error("%s '%s' has disconnected Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            BelId io_bel;
+            CellInfo *ob = find_p_outbuf(q);
+            if (ob != nullptr)
+                io_bel = ctx->getBelByName(ctx->id(ob->attrs.at(ctx->id("BEL")).as_string()));
+            else
+                log_error("%s '%s' has illegal fanout on Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = ol_site + "/OUTFF";
+        } else if (ci->type == ctx->id("OSERDESE2")) {
             NetInfo *q = get_net_or_empty(ci, ctx->id("OQ"));
             if (q == nullptr || q->users.empty())
                 log_error("%s '%s' has disconnected OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
