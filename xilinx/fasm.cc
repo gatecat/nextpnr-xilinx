@@ -691,7 +691,8 @@ struct FasmBackend
         bool is_sing = tile.find("_SING_") != std::string::npos;
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
-        bool is_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
+        bool is_lvcmos = boost::starts_with(iostandard, "LVCMOS");
+        bool is_low_volt_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
 
         auto yLoc = is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y);
         push("IOB_Y" + std::to_string(yLoc));
@@ -705,14 +706,15 @@ struct FasmBackend
 
         if (is_output) {
             // DRIVE
-            if (iostandard == "LVCMOS33" || iostandard == "LVTTL") {
-                if (!is_riob18)
-                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
-                else
-                    log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
-            }
+            int default_drive = (is_riob18 && iostandard == "LVCMOS12") ? 8 : 12;
+            int drive = int_or_default(pad->attrs, ctx->id("DRIVE"), default_drive);
 
-            if (is_riob18) {
+            if ((iostandard == "LVCMOS33" || iostandard == "LVTTL") && is_riob18)
+                log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
+
+            if (iostandard == "SSTL135")
+                write_bit("SSTL135.DRIVE.I_FIXED");
+            else if (is_riob18) {
                 if ((iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
                     write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
                 else if (iostandard == "LVCMOS12")
@@ -721,14 +723,33 @@ struct FasmBackend
                     write_bit("LVDS.DRIVE.I_FIXED");
                 else if (is_sstl) {
                     write_bit(iostandard + ".DRIVE.I_FIXED");
-                    write_bit(iostandard + ".IN_USE");
                 }
+            } else { // IOB33
+                if ((iostandard == "LVCMOS15" && drive == 16) || iostandard == "SSTL15")
+                    write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
+                else if (iostandard == "LVCMOS18" && (drive == 12 || drive == 8))
+                    write_bit("LVCMOS18.DRIVE.I12_I8");
+                else if ((iostandard == "LVCMOS33" && drive == 12) ||
+                         (iostandard == "LVTTL"    && drive == 16))
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+                else if ((iostandard == "LVCMOS33" && drive == 8) ||
+                         (iostandard == "LVTTL"    && drive == 12))
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I8");
+                else if ((iostandard == "LVCMOS33" && drive == 4) ||
+                         (iostandard == "LVTTL"    && drive == 4))
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I4");
+                else if (drive == 8 &&
+                         (iostandard == "LVCMOS12" || iostandard == "LVCMOS25"))
+                    write_bit("LVCMOS12_LVCMOS25.DRIVE.I8");
+                else if (drive == 4 &&
+                         (iostandard == "LVCMOS15" || iostandard == "LVCMOS18" || iostandard == "LVCMOS25"))
+                    write_bit("LVCMOS15_LVCMOS18_LVCMOS25.DRIVE.I4");
+                else if (is_lvcmos || iostandard == "LVTTL")
+                    write_bit(iostandard + ".I" + std::to_string(drive));
             }
-            else if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
-                write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
 
-            if (iostandard == "SSTL135")
-                write_bit("SSTL135.DRIVE.I_FIXED");
+            // SSTL output used
+            if (is_riob18 && is_sstl) write_bit(iostandard + ".IN_USE");
 
             // SLEW
             if (is_riob18 && slew == "SLOW") {
@@ -770,7 +791,7 @@ struct FasmBackend
                         write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
                 }
 
-                if (is_lvcmos) {
+                if (is_low_volt_lvcmos) {
                     write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
                 }
             } else /* is_diff */ {
@@ -802,7 +823,7 @@ struct FasmBackend
             }
         }
 
-        if (!is_riob18 && (is_lvcmos || is_sstl)) {
+        if (!is_riob18 && (is_low_volt_lvcmos || is_sstl)) {
             if (iostandard == "SSTL12") {
                 log_error("SSTL12 is only available on high performance banks.");
             }
