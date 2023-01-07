@@ -431,6 +431,44 @@ void XC7Packer::pack_io()
         type.replace(0, 5, ci->attrs.at(ctx->id("X_IOB_SITE_TYPE")).as_string());
         ci->type = ctx->id(type);
     }
+
+    // check all PAD cells for IOSTANDARD/DRIVE
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        std::string type = ci->type.str(ctx);
+        if (type != "PAD") continue;
+        check_valid_pad(ci, type);
+    }
+}
+
+void XC7Packer::check_valid_pad(CellInfo *ci, std::string type)
+{
+    auto iostandard_id = ctx->id("IOSTANDARD");
+    auto iostandard_attr = ci->attrs.find(iostandard_id);
+    if (iostandard_attr == ci->attrs.end())
+        log_error("port %s has no IOSTANDARD property", ci->name.c_str(ctx));
+
+    auto iostandard = iostandard_attr->second.as_string();
+    if (!boost::starts_with(iostandard, "LVTTL") &&
+        !boost::starts_with(iostandard, "LVCMOS")) return;
+
+    auto drive_attr = ci->attrs.find(ctx->id("DRIVE"));
+    // no drive strength attribute: use default
+    if (drive_attr == ci->attrs.end()) return;
+    auto drive = drive_attr->second.as_int64();
+
+    bool is_iob33 = boost::starts_with(type, "IOB33");
+    if (is_iob33) {
+        if (drive == 4 || drive == 8 || drive == 12) return;
+        if (iostandard != "LVCMOS12" && drive == 16) return;
+        if ((iostandard == "LVCMOS18" || iostandard == "LVTTL") && drive == 24) return;
+    } else { // IOB18
+        if (drive == 2 || drive == 4 || drive == 6 || drive == 8)     return;
+        if (iostandard != "LVCMOS12" && (drive == 12 || drive == 16)) return;
+    }
+
+    log_error("unsupported DRIVE strength property %s for port %s",
+        drive_attr->second.c_str(), ci->name.c_str(ctx));
 }
 
 std::string XC7Packer::get_ologic_site(const std::string &io_bel)
