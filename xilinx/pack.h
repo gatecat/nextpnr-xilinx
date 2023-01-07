@@ -239,6 +239,9 @@ struct XC7Packer : public XilinxPacker
 
     // DSP
     void pack_dsps();
+
+private:
+    void check_valid_pad(CellInfo *ci, std::string type);
 };
 
 NEXTPNR_NAMESPACE_END
