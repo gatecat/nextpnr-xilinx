@@ -141,9 +141,6 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
     bool is_diff_ibuf = xil_iob->type == ctx->id("IBUFDS") || xil_iob->type == ctx->id("IBUFDS_INTERMDISABLE") ||
                         xil_iob->type == ctx->id("IBUFDS");
-    bool is_diff_out_ibuf = xil_iob->type == ctx->id("IBUFDS_DIFF_OUT") ||
-                            xil_iob->type == ctx->id("IBUFDS_DIFF_OUT_IBUFDISABLE") ||
-                            xil_iob->type == ctx->id("IBUFDS_DIFF_OUT_INTERMDISABLE");
     bool is_diff_iobuf = xil_iob->type == ctx->id("IOBUFDS") || xil_iob->type == ctx->id("IOBUFDS_DCIEN");
     bool is_diff_out_iobuf = xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT") ||
                              xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT_DCIEN") ||
