@@ -878,10 +878,14 @@ struct FasmBackend
             auto init = int_or_default(ci->params, ctx->id("INIT"), 1);
             if (init == 0) write_bit("ZINIT_OQ");
 
+            write_bit("ODDR.SRUSED", get_net_or_empty(ci, ctx->id("SR")) != nullptr);
+
+            auto sr_name = str_or_default(ci->attrs, ctx->id("X_ORIG_PORT_SR"), "R");
+            if (sr_name == "R") write_bit("ZSRVAL_OQ");
+
             auto clk_inv = bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"));
             if (!clk_inv)
                 write_bit("ZINV_CLK");
-
         } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
             write_bit("ODDR.SRUSED");

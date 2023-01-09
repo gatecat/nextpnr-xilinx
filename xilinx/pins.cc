@@ -459,9 +459,6 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
     }
 
     // IO logic primitives
-    tied_pins[ctx->id("ODDR")][ctx->id("SR")] = false;
-    tied_pins[ctx->id("ODDR")][ctx->id("CE")] = true;
-
     tied_pins[ctx->id("IDDRE1")][ctx->id("R")] = false;
     tied_pins[ctx->id("ODDRE1")][ctx->id("SR")] = false;
 
