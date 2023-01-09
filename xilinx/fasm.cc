@@ -745,7 +745,7 @@ struct FasmBackend
                          (iostandard == "LVCMOS15" || iostandard == "LVCMOS18" || iostandard == "LVCMOS25"))
                     write_bit("LVCMOS15_LVCMOS18_LVCMOS25.DRIVE.I4");
                 else if (is_lvcmos || iostandard == "LVTTL")
-                    write_bit(iostandard + ".I" + std::to_string(drive));
+                    write_bit(iostandard + ".DRIVE.I" + std::to_string(drive));
             }
 
             // SSTL output used
