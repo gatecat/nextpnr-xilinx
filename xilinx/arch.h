@@ -966,7 +966,7 @@ struct Arch : BaseCtx
 
     IdString getWireName(WireId wire) const
     {
-        NPNR_ASSERT(wire != WireId());
+        NPNR_ASSERT_MSG(wire != WireId(), "uninitialized wire");
         if (wire.tile != -1 && locInfo(wire).wire_data[wire.index].site != -1) {
             return id(std::string("SITEWIRE/") +
                       chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +

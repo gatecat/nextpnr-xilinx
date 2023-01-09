@@ -856,7 +856,33 @@ struct FasmBackend
         std::string sitetype = site.substr(0, site.find('_'));
         Loc siteloc = ctx->getSiteLocInTile(ci->bel);
         push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
-        if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
+
+        if (ci->type == ctx->id("OLOGICE3_OUTFF")) {
+            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
+            if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
+
+            write_bit("ODDR_TDDR.IN_USE");
+            write_bit("OQUSED");
+            write_bit("OSERDES.DATA_RATE_OQ.DDR");
+            write_bit("OSERDES.DATA_RATE_TQ.BUF");
+
+            std::string srtype = str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC");
+            if (srtype == "SYNC") write_bit("OSERDES.SRTYPE.SYNC");
+
+            for (std::string d : {"D1", "D2"})
+                write_bit("IS_" + d + "_INVERTED",
+                          bool_or_default(ci->params, ctx->id("IS_" + d + "_INVERTED"), false));
+
+            auto init = int_or_default(ci->params, ctx->id("INIT"), 1);
+            if (init == 0) write_bit("ZINIT_OQ");
+
+            write_bit("ODDR.SRUSED", get_net_or_empty(ci, ctx->id("SR")) != nullptr);
+            auto sr_name = str_or_default(ci->attrs, ctx->id("X_ORIG_PORT_SR"), "R");
+            if (sr_name == "R") write_bit("ZSRVAL_OQ");
+
+            auto clk_inv = bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"));
+            if (!clk_inv) write_bit("ZINV_CLK");
+        } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
             write_bit("ODDR.SRUSED");
             write_bit("ODDR_TDDR.IN_USE");
@@ -954,7 +980,9 @@ struct FasmBackend
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2") || ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
+            } else if (ci->type == ctx->id("OLOGICE3_OUTFF") ||
+                       ci->type == ctx->id("OSERDESE2_OSERDESE2") ||
+                       ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
                        ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
                 write_iol_config(ci);
                 blank();
