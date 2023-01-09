@@ -729,11 +729,11 @@ struct FasmBackend
                     write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
                 else if (iostandard == "LVCMOS18" && (drive == 12 || drive == 8))
                     write_bit("LVCMOS18.DRIVE.I12_I8");
-                else if ((iostandard == "LVCMOS33" && drive == 12) ||
+                else if ((iostandard == "LVCMOS33" && drive == 16) ||
                          (iostandard == "LVTTL"    && drive == 16))
                     write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
-                else if ((iostandard == "LVCMOS33" && drive == 8) ||
-                         (iostandard == "LVTTL"    && (drive == 12 | drive == 8)))
+                else if ((iostandard == "LVCMOS33" && (drive == 8 || drive == 12)) ||
+                         (iostandard == "LVTTL"    && (drive == 8 || drive == 12)))
                     write_bit("LVCMOS33_LVTTL.DRIVE.I12_I8");
                 else if ((iostandard == "LVCMOS33" && drive == 4) ||
                          (iostandard == "LVTTL"    && drive == 4))
