@@ -474,7 +474,7 @@ void XC7Packer::check_valid_pad(CellInfo *ci, std::string type)
 std::string XC7Packer::get_ologic_site(const std::string &io_bel)
 {
     BelId ibc_bel;
-    if (io_bel.find("IOB18") != std::string::npos)
+    if (boost::contains(io_bel, "IOB18"))
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/OUTBUF_DCIEN"));
     else
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/OUTBUF"));
@@ -498,7 +498,7 @@ std::string XC7Packer::get_ologic_site(const std::string &io_bel)
 std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
 {
     BelId ibc_bel;
-    if (io_bel.find("IOB18") != std::string::npos)
+    if (boost::contains(io_bel, "IOB18"))
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/INBUF_DCIEN"));
     else
       ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
@@ -522,7 +522,7 @@ std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
 std::string XC7Packer::get_idelay_site(const std::string &io_bel)
 {
     BelId ibc_bel;
-    if (io_bel.find("IOB18") != std::string::npos)
+    if (boost::contains(io_bel, "IOB18"))
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/INBUF_DCIEN"));
     else
       ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
@@ -633,8 +633,8 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
-            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos
-                || drv->type.str(ctx).find("INBUF_DCIEN") != std::string::npos)
+            if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
+                || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                 io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has IDATAIN input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -706,7 +706,7 @@ void XC7Packer::pack_iologic()
                 if (d == nullptr || d->driver.cell == nullptr)
                     log_error("%s '%s' has disconnected DDLY input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
                 CellInfo *drv = d->driver.cell;
-                if (drv->type.str(ctx).find("IDELAYE2") != std::string::npos && d->driver.port == ctx->id("DATAOUT"))
+                if (boost::contains(drv->type.str(ctx), "IDELAYE2") && d->driver.port == ctx->id("DATAOUT"))
                     io_bel = iodelay_to_io.at(drv->name);
                 else
                     log_error("%s '%s' has DDLY input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -716,8 +716,8 @@ void XC7Packer::pack_iologic()
                 if (d == nullptr || d->driver.cell == nullptr)
                     log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
                 CellInfo *drv = d->driver.cell;
-                if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos
-                    || drv->type.str(ctx).find("INBUF_DCIEN") != std::string::npos)
+                if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
+                    || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                     io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
                 else
                     log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
