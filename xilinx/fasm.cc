@@ -878,7 +878,30 @@ struct FasmBackend
         Loc siteloc = ctx->getSiteLocInTile(ci->bel);
         push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
 
-        if (ci->type == ctx->id("OLOGICE3_OUTFF")) {
+        if (ci->type == ctx->id("ILOGICE3_IFF")) {
+            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
+            if (edge == "SAME_EDGE") write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
+
+            write_bit("IDDR.IN_USE");
+            write_bit("IDDR_OR_ISERDES.IN_USE");
+
+            std::string srtype = str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC");
+            if (srtype == "SYNC") write_bit("IFF.SRTYPE.SYNC"); else write_bit("IFF.SRTYPE.ASYNC");
+
+            auto init = int_or_default(ci->params, ctx->id("INIT_Q1"), 0);
+            if (init == 0) write_bit("IFF.ZINIT_Q1");
+            init = int_or_default(ci->params, ctx->id("INIT_Q2"), 0);
+            if (init == 0) write_bit("IFF.ZINIT_Q2");
+
+            auto sr_name = str_or_default(ci->attrs, ctx->id("X_ORIG_PORT_SR"), "R");
+            if (sr_name == "R") {
+                write_bit("IFF.ZSRVAL_Q1");
+                write_bit("IFF.ZSRVAL_Q2");
+            }
+
+            auto clk_inv = bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"));
+            if (!clk_inv) write_bit("IFF.INV_OCLK");
+        } else if (ci->type == ctx->id("OLOGICE3_OUTFF")) {
             std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
 

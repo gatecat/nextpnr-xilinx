@@ -596,6 +596,11 @@ void XC7Packer::pack_iologic()
 {
     std::unordered_map<IdString, BelId> iodelay_to_io;
     std::unordered_map<IdString, XFormRule> iologic_rules;
+    iologic_rules[ctx->id("IDDR")].new_type = ctx->id("ILOGICE3_IFF");
+    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("C")] = ctx->id("CK");
+    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("S")] = ctx->id("SR");
+    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("R")] = ctx->id("SR");
+
     iologic_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE3_OUTFF");
     iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("C")] = ctx->id("CK");
     iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("S")] = ctx->id("SR");
@@ -668,6 +673,27 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has illegal fanout on OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[ctx->id("BEL")] = ol_site + "/OSERDESE2";
+        } else if (ci->type == ctx->id("IDDR")) {
+            fold_inverter(ci, "C");
+
+            std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
+            BelId io_bel;
+
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
+                || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+            else if (boost::contains(drv->type.str(ctx), "IDELAYE2") && d->driver.port == ctx->id("DATAOUT"))
+                io_bel = iodelay_to_io.at(drv->name);
+            else
+                log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                            ctx->nameOf(ci), drv->type.c_str(ctx));
+
+            std::string iol_site = get_ilogic_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = iol_site + "/IFF";
         } else if (ci->type == ctx->id("ISERDESE2")) {
             fold_inverter(ci, "CLKB");
             fold_inverter(ci, "OCLKB");
