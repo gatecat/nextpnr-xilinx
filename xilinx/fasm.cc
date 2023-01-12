@@ -879,14 +879,33 @@ struct FasmBackend
         push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
 
         if (ci->type == ctx->id("ILOGICE3_IFF")) {
-            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
-            if (edge == "SAME_EDGE") write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
-
             write_bit("IDDR.IN_USE");
             write_bit("IDDR_OR_ISERDES.IN_USE");
+            write_bit("ISERDES.MODE.MASTER");
+            write_bit("ISERDES.NUM_CE.N1");
+
+            // Switch IDELMUXE3 to include the IDELAY element, if we have an IDELAYE2 driving D
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            if (boost::contains(drv->type.str(ctx), "IDELAYE2"))
+                write_bit("IDELMUXE3.P0");
+            else
+                write_bit("IDELMUXE3.P1");
+
+            // clock edge
+            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
+            if (edge == "SAME_EDGE")          write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
+            else if (edge == "OPPOSITE_EDGE") write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
+            else log_error("unsupported clock edge parameter for cell '%s' at %s: %s. Supported are: SAME_EDGE and OPPOSITE_EDGE",
+                            ci->name.c_str(ctx), site.c_str(), edge.c_str());
 
             std::string srtype = str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC");
             if (srtype == "SYNC") write_bit("IFF.SRTYPE.SYNC"); else write_bit("IFF.SRTYPE.ASYNC");
+
+            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false));
 
             auto init = int_or_default(ci->params, ctx->id("INIT_Q1"), 0);
             if (init == 0) write_bit("IFF.ZINIT_Q1");
@@ -898,9 +917,6 @@ struct FasmBackend
                 write_bit("IFF.ZSRVAL_Q1");
                 write_bit("IFF.ZSRVAL_Q2");
             }
-
-            auto clk_inv = bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"));
-            if (!clk_inv) write_bit("IFF.INV_OCLK");
         } else if (ci->type == ctx->id("OLOGICE3_OUTFF")) {
             std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
@@ -1024,7 +1040,8 @@ struct FasmBackend
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == ctx->id("OLOGICE3_OUTFF") ||
+            } else if (ci->type == ctx->id("ILOGICE3_IFF") ||
+                       ci->type == ctx->id("OLOGICE3_OUTFF") ||
                        ci->type == ctx->id("OSERDESE2_OSERDESE2") ||
                        ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
                        ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
