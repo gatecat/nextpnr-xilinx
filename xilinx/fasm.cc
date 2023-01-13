@@ -268,8 +268,8 @@ struct FasmBackend
                 || boost::starts_with(tile_name, "LIOI3_SING")
                 || boost::starts_with(tile_name, "RIOI_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
-                if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
-                    (dst_name.find("CLK") == std::string::npos))
+                if ((boost::contains(src_name, "IMUX") || boost::contains(src_name, "CTRL0"))
+                     && !boost::contains(dst_name, "CLK"))
                     return;
                 auto spos = src_name.find("_SING_");
                 if (spos != std::string::npos)
@@ -289,8 +289,8 @@ struct FasmBackend
                     }
                 }
             }
-            if (tile_name.find("IOI") != std::string::npos) {
-                if (dst_name.find("OCLKB") != std::string::npos && src_name.find("IOI_OCLKM_") != std::string::npos)
+            if (boost::contains(tile_name, "IOI")) {
+                if (boost::contains(dst_name, "OCLKB") && boost::contains(src_name, "IOI_OCLKM_"))
                     return; // missing, not sure if really a ppip?
             }
 
@@ -298,7 +298,7 @@ struct FasmBackend
             out << dst_name << ".";
             out << src_name << std::endl;
 
-            if (tile_name.find("IOI") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
+            if (boost::contains(tile_name, "IOI") && boost::starts_with(dst_name, "IOI_OCLK_")) {
                 dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
                 orig_dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
 
@@ -460,7 +460,7 @@ struct FasmBackend
             return;
 
         push(tname);
-        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
+        push(get_half_name(half, boost::contains(tname, "CLBLM")));
 
         for (int i = 0; i < 4; i++) {
             CellInfo *ff1 = lts->cells[(half << 6) | (i << 4) | BEL_FF];
@@ -543,7 +543,7 @@ struct FasmBackend
         bool wa7_used = false, wa8_used = false;
 
         std::string tname = get_tile_name(tile);
-        bool is_mtile = tname.find("CLBLM") != std::string::npos;
+        bool is_mtile = boost::contains(tname, "CLBLM");
         bool is_slicem = is_mtile && (half == 0);
 
         auto lts = ctx->tileStatus[tile].lts;
@@ -608,7 +608,7 @@ struct FasmBackend
     void write_carry_config(int tile, int half)
     {
         std::string tname = get_tile_name(tile);
-        bool is_mtile = tname.find("CLBLM") != std::string::npos;
+        bool is_mtile = boost::contains(tname, "CLBLM");
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
@@ -682,16 +682,16 @@ struct FasmBackend
         if (pad_net->driver.cell != nullptr)
             is_output = true;
         for (auto &usr : pad_net->users)
-            if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
+            if (boost::contains(usr.cell->type.str(ctx), "INBUF"))
                 is_input = true;
         std::string tile = get_tile_name(pad->bel.tile);
         push(tile);
 
-        bool is_riob18 = boost::starts_with(tile, "RIOB18_");
-        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_riob18   = boost::starts_with(tile, "RIOB18_");
+        bool is_sing     = boost::contains(tile, "_SING_");
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
-        bool is_lvcmos = boost::starts_with(iostandard, "LVCMOS");
+        bool is_lvcmos   = boost::starts_with(iostandard, "LVCMOS");
         bool is_low_volt_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
 
         auto yLoc = is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y);
@@ -870,7 +870,7 @@ struct FasmBackend
     {
         std::string tile = get_tile_name(ci->bel.tile);
         push(tile);
-        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_sing     = boost::contains(tile, "_SING_");
         bool is_top_sing = ci->bel.tile < ctx->getHclkForIoi(ci->bel.tile);
 
         std::string site = ctx->getBelSite(ci->bel);
@@ -1108,7 +1108,7 @@ struct FasmBackend
                 auto used_sources = used_wires_starting_with(tile, "HCLK_CK_", true);
                 push("ENABLE_BUFFER");
                 for (auto s : used_sources) {
-                    if (s.find("BUFHCLK") != std::string::npos) {
+                    if (boost::contains(s, "BUFHCLK")) {
                         write_bit(s);
                         hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
                     }
@@ -1122,7 +1122,7 @@ struct FasmBackend
                     all_gclk.insert(s.substr(s.find("GCLK")));
                 }
                 for (auto s : used_ck_in) {
-                    if (s.find("HROW_CK_INT") != std::string::npos)
+                    if (boost::contains(s, "HROW_CK_INT"))
                         continue;
                     write_bit(s + "_ACTIVE");
                 }
@@ -1134,7 +1134,7 @@ struct FasmBackend
                 }
                 auto used_hclk = used_wires_starting_with(tile, "HCLK_CMT_CK_", true);
                 for (auto s : used_hclk) {
-                    if (s.find("BUFHCLK") != std::string::npos) {
+                    if (boost::contains(s, "BUFHCLK")) {
                         write_bit(s + "_USED");
                         hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
                     }
