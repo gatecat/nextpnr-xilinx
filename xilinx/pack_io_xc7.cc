@@ -597,7 +597,7 @@ void XC7Packer::pack_iologic()
     std::unordered_map<IdString, BelId> iodelay_to_io;
     std::unordered_map<IdString, XFormRule> iologic_rules;
     iologic_rules[ctx->id("IDDR")].new_type = ctx->id("ILOGICE3_IFF");
-    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("C")] = ctx->id("CK");
+    iologic_rules[ctx->id("IDDR")].port_multixform[ctx->id("C")] = { ctx->id("CK"), ctx->id("CKB") };
     iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("S")] = ctx->id("SR");
     iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("R")] = ctx->id("SR");
 
@@ -676,9 +676,7 @@ void XC7Packer::pack_iologic()
         } else if (ci->type == ctx->id("IDDR")) {
             fold_inverter(ci, "C");
 
-            std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
             BelId io_bel;
-
             NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
             if (d == nullptr || d->driver.cell == nullptr)
                 log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
