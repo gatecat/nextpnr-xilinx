@@ -249,7 +249,6 @@ struct FasmBackend
             if (!pp.empty())
                 last_was_blank = false;
         } else {
-
             if (pd.extra_data == 1)
                 log_warning("Unprocessed route-thru %s.%s.%s\n!", get_tile_name(pip.tile).c_str(),
                             IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).c_str(ctx),
