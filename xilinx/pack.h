@@ -221,6 +221,7 @@ struct XC7Packer : public XilinxPacker
     std::string get_ologic_site(const std::string &io_bel);
     std::string get_ilogic_site(const std::string &io_bel);
     std::string get_ioctrl_site(const std::string &io_bel);
+    std::string get_odelay_site(const std::string &io_bel);
     std::string get_idelay_site(const std::string &io_bel);
     // Call before packing constants
     void prepare_iologic();

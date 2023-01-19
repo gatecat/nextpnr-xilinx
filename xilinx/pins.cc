@@ -311,8 +311,9 @@ void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unorder
     invertible_pins[ctx->id("IDDR_2CLK")].insert(ctx->id("C"));
     // invertible_pins[ctx->id("IDDR_2CLK")].insert(ctx->id("D"));
     invertible_pins[ctx->id("IDELAYE2")].insert(ctx->id("C"));
-    // invertible_pins[ctx->id("IDELAYE2")].insert(ctx->id("DATAIN"));
     invertible_pins[ctx->id("IDELAYE2")].insert(ctx->id("IDATAIN"));
+    invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("C"));
+    invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("ODATAIN"));
     invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLKB"));
     invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLKDIVP"));
     invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLKDIV"));
