@@ -621,18 +621,18 @@ void XC7Packer::pack_iologic()
 {
     std::unordered_map<IdString, BelId> iodelay_to_io;
     std::unordered_map<IdString, XFormRule> iologic_rules;
+
+    // IDDR
     iologic_rules[ctx->id("IDDR")].new_type = ctx->id("ILOGICE3_IFF");
     iologic_rules[ctx->id("IDDR")].port_multixform[ctx->id("C")] = { ctx->id("CK"), ctx->id("CKB") };
     iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("S")] = ctx->id("SR");
     iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("R")] = ctx->id("SR");
 
-    iologic_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE2_OUTFF");
-    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("C")] = ctx->id("CK");
-    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("S")] = ctx->id("SR");
-    iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("R")] = ctx->id("SR");
-
+    // SERDES
     iologic_rules[ctx->id("ISERDESE2")].new_type = ctx->id("ISERDESE2_ISERDESE2");
     iologic_rules[ctx->id("OSERDESE2")].new_type = ctx->id("OSERDESE2_OSERDESE2");
+
+    // DELAY
     iologic_rules[ctx->id("IDELAYE2")].new_type = ctx->id("IDELAYE2_IDELAYE2");
     iologic_rules[ctx->id("ODELAYE2")].new_type = ctx->id("ODELAYE2_ODELAYE2");
 
@@ -723,7 +723,19 @@ void XC7Packer::pack_iologic()
                 io_bel = ctx->getBelByName(ctx->id(ob->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has illegal fanout on Q output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
-            std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
+            auto io_bel_str = ctx->getBelName(io_bel).str(ctx);
+            std::string ol_site = get_ologic_site(io_bel_str);
+
+            std::unordered_map<IdString, XFormRule> oddr_rules;
+            if (boost::contains(io_bel_str, "IOB18"))
+                oddr_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE2_OUTFF");
+            else
+                oddr_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE3_OUTFF");
+            oddr_rules[ctx->id("ODDR")].port_xform[ctx->id("C")] = ctx->id("CK");
+            oddr_rules[ctx->id("ODDR")].port_xform[ctx->id("S")] = ctx->id("SR");
+            oddr_rules[ctx->id("ODDR")].port_xform[ctx->id("R")] = ctx->id("SR");
+            xform_cell(oddr_rules, ci);
+
             ci->attrs[ctx->id("BEL")] = ol_site + "/OUTFF";
         } else if (ci->type == ctx->id("OSERDESE2")) {
             NetInfo *q   = get_net_or_empty(ci, ctx->id("OQ"));

@@ -959,7 +959,7 @@ struct FasmBackend
                 write_bit("IFF.ZSRVAL_Q1");
                 write_bit("IFF.ZSRVAL_Q2");
             }
-        } else if (ci->type == ctx->id("OLOGICE2_OUTFF")) {
+        } else if (ci->type == ctx->id("OLOGICE2_OUTFF") || ci->type == ctx->id("OLOGICE3_OUTFF")) {
             std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
 
@@ -1094,6 +1094,7 @@ struct FasmBackend
                 blank();
             } else if (ci->type == ctx->id("ILOGICE3_IFF") ||
                        ci->type == ctx->id("OLOGICE2_OUTFF") ||
+                       ci->type == ctx->id("OLOGICE3_OUTFF") ||
                        ci->type == ctx->id("OSERDESE2_OSERDESE2") ||
                        ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
                        ci->type == ctx->id("IDELAYE2_IDELAYE2")   ||
