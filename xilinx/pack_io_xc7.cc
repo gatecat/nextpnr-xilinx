@@ -141,9 +141,6 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
     bool is_diff_ibuf = xil_iob->type == ctx->id("IBUFDS") || xil_iob->type == ctx->id("IBUFDS_INTERMDISABLE") ||
                         xil_iob->type == ctx->id("IBUFDS");
-    bool is_diff_out_ibuf = xil_iob->type == ctx->id("IBUFDS_DIFF_OUT") ||
-                            xil_iob->type == ctx->id("IBUFDS_DIFF_OUT_IBUFDISABLE") ||
-                            xil_iob->type == ctx->id("IBUFDS_DIFF_OUT_INTERMDISABLE");
     bool is_diff_iobuf = xil_iob->type == ctx->id("IOBUFDS") || xil_iob->type == ctx->id("IOBUFDS_DCIEN");
     bool is_diff_out_iobuf = xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT") ||
                              xil_iob->type == ctx->id("IOBUFDS_DIFF_OUT_DCIEN") ||
@@ -434,12 +431,50 @@ void XC7Packer::pack_io()
         type.replace(0, 5, ci->attrs.at(ctx->id("X_IOB_SITE_TYPE")).as_string());
         ci->type = ctx->id(type);
     }
+
+    // check all PAD cells for IOSTANDARD/DRIVE
+    for (auto cell : sorted(ctx->cells)) {
+        CellInfo *ci = cell.second;
+        std::string type = ci->type.str(ctx);
+        if (type != "PAD") continue;
+        check_valid_pad(ci, type);
+    }
+}
+
+void XC7Packer::check_valid_pad(CellInfo *ci, std::string type)
+{
+    auto iostandard_id = ctx->id("IOSTANDARD");
+    auto iostandard_attr = ci->attrs.find(iostandard_id);
+    if (iostandard_attr == ci->attrs.end())
+        log_error("port %s has no IOSTANDARD property", ci->name.c_str(ctx));
+
+    auto iostandard = iostandard_attr->second.as_string();
+    if (!boost::starts_with(iostandard, "LVTTL") &&
+        !boost::starts_with(iostandard, "LVCMOS")) return;
+
+    auto drive_attr = ci->attrs.find(ctx->id("DRIVE"));
+    // no drive strength attribute: use default
+    if (drive_attr == ci->attrs.end()) return;
+    auto drive = drive_attr->second.as_int64();
+
+    bool is_iob33 = boost::starts_with(type, "IOB33");
+    if (is_iob33) {
+        if (drive == 4 || drive == 8 || drive == 12) return;
+        if (iostandard != "LVCMOS12" && drive == 16) return;
+        if ((iostandard == "LVCMOS18" || iostandard == "LVTTL") && drive == 24) return;
+    } else { // IOB18
+        if (drive == 2 || drive == 4 || drive == 6 || drive == 8)     return;
+        if (iostandard != "LVCMOS12" && (drive == 12 || drive == 16)) return;
+    }
+
+    log_error("unsupported DRIVE strength property %s for port %s",
+        drive_attr->second.c_str(), ci->name.c_str(ctx));
 }
 
 std::string XC7Packer::get_ologic_site(const std::string &io_bel)
 {
     BelId ibc_bel;
-    if (io_bel.find("IOB18") != std::string::npos)
+    if (boost::contains(io_bel, "IOB18"))
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/OUTBUF_DCIEN"));
     else
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/OUTBUF"));
@@ -463,7 +498,7 @@ std::string XC7Packer::get_ologic_site(const std::string &io_bel)
 std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
 {
     BelId ibc_bel;
-    if (io_bel.find("IOB18") != std::string::npos)
+    if (boost::contains(io_bel, "IOB18"))
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/INBUF_DCIEN"));
     else
       ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
@@ -487,7 +522,7 @@ std::string XC7Packer::get_ilogic_site(const std::string &io_bel)
 std::string XC7Packer::get_idelay_site(const std::string &io_bel)
 {
     BelId ibc_bel;
-    if (io_bel.find("IOB18") != std::string::npos)
+    if (boost::contains(io_bel, "IOB18"))
         ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/INBUF_DCIEN"));
     else
       ibc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB33/INBUF_EN"));
@@ -561,6 +596,11 @@ void XC7Packer::pack_iologic()
 {
     std::unordered_map<IdString, BelId> iodelay_to_io;
     std::unordered_map<IdString, XFormRule> iologic_rules;
+    iologic_rules[ctx->id("IDDR")].new_type = ctx->id("ILOGICE3_IFF");
+    iologic_rules[ctx->id("IDDR")].port_multixform[ctx->id("C")] = { ctx->id("CK"), ctx->id("CKB") };
+    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("S")] = ctx->id("SR");
+    iologic_rules[ctx->id("IDDR")].port_xform[ctx->id("R")] = ctx->id("SR");
+
     iologic_rules[ctx->id("ODDR")].new_type = ctx->id("OLOGICE3_OUTFF");
     iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("C")] = ctx->id("CK");
     iologic_rules[ctx->id("ODDR")].port_xform[ctx->id("S")] = ctx->id("SR");
@@ -593,8 +633,8 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
-            if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos
-                || drv->type.str(ctx).find("INBUF_DCIEN") != std::string::npos)
+            if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
+                || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                 io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
             else
                 log_error("%s '%s' has IDATAIN input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -633,6 +673,25 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has illegal fanout on OQ output\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             std::string ol_site = get_ologic_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[ctx->id("BEL")] = ol_site + "/OSERDESE2";
+        } else if (ci->type == ctx->id("IDDR")) {
+            fold_inverter(ci, "C");
+
+            BelId io_bel;
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
+                || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
+                io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
+            else if (boost::contains(drv->type.str(ctx), "IDELAYE2") && d->driver.port == ctx->id("DATAOUT"))
+                io_bel = iodelay_to_io.at(drv->name);
+            else
+                log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
+                            ctx->nameOf(ci), drv->type.c_str(ctx));
+
+            std::string iol_site = get_ilogic_site(ctx->getBelName(io_bel).str(ctx));
+            ci->attrs[ctx->id("BEL")] = iol_site + "/IFF";
         } else if (ci->type == ctx->id("ISERDESE2")) {
             fold_inverter(ci, "CLKB");
             fold_inverter(ci, "OCLKB");
@@ -645,7 +704,7 @@ void XC7Packer::pack_iologic()
                 if (d == nullptr || d->driver.cell == nullptr)
                     log_error("%s '%s' has disconnected DDLY input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
                 CellInfo *drv = d->driver.cell;
-                if (drv->type.str(ctx).find("IDELAYE2") != std::string::npos && d->driver.port == ctx->id("DATAOUT"))
+                if (boost::contains(drv->type.str(ctx), "IDELAYE2") && d->driver.port == ctx->id("DATAOUT"))
                     io_bel = iodelay_to_io.at(drv->name);
                 else
                     log_error("%s '%s' has DDLY input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -655,8 +714,8 @@ void XC7Packer::pack_iologic()
                 if (d == nullptr || d->driver.cell == nullptr)
                     log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
                 CellInfo *drv = d->driver.cell;
-                if (drv->type.str(ctx).find("INBUF_EN") != std::string::npos
-                    || drv->type.str(ctx).find("INBUF_DCIEN") != std::string::npos)
+                if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
+                    || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                     io_bel = ctx->getBelByName(ctx->id(drv->attrs.at(ctx->id("BEL")).as_string()));
                 else
                     log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),

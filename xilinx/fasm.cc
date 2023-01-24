@@ -249,7 +249,6 @@ struct FasmBackend
             if (!pp.empty())
                 last_was_blank = false;
         } else {
-
             if (pd.extra_data == 1)
                 log_warning("Unprocessed route-thru %s.%s.%s\n!", get_tile_name(pip.tile).c_str(),
                             IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name).c_str(ctx),
@@ -268,8 +267,8 @@ struct FasmBackend
                 || boost::starts_with(tile_name, "LIOI3_SING")
                 || boost::starts_with(tile_name, "RIOI_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
-                if ((src_name.find("IMUX") != std::string::npos || src_name.find("CTRL0") != std::string::npos) &&
-                    (dst_name.find("CLK") == std::string::npos))
+                if ((boost::contains(src_name, "IMUX") || boost::contains(src_name, "CTRL0"))
+                     && !boost::contains(dst_name, "CLK"))
                     return;
                 auto spos = src_name.find("_SING_");
                 if (spos != std::string::npos)
@@ -289,8 +288,8 @@ struct FasmBackend
                     }
                 }
             }
-            if (tile_name.find("IOI") != std::string::npos) {
-                if (dst_name.find("OCLKB") != std::string::npos && src_name.find("IOI_OCLKM_") != std::string::npos)
+            if (boost::contains(tile_name, "IOI")) {
+                if (boost::contains(dst_name, "OCLKB") && boost::contains(src_name, "IOI_OCLKM_"))
                     return; // missing, not sure if really a ppip?
             }
 
@@ -298,7 +297,7 @@ struct FasmBackend
             out << dst_name << ".";
             out << src_name << std::endl;
 
-            if (tile_name.find("IOI") != std::string::npos && boost::starts_with(dst_name, "IOI_OCLK_")) {
+            if (boost::contains(tile_name, "IOI") && boost::starts_with(dst_name, "IOI_OCLK_")) {
                 dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
                 orig_dst_name.insert(dst_name.find("OCLK") + 4, 1, 'M');
 
@@ -460,7 +459,7 @@ struct FasmBackend
             return;
 
         push(tname);
-        push(get_half_name(half, tname.find("CLBLM") != std::string::npos));
+        push(get_half_name(half, boost::contains(tname, "CLBLM")));
 
         for (int i = 0; i < 4; i++) {
             CellInfo *ff1 = lts->cells[(half << 6) | (i << 4) | BEL_FF];
@@ -543,7 +542,7 @@ struct FasmBackend
         bool wa7_used = false, wa8_used = false;
 
         std::string tname = get_tile_name(tile);
-        bool is_mtile = tname.find("CLBLM") != std::string::npos;
+        bool is_mtile = boost::contains(tname, "CLBLM");
         bool is_slicem = is_mtile && (half == 0);
 
         auto lts = ctx->tileStatus[tile].lts;
@@ -608,7 +607,7 @@ struct FasmBackend
     void write_carry_config(int tile, int half)
     {
         std::string tname = get_tile_name(tile);
-        bool is_mtile = tname.find("CLBLM") != std::string::npos;
+        bool is_mtile = boost::contains(tname, "CLBLM");
 
         auto lts = ctx->tileStatus[tile].lts;
         if (lts == nullptr)
@@ -682,16 +681,17 @@ struct FasmBackend
         if (pad_net->driver.cell != nullptr)
             is_output = true;
         for (auto &usr : pad_net->users)
-            if (usr.cell->type.str(ctx).find("INBUF") != std::string::npos)
+            if (boost::contains(usr.cell->type.str(ctx), "INBUF"))
                 is_input = true;
         std::string tile = get_tile_name(pad->bel.tile);
         push(tile);
 
-        bool is_riob18 = boost::starts_with(tile, "RIOB18_");
-        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_riob18   = boost::starts_with(tile, "RIOB18_");
+        bool is_sing     = boost::contains(tile, "_SING_");
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
-        bool is_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
+        bool is_lvcmos   = boost::starts_with(iostandard, "LVCMOS");
+        bool is_low_volt_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
 
         auto yLoc = is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y);
         push("IOB_Y" + std::to_string(yLoc));
@@ -705,14 +705,15 @@ struct FasmBackend
 
         if (is_output) {
             // DRIVE
-            if (iostandard == "LVCMOS33" || iostandard == "LVTTL") {
-                if (!is_riob18)
-                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
-                else
-                    log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
-            }
+            int default_drive = (is_riob18 && iostandard == "LVCMOS12") ? 8 : 12;
+            int drive = int_or_default(pad->attrs, ctx->id("DRIVE"), default_drive);
 
-            if (is_riob18) {
+            if ((iostandard == "LVCMOS33" || iostandard == "LVTTL") && is_riob18)
+                log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
+
+            if (iostandard == "SSTL135")
+                write_bit("SSTL135.DRIVE.I_FIXED");
+            else if (is_riob18) {
                 if ((iostandard == "LVCMOS18" || iostandard == "LVCMOS15"))
                     write_bit("LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8");
                 else if (iostandard == "LVCMOS12")
@@ -721,14 +722,33 @@ struct FasmBackend
                     write_bit("LVDS.DRIVE.I_FIXED");
                 else if (is_sstl) {
                     write_bit(iostandard + ".DRIVE.I_FIXED");
-                    write_bit(iostandard + ".IN_USE");
                 }
+            } else { // IOB33
+                if ((iostandard == "LVCMOS15" && drive == 16) || iostandard == "SSTL15")
+                    write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
+                else if (iostandard == "LVCMOS18" && (drive == 12 || drive == 8))
+                    write_bit("LVCMOS18.DRIVE.I12_I8");
+                else if ((iostandard == "LVCMOS33" && drive == 16) ||
+                         (iostandard == "LVTTL"    && drive == 16))
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
+                else if ((iostandard == "LVCMOS33" && (drive == 8 || drive == 12)) ||
+                         (iostandard == "LVTTL"    && (drive == 8 || drive == 12)))
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I12_I8");
+                else if ((iostandard == "LVCMOS33" && drive == 4) ||
+                         (iostandard == "LVTTL"    && drive == 4))
+                    write_bit("LVCMOS33_LVTTL.DRIVE.I4");
+                else if (drive == 8 &&
+                         (iostandard == "LVCMOS12" || iostandard == "LVCMOS25"))
+                    write_bit("LVCMOS12_LVCMOS25.DRIVE.I8");
+                else if (drive == 4 &&
+                         (iostandard == "LVCMOS15" || iostandard == "LVCMOS18" || iostandard == "LVCMOS25"))
+                    write_bit("LVCMOS15_LVCMOS18_LVCMOS25.DRIVE.I4");
+                else if (is_lvcmos || iostandard == "LVTTL")
+                    write_bit(iostandard + ".DRIVE.I" + std::to_string(drive));
             }
-            else if (iostandard == "LVCMOS15" || iostandard == "SSTL15")
-                write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
 
-            if (iostandard == "SSTL135")
-                write_bit("SSTL135.DRIVE.I_FIXED");
+            // SSTL output used
+            if (is_riob18 && is_sstl) write_bit(iostandard + ".IN_USE");
 
             // SLEW
             if (is_riob18 && slew == "SLOW") {
@@ -770,7 +790,7 @@ struct FasmBackend
                         write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
                 }
 
-                if (is_lvcmos) {
+                if (is_low_volt_lvcmos) {
                     write_bit("LVCMOS12_LVCMOS15_LVCMOS18.IN");
                 }
             } else /* is_diff */ {
@@ -802,7 +822,7 @@ struct FasmBackend
             }
         }
 
-        if (!is_riob18 && (is_lvcmos || is_sstl)) {
+        if (!is_riob18 && (is_low_volt_lvcmos || is_sstl)) {
             if (iostandard == "SSTL12") {
                 log_error("SSTL12 is only available on high performance banks.");
             }
@@ -849,7 +869,7 @@ struct FasmBackend
     {
         std::string tile = get_tile_name(ci->bel.tile);
         push(tile);
-        bool is_sing = tile.find("_SING_") != std::string::npos;
+        bool is_sing     = boost::contains(tile, "_SING_");
         bool is_top_sing = ci->bel.tile < ctx->getHclkForIoi(ci->bel.tile);
 
         std::string site = ctx->getBelSite(ci->bel);
@@ -857,7 +877,46 @@ struct FasmBackend
         Loc siteloc = ctx->getSiteLocInTile(ci->bel);
         push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
 
-        if (ci->type == ctx->id("OLOGICE3_OUTFF")) {
+        if (ci->type == ctx->id("ILOGICE3_IFF")) {
+            write_bit("IDDR.IN_USE");
+            write_bit("IDDR_OR_ISERDES.IN_USE");
+            write_bit("ISERDES.MODE.MASTER");
+            write_bit("ISERDES.NUM_CE.N1");
+
+            // Switch IDELMUXE3 to include the IDELAY element, if we have an IDELAYE2 driving D
+            NetInfo *d = get_net_or_empty(ci, ctx->id("D"));
+            if (d == nullptr || d->driver.cell == nullptr)
+                log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
+            CellInfo *drv = d->driver.cell;
+            if (boost::contains(drv->type.str(ctx), "IDELAYE2"))
+                write_bit("IDELMUXE3.P0");
+            else
+                write_bit("IDELMUXE3.P1");
+
+            // clock edge
+            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
+            if (edge == "SAME_EDGE")          write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
+            else if (edge == "OPPOSITE_EDGE") write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
+            else log_error("unsupported clock edge parameter for cell '%s' at %s: %s. Supported are: SAME_EDGE and OPPOSITE_EDGE",
+                            ci->name.c_str(ctx), site.c_str(), edge.c_str());
+
+            std::string srtype = str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC");
+            if (srtype == "SYNC") write_bit("IFF.SRTYPE.SYNC"); else write_bit("IFF.SRTYPE.ASYNC");
+
+            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false));
+
+            auto init = int_or_default(ci->params, ctx->id("INIT_Q1"), 0);
+            if (init == 0) write_bit("IFF.ZINIT_Q1");
+            init = int_or_default(ci->params, ctx->id("INIT_Q2"), 0);
+            if (init == 0) write_bit("IFF.ZINIT_Q2");
+
+            auto sr_name = str_or_default(ci->attrs, ctx->id("X_ORIG_PORT_SR"), "R");
+            if (sr_name == "R") {
+                write_bit("IFF.ZSRVAL_Q1");
+                write_bit("IFF.ZSRVAL_Q2");
+            }
+        } else if (ci->type == ctx->id("OLOGICE3_OUTFF")) {
             std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
 
@@ -980,7 +1039,8 @@ struct FasmBackend
             if (ci->type == ctx->id("PAD")) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == ctx->id("OLOGICE3_OUTFF") ||
+            } else if (ci->type == ctx->id("ILOGICE3_IFF") ||
+                       ci->type == ctx->id("OLOGICE3_OUTFF") ||
                        ci->type == ctx->id("OSERDESE2_OSERDESE2") ||
                        ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
                        ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
@@ -1047,7 +1107,7 @@ struct FasmBackend
                 auto used_sources = used_wires_starting_with(tile, "HCLK_CK_", true);
                 push("ENABLE_BUFFER");
                 for (auto s : used_sources) {
-                    if (s.find("BUFHCLK") != std::string::npos) {
+                    if (boost::contains(s, "BUFHCLK")) {
                         write_bit(s);
                         hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
                     }
@@ -1061,7 +1121,7 @@ struct FasmBackend
                     all_gclk.insert(s.substr(s.find("GCLK")));
                 }
                 for (auto s : used_ck_in) {
-                    if (s.find("HROW_CK_INT") != std::string::npos)
+                    if (boost::contains(s, "HROW_CK_INT"))
                         continue;
                     write_bit(s + "_ACTIVE");
                 }
@@ -1073,7 +1133,7 @@ struct FasmBackend
                 }
                 auto used_hclk = used_wires_starting_with(tile, "HCLK_CMT_CK_", true);
                 for (auto s : used_hclk) {
-                    if (s.find("BUFHCLK") != std::string::npos) {
+                    if (boost::contains(s, "BUFHCLK")) {
                         write_bit(s + "_USED");
                         hclk_by_row[tile / ctx->chip_info->width].insert(s.substr(s.find("BUFHCLK")));
                     }
