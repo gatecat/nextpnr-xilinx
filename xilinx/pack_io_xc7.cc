@@ -433,8 +433,8 @@ void XC7Packer::pack_io()
     }
 
     // check all PAD cells for IOSTANDARD/DRIVE
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
+    for (auto& cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
         std::string type = ci->type.str(ctx);
         if (type != "PAD") continue;
         check_valid_pad(ci, type);
@@ -547,7 +547,7 @@ std::string XC7Packer::get_odelay_site(const std::string &io_bel)
 {
     BelId obc_bel;
     if (boost::contains(io_bel, "IOB18"))
-        obc_bel = ctx->getBelByName(ctx->id(io_bel.substr(0, io_bel.find('/')) + "/IOB18/OUTBUF_DCIEN"));
+        obc_bel = ctx->getBelByNameStr(io_bel.substr(0, io_bel.find('/')) + "/IOB18/OUTBUF_DCIEN");
     else
         log_error("BEL %s is located on a high range bank. High range banks do not have ODELAY", io_bel.c_str());
 
@@ -686,11 +686,11 @@ void XC7Packer::pack_iologic()
             ci->attrs[ctx->id("X_IO_BEL")] = ctx->getBelName(io_bel).str(ctx);
             iodelay_to_io[ci->name] = io_bel;
         } else if (ci->type == ctx->id("ODELAYE2")) {
-            NetInfo *dataout = get_net_or_empty(ci, ctx->id("DATAOUT"));
+            NetInfo *dataout = ci->getPort(ctx->id("DATAOUT"));
             if (dataout == nullptr || dataout->users.empty())
                 log_error("%s '%s' has disconnected DATAOUT input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             BelId io_bel;
-            auto no_users = dataout->users.size();
+            auto no_users = dataout->users.entries();
             for (auto userport : dataout->users) {
                 CellInfo *user = userport.cell;
                 auto user_type = user->type.str(ctx);
@@ -698,7 +698,7 @@ void XC7Packer::pack_iologic()
                 if (no_users == 2 && user_type == "INVERTER") continue;
                 if (   boost::contains(user_type, "OUTBUF_EN")
                     || boost::contains(user_type, "OUTBUF_DCIEN"))
-                    io_bel = ctx->getBelByName(ctx->id(user->attrs.at(ctx->id("BEL")).as_string()));
+                    io_bel = ctx->getBelByNameStr(user->attrs.at(ctx->id("BEL")).as_string());
                 else
                     // TODO: support SIGNAL_PATTERN = CLOCK
                     log_error("%s '%s' has DATAOUT connected to unsupported cell type %s\n",

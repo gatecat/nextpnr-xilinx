@@ -641,7 +641,7 @@ void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vecto
         }
     }
     NPNR_ASSERT(spec_bel != BelId());
-    std::set<std::string> belpins;
+    pool<std::string> belpins;
     for (auto &bp : ctx->getBelPins(spec_bel))
         if (ctx->getBelPinType(spec_bel, bp) == PORT_IN)
             belpins.insert(bp.str(ctx));
