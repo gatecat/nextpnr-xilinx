@@ -250,7 +250,7 @@ void XilinxPacker::pack_lutffs()
         if (lut->cluster != ClusterId() || !lut->constr_children.empty())
             continue;
         lut->constr_children.push_back(ci);
-        ci->cluster = lut->cluster;
+        ci->cluster = lut->name;
         ci->constr_x = 0;
         ci->constr_y = 0;
         ci->constr_z = (BEL_FF - BEL_6LUT);
@@ -338,7 +338,7 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         curr->constr_y = 0;
         curr->constr_z = curr_z - base_z;
         curr->constr_abs_z = false;
-        curr->cluster = base->cluster;
+        curr->cluster = base->name;
         base->constr_children.push_back(curr);
     }
     if (curr->type == ctx->id("MUXF7") || curr->type == ctx->id("MUXF8") || curr->type == ctx->id("MUXF9")) {

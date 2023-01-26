@@ -59,7 +59,7 @@ void USPacker::pack_dsps()
 
             if (!subcells.empty()) {
                 // FIXME: add constraints for cascaded DSP chains
-                subcell->cluster = subcells.front()->cluster;
+                subcell->cluster = subcells.front()->name;
                 subcells.front()->constr_children.push_back(subcell.get());
                 subcell->constr_x = 0;
                 subcell->constr_y = 0;

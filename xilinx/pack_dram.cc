@@ -51,7 +51,7 @@ CellInfo *XilinxPacker::create_dram_lut(const std::string &name, CellInfo *base,
     dram_lut->constr_abs_z = true;
     dram_lut->constr_z = (z << 4) | BEL_6LUT;
     if (base != nullptr) {
-        dram_lut->cluster = base->cluster;
+        dram_lut->cluster = base->name;
         dram_lut->constr_x = 0;
         dram_lut->constr_y = 0;
         base->constr_children.push_back(dram_lut.get());
@@ -82,7 +82,7 @@ CellInfo *XilinxPacker::create_dram32_lut(const std::string &name, CellInfo *bas
     dram_lut->constr_abs_z = true;
     dram_lut->constr_z = (z << 4) | (o5 ? BEL_5LUT : BEL_6LUT);
     if (base != nullptr) {
-        dram_lut->cluster = base->cluster;
+        dram_lut->cluster = base->name;
         dram_lut->constr_x = 0;
         dram_lut->constr_y = 0;
         base->constr_children.push_back(dram_lut.get());

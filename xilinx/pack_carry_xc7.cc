@@ -237,7 +237,7 @@ void XC7Packer::pack_carries()
                 c4->constr_z = BEL_CARRY4;
             } else if (z == 0) {
                 // Constrain relative to the root carry4
-                c4->cluster = root->cluster;
+                c4->cluster = root->name;
                 root->constr_children.push_back(c4);
                 c4->constr_x = 0;
                 // Looks no CARRY4 on the tile of which grid_y is a multiple of 26. Skip them
@@ -344,7 +344,7 @@ void XC7Packer::pack_carries()
             // Constrain LUTs relative to root CARRY4
             if (s_lut) {
                 root->constr_children.push_back(s_lut);
-                s_lut->cluster = root->cluster;
+                s_lut->cluster = root->name;
                 s_lut->constr_x = 0;
                 s_lut->constr_y = -(i / 4 + i / (4*25));
                 s_lut->constr_abs_z = true;
@@ -352,7 +352,7 @@ void XC7Packer::pack_carries()
             }
             if (di_lut) {
                 root->constr_children.push_back(di_lut);
-                di_lut->cluster = root->cluster;
+                di_lut->cluster = root->name;
                 di_lut->constr_x = 0;
                 di_lut->constr_y = -(i / 4 + i / (4*25));
                 di_lut->constr_abs_z = true;

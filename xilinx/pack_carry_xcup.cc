@@ -199,7 +199,7 @@ void USPacker::pack_carries()
                 c8->constr_z = BEL_CARRY8;
             } else if (z == 0) {
                 // Constrain relative to the root carry8
-                c8->cluster = root->cluster;
+                c8->cluster = root->name;
                 root->constr_children.push_back(c8);
                 c8->constr_x = 0;
                 c8->constr_y = -i / 8;
@@ -303,7 +303,7 @@ void USPacker::pack_carries()
             // Constrain LUTs relative to root CARRY8
             if (s_lut) {
                 root->constr_children.push_back(s_lut);
-                s_lut->cluster = root->cluster;
+                s_lut->cluster = root->name;
                 s_lut->constr_x = 0;
                 s_lut->constr_y = -i / 8;
                 s_lut->constr_abs_z = true;
@@ -311,7 +311,7 @@ void USPacker::pack_carries()
             }
             if (di_lut) {
                 root->constr_children.push_back(di_lut);
-                di_lut->cluster = root->cluster;
+                di_lut->cluster = root->name;
                 di_lut->constr_x = 0;
                 di_lut->constr_y = -i / 8;
                 di_lut->constr_abs_z = true;
