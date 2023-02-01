@@ -65,6 +65,8 @@ void USPacker::pack_dsps()
                 subcell->constr_y = 0;
                 subcell->constr_z = int(subcells.size());
                 subcell->constr_abs_z = false;
+            } else {
+                subcell->cluster = subcell->name;
             }
 
             CellInfo *sci = subcell.get();

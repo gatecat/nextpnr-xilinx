@@ -233,6 +233,7 @@ void XC7Packer::pack_carries()
             CellInfo *root = carry4s.front().get();
             if (i == 0) {
                 // Constrain initial CARRY4, forcing it to the CARRY4 of a logic tile
+                c4->cluster = c4->name;
                 c4->constr_abs_z = true;
                 c4->constr_z = BEL_CARRY4;
             } else if (z == 0) {

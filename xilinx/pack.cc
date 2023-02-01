@@ -250,6 +250,7 @@ void XilinxPacker::pack_lutffs()
         if (lut->cluster != ClusterId() || !lut->constr_children.empty())
             continue;
         lut->constr_children.push_back(ci);
+        lut->cluster = lut->name;
         ci->cluster = lut->name;
         ci->constr_x = 0;
         ci->constr_y = 0;
@@ -377,8 +378,10 @@ void XilinxPacker::pack_muxfs()
         root->attrs[ctx->id("MUX_TREE_ROOT")] = 1;
     for (auto root : mux_roots)
         legalise_muxf_tree(root, mux_roots);
-    for (auto root : mux_roots)
+    for (auto root : mux_roots) {
+        root->cluster = root->name;
         constrain_muxf_tree(root, root, 0);
+    }
 }
 
 void XilinxPacker::finalise_muxfs()

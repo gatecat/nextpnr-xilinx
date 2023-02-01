@@ -195,6 +195,7 @@ void USPacker::pack_carries()
             CellInfo *root = carry8s.front().get();
             if (i == 0) {
                 // Constrain initial CARRY8, forcing it to the CARRY8 of a logic tile
+                c8->cluster = c8->name;
                 c8->constr_abs_z = true;
                 c8->constr_z = BEL_CARRY8;
             } else if (z == 0) {
