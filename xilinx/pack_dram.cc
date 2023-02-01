@@ -446,32 +446,32 @@ void XilinxPacker::pack_dram()
             for (int i = 0; i < 4; i++) {
                 std::vector<NetInfo *> address;
                 for (int j = 0; j < abits; j++) {
-                    address.push_back(ci->getPort(ctx->id(stringf("ADDR%c[%d]", 'A' + i, j))));
+                    address.push_back(ci->getPort(ctx->idf("ADDR%c[%d]", 'A' + i, j)));
                 }
                 if (is_64) {
-                    NetInfo *di = ci->getPort(ctx->id(stringf("DI%c", 'A' + i)));
-                    NetInfo *dout = ci->getPort(ctx->id(stringf("DO%c", 'A' + i)));
-                    ci->disconnectPort(ctx->id(stringf("DI%c", 'A' + i)));
-                    ci->disconnectPort(ctx->id(stringf("DO%c", 'A' + i)));
+                    NetInfo *di = ci->getPort(ctx->idf("DI%c", 'A' + i));
+                    NetInfo *dout = ci->getPort(ctx->idf("DO%c", 'A' + i));
+                    ci->disconnectPort(ctx->idf("DI%c", 'A' + i));
+                    ci->disconnectPort(ctx->idf("DO%c", 'A' + i));
                     CellInfo *dram = create_dram_lut(stringf("%s/DPR%d", ctx->nameOf(ci), i), base, dcs, address, di,
                                                      dout, zoffset + i);
                     if (base == nullptr)
                         base = dram;
-                    if (ci->params.count(ctx->id(stringf("INIT%c", 'A' + i))))
-                        dram->params[id_INIT] = ci->params[ctx->id(stringf("INIT%c", 'A' + i))];
+                    if (ci->params.count(ctx->idf("INIT%c", 'A' + i)))
+                        dram->params[id_INIT] = ci->params[ctx->idf("INIT%c", 'A' + i)];
                 } else {
                     for (int j = 0; j < dbits; j++) {
-                        NetInfo *di = ci->getPort(ctx->id(stringf("DI%c[%d]", 'A' + i, j)));
-                        NetInfo *dout = ci->getPort(ctx->id(stringf("DO%c[%d]", 'A' + i, j)));
-                        ci->disconnectPort(ctx->id(stringf("DI%c[%d]", 'A' + i, j)));
-                        ci->disconnectPort(ctx->id(stringf("DO%c[%d]", 'A' + i, j)));
+                        NetInfo *di = ci->getPort(ctx->idf("DI%c[%d]", 'A' + i, j));
+                        NetInfo *dout = ci->getPort(ctx->idf("DO%c[%d]", 'A' + i, j));
+                        ci->disconnectPort(ctx->idf("DI%c[%d]", 'A' + i, j));
+                        ci->disconnectPort(ctx->idf("DO%c[%d]", 'A' + i, j));
                         CellInfo *dram = create_dram32_lut(stringf("%s/DPR%d_%d", ctx->nameOf(ci), i, j), base, dcs,
                                                            address, di, dout, (j == 0), zoffset + i);
                         if (base == nullptr)
                             base = dram;
-                        if (ci->params.count(ctx->id(stringf("INIT%c", 'A' + i)))) {
+                        if (ci->params.count(ctx->idf("INIT%c", 'A' + i))) {
                             auto orig_init =
-                                    ci->params.at(ctx->id(stringf("INIT%c", 'A' + i))).extract(0, 64).as_bits();
+                                    ci->params.at(ctx->idf("INIT%c", 'A' + i)).extract(0, 64).as_bits();
                             std::string init;
                             for (int k = 0; k < 32; k++) {
                                 init.push_back(orig_init.at(k * 2 + j));

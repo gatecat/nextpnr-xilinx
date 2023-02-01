@@ -1267,7 +1267,7 @@ struct FasmBackend
                 std::vector<bool> init_data(256, false);
                 if (is_36) {
                     for (int j = 0; j < 2; j++) {
-                        IdString param = ctx->id(stringf("INIT%s_%02X", mode.c_str(), i * 2 + j));
+                        IdString param = ctx->idf("INIT%s_%02X", mode.c_str(), i * 2 + j);
                         if (ci->params.count(param)) {
                             auto &init0 = ci->params.at(param);
                             has_init = true;
@@ -1279,7 +1279,7 @@ struct FasmBackend
                         }
                     }
                 } else {
-                    IdString param = ctx->id(stringf("INIT%s_%02X", mode.c_str(), i));
+                    IdString param = ctx->idf("INIT%s_%02X", mode.c_str(), i);
                     if (ci->params.count(param)) {
                         auto &init = ci->params.at(param);
                         has_init = true;
