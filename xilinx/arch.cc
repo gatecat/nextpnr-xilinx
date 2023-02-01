@@ -663,7 +663,7 @@ bool Arch::place()
         cfg.hpwl_scale_y = 2;
         cfg.spread_scale_x = 2;
         cfg.spread_scale_y = 1;
-        cfg.netShareWeight = 0.2;
+        cfg.netShareWeight = 0;
         cfg.solverTolerance = 0.6e-6;
         cfg.cellGroups.emplace_back();
         cfg.cellGroups.back().insert(id_SLICE_LUTX);
