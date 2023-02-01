@@ -34,6 +34,8 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <set>
+
 #include "command.h"
 #include "design_utils.h"
 #include "json_frontend.h"
@@ -190,7 +192,8 @@ po::options_description CommandHandler::getGeneralOptions()
                           "placer heap criticality exponent (int, default: 2)");
     general.add_options()("placer-heap-timingweight", po::value<int>(), "placer heap timing weight (int, default: 10)");
     general.add_options()("placer-heap-cell-placement-timeout", po::value<int>(),
-            "allow placer to attempt up to max(10000, total cells^2 / N) iterations to place a cell (int N, default: 8, 0 for no timeout)");
+                          "allow placer to attempt up to max(10000, total cells^2 / N) iterations to place a cell (int "
+                          "N, default: 8, 0 for no timeout)");
 
 #if !defined(__wasm)
     general.add_options()("parallel-refine", "use new experimental parallelised engine for placement refinement");
@@ -332,7 +335,7 @@ void CommandHandler::setupContext(Context *ctx)
 
     if (vm.count("placer-heap-cell-placement-timeout"))
         ctx->settings[ctx->id("placerHeap/cellPlacementTimeout")] =
-            std::to_string(std::max(0, vm["placer-heap-cell-placement-timeout"].as<int>()));
+                std::to_string(std::max(0, vm["placer-heap-cell-placement-timeout"].as<int>()));
 
     if (vm.count("parallel-refine"))
         ctx->settings[ctx->id("placerHeap/parallelRefine")] = true;
@@ -432,8 +435,7 @@ int CommandHandler::executeMain(std::unique_ptr<Context> ctx)
             execute_python_file(filename.c_str());
     } else
 #endif
-
-    if (vm.count("json")) {
+            if (ctx->design_loaded) {
         bool do_pack = vm.count("pack-only") != 0 || vm.count("no-pack") == 0;
         bool do_place = vm.count("pack-only") == 0 && vm.count("no-place") == 0;
         bool do_route = vm.count("pack-only") == 0 && vm.count("no-route") == 0;

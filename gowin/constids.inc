@@ -313,6 +313,7 @@ X(COUT2)
 X(COUT3)
 X(COUT4)
 X(COUT5)
+X(VREN)
 
 // wires
 // SN
@@ -854,7 +855,7 @@ X(OSCF)
 // PLLs
 X(rPLL)
 X(RPLLA)
-X(RPLLB)
+X(PLLVR)
 
 // primitive attributes
 X(INIT)

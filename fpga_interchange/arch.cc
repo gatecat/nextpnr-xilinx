@@ -28,6 +28,7 @@
 #include <cmath>
 #include <cstring>
 #include <queue>
+#include <set>
 
 #include "constraints.impl.h"
 #include "fpga_interchange.h"
@@ -45,9 +46,9 @@
 // scope of the header.
 #include <tcl.h>
 
-//#define DEBUG_BINDING
-//#define USE_LOOKAHEAD
-//#define DEBUG_CELL_PIN_MAPPING
+// #define DEBUG_BINDING
+// #define USE_LOOKAHEAD
+// #define DEBUG_CELL_PIN_MAPPING
 
 // Define to enable some idempotent sanity checks for some important
 // operations prior to placement and routing.
