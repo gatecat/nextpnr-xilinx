@@ -533,6 +533,10 @@ struct Router2
         if (net->driver.cell != nullptr && net->driver.cell->type == id_VCC_DRV)
             return true;
 #endif
+#ifdef ARCH_XILINX
+        if (net->driver.cell != nullptr && (net->driver.cell->type.in(id_PSEUDO_VCC, id_PSEUDO_GND)))
+            return true;
+#endif
         return false;
     }
 
