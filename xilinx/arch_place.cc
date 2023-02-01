@@ -34,7 +34,7 @@ inline NetInfo *port_or_nullptr(const CellInfo *cell, IdString name)
     return found->second.net;
 }
 
-//#define DEBUG_VALIDITY
+// #define DEBUG_VALIDITY
 #ifdef DEBUG_VALIDITY
 #define DBG() log_info("invalid: %s %d\n", __FILE__, __LINE__)
 #else
@@ -221,7 +221,7 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
                 out5 = lut5->lutInfo.output_sigs[0];
             if (out5 != nullptr && (out5->users.entries() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
-                                                               (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
+                                                                  (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
                 mux_output_used = true;
             }
 
@@ -236,7 +236,7 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             if (out_fmux != nullptr) {
                 NetInfo *f7f8 = out_fmux->muxInfo.out;
                 if (f7f8 != nullptr && (f7f8->users.entries() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d) &&
-                                                                   (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
+                                                                      (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
                     if (mux_output_used) {
                         DBG();
                         return false; // Memory and SRLs only valid in SLICEMs
@@ -482,7 +482,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
                 out5 = lut5->lutInfo.output_sigs[0];
             if (out5 != nullptr && (out5->users.entries() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
-                                                               (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
+                                                                  (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
                 mux_output_used = true;
             }
 
@@ -728,7 +728,7 @@ void Arch::fixupPlacement()
             }
         }
     }
-    for (auto& cell : cells) {
+    for (auto &cell : cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_PSS_ALTO_CORE) {
             log_info("Tieing unused PSS inputs to constants...\n");
@@ -926,7 +926,7 @@ void Arch::fixupRouting()
      */
     dict<int, std::vector<int>> used_perm_pips; // tile -> [extra_data] for LUT perm pips
 
-    for (auto& net : nets) {
+    for (auto &net : nets) {
         NetInfo *ni = net.second.get();
         for (auto &wire : ni->wires) {
             PipId pip = wire.second.pip;
@@ -1067,7 +1067,7 @@ void Arch::fixupRouting()
             bindPip(uh, net, STRENGTH_STRONG);
         }
     };
-    for (auto& cell : cells) {
+    for (auto &cell : cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_IOB_PAD) {
             NetInfo *pad_net = ci->ports[id_PAD].net;
@@ -1097,7 +1097,7 @@ void Arch::fixupRouting()
     /*
      * Legalise route through OSERDESE3s
      */
-    for (auto& cell : cells) {
+    for (auto &cell : cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_OSERDESE3) {
             if (ci->getPort(id_T_OUT) != nullptr)

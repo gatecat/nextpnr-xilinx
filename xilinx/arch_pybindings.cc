@@ -68,7 +68,7 @@ void arch_wrap_python(py::module &m)
 
     WRAP_MAP_UPTR(m, CellMap, "IdCellMap");
     WRAP_MAP_UPTR(m, NetMap, "IdNetMap");
-    WRAP_MAP(m, HierarchyMap, wrap_context<HierarchicalCell &>, "HierarchyMap"); 
+    WRAP_MAP(m, HierarchyMap, wrap_context<HierarchicalCell &>, "HierarchyMap");
 }
 
 NEXTPNR_NAMESPACE_END

@@ -66,7 +66,8 @@ struct XilinxPacker
             return wa != other.wa || wclk != other.wclk || we != other.we || wclk_inv != other.wclk_inv ||
                    memtype != other.memtype;
         }
-        unsigned int hash() const { 
+        unsigned int hash() const
+        {
             unsigned seed = 0;
             seed = mkhash(seed, wa.size());
             for (auto abit : wa)

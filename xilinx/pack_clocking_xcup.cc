@@ -104,7 +104,7 @@ void USPacker::prepare_clocking()
     upgrade[id_PLLE4_BASIC] = id_PLLE4_ADV;
     upgrade[id_BUFG] = id_BUFGCE;
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (upgrade.count(ci->type)) {
             IdString new_type = upgrade.at(ci->type);
@@ -128,7 +128,7 @@ void USPacker::pack_plls()
     pll_rules[id_MMCME4_ADV].new_type = id_MMCM_MMCM_TOP;
     pll_rules[id_PLLE4_ADV].new_type = id_PLL_PLL_TOP;
     generic_xform(pll_rules);
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         // Preplace PLLs to make use of dedicated/short routing paths
         if (ci->type.in(id_MMCM_MMCM_TOP, id_PLL_PLL_TOP))
@@ -165,7 +165,7 @@ void USPacker::pack_gbs()
     gb_rules[id_BUFGCE].new_type = id_BUFCE_BUFCE;
 
     // Make sure prerequisites are set up first
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_PSS_ALTO_CORE)
             preplace_unique(ci);
@@ -174,7 +174,7 @@ void USPacker::pack_gbs()
     generic_xform(gb_rules);
 
     // Preplace global buffers to make use of dedicated/short routing
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_BUFGCTRL)
             try_preplace(ci, id_I0);

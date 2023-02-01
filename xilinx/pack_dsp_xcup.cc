@@ -25,11 +25,11 @@ NEXTPNR_NAMESPACE_BEGIN
 
 void USPacker::pack_dsps()
 {
-    const std::vector<IdString> dsp_subcell_names = {
-            id_DSP_PREADD_DATA, id_DSP_PREADD, id_DSP_A_B_DATA, id_DSP_MULTIPLIER,
-            id_DSP_C_DATA,      id_DSP_M_DATA, id_DSP_ALU,      id_DSP_OUTPUT};
+    const std::vector<IdString> dsp_subcell_names = {id_DSP_PREADD_DATA, id_DSP_PREADD, id_DSP_A_B_DATA,
+                                                     id_DSP_MULTIPLIER,  id_DSP_C_DATA, id_DSP_M_DATA,
+                                                     id_DSP_ALU,         id_DSP_OUTPUT};
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type != id_DSP48E2)
             continue;
@@ -76,16 +76,16 @@ void USPacker::pack_dsps()
 
         for (int i = 0; i < 30; i++)
             ci->movePortTo(ctx->id("A[" + std::to_string(i) + "]"), subcells[BEL_DSP_A_B_DATA],
-                         ctx->id("A[" + std::to_string(i) + "]"));
+                           ctx->id("A[" + std::to_string(i) + "]"));
         for (int i = 0; i < 18; i++)
             ci->movePortTo(ctx->id("B[" + std::to_string(i) + "]"), subcells[BEL_DSP_A_B_DATA],
-                         ctx->id("B[" + std::to_string(i) + "]"));
+                           ctx->id("B[" + std::to_string(i) + "]"));
         for (int i = 0; i < 48; i++)
             ci->movePortTo(ctx->id("C[" + std::to_string(i) + "]"), subcells[BEL_DSP_C_DATA],
-                         ctx->id("C[" + std::to_string(i) + "]"));
+                           ctx->id("C[" + std::to_string(i) + "]"));
         for (int i = 0; i < 27; i++)
             ci->movePortTo(ctx->id("D[" + std::to_string(i) + "]"), subcells[BEL_DSP_PREADD_DATA],
-                         ctx->id("DIN[" + std::to_string(i) + "]"));
+                           ctx->id("DIN[" + std::to_string(i) + "]"));
         for (auto port : ci->ports) {
             IdString p = port.first;
             NetInfo *pn = port.second.net;

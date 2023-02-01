@@ -101,7 +101,8 @@ NetInfo *XilinxPacker::invert_net(NetInfo *toinv)
         }
         return preinv;
     } else {
-        std::unique_ptr<NetInfo> inv = std::make_unique<NetInfo>(ctx->id(toinv->name.str(ctx) + "$inverted$" + std::to_string(autoidx++)));
+        std::unique_ptr<NetInfo> inv =
+                std::make_unique<NetInfo>(ctx->id(toinv->name.str(ctx) + "$inverted$" + std::to_string(autoidx++)));
         auto lut = create_lut(ctx, inv->name.str(ctx) + "$lut", {toinv}, inv.get(), Property(1));
         NetInfo *inv_ptr = inv.get();
         ctx->nets[inv->name] = std::move(inv);
@@ -111,10 +112,10 @@ NetInfo *XilinxPacker::invert_net(NetInfo *toinv)
 }
 
 namespace {
-static const pool<std::string> pseudo_diff_iotypes = {
-        "DIFF_POD12_DCI",  "DIFF_POD12",        "DIFF_POD10_DCI",  "DIFF_POD10",
-        "DIFF_SSTL12_DCI", "DIFF_SSTL_135_DCI", "DIFF_SSTL15_DCI", "DIFF_SSTL18_I_DCI",
-        "DIFF_SSTL12_I",   "DIFF_SSTL12_II",    "DIFF_HSTL_I_12",  "DIFF_HSTL_I_12_DCI"};
+static const pool<std::string> pseudo_diff_iotypes = {"DIFF_POD12_DCI",  "DIFF_POD12",        "DIFF_POD10_DCI",
+                                                      "DIFF_POD10",      "DIFF_SSTL12_DCI",   "DIFF_SSTL_135_DCI",
+                                                      "DIFF_SSTL15_DCI", "DIFF_SSTL18_I_DCI", "DIFF_SSTL12_I",
+                                                      "DIFF_SSTL12_II",  "DIFF_HSTL_I_12",    "DIFF_HSTL_I_12_DCI"};
 }
 
 void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
@@ -166,7 +167,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
         xil_iob->movePortTo(id_OSC_EN, inbuf, id_OSC_EN);
         for (int i = 0; i < 4; i++)
             xil_iob->movePortTo(ctx->id("OSC[" + std::to_string(i) + "]"), inbuf,
-                         ctx->id("OSC[" + std::to_string(i) + "]"));
+                                ctx->id("OSC[" + std::to_string(i) + "]"));
 
         NetInfo *top_out = xil_iob->getPort(id_O);
         xil_iob->disconnectPort(id_O);
@@ -186,10 +187,9 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
         xil_iob->disconnectPort(is_se_iobuf ? id_IO : id_O);
         bool has_dci = xil_iob->type.in(id_IOBUF_DCIEN, id_IOBUFE3);
         CellInfo *obuf = insert_obuf(
-                int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == id_OBUFT) ? "OBUFT" : "OBUF",
-                         !is_se_obuf),
-                is_se_iobuf ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT) : xil_iob->type,
-                xil_iob->getPort(id_I), pad_net, xil_iob->getPort(id_T));
+                int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == id_OBUFT) ? "OBUFT" : "OBUF", !is_se_obuf),
+                is_se_iobuf ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT) : xil_iob->type, xil_iob->getPort(id_I), pad_net,
+                xil_iob->getPort(id_T));
         obuf->attrs[id_BEL] = site + "/OUTBUF";
         xil_iob->movePortTo(id_DCITERMDISABLE, obuf, id_DCITERMDISABLE);
         if (is_se_iobuf)
@@ -197,19 +197,19 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
     }
 
     bool is_diff_ibuf = xil_iob->type.in(id_IBUFDS, id_IBUFDS_INTERMDISABLE, id_IBUFDSE3);
-    bool is_diff_out_ibuf = xil_iob->type.in(id_IBUFDS_DIFF_OUT, id_IBUFDS_DIFF_OUT_IBUFDISABLE, id_IBUFDS_DIFF_OUT_INTERMDISABLE);
+    bool is_diff_out_ibuf =
+            xil_iob->type.in(id_IBUFDS_DIFF_OUT, id_IBUFDS_DIFF_OUT_IBUFDISABLE, id_IBUFDS_DIFF_OUT_INTERMDISABLE);
     bool is_diff_iobuf = xil_iob->type.in(id_IOBUFDS, id_IOBUFDS_DCIEN, id_IOBUFDSE3);
-    bool is_diff_out_iobuf = xil_iob->type.in(id_IOBUFDS_DIFF_OUT, id_IOBUFDS_DIFF_OUT_DCIEN, id_IOBUFDS_DIFF_OUT_INTERMDISABLE);
+    bool is_diff_out_iobuf =
+            xil_iob->type.in(id_IOBUFDS_DIFF_OUT, id_IOBUFDS_DIFF_OUT_DCIEN, id_IOBUFDS_DIFF_OUT_INTERMDISABLE);
     bool is_diff_obuf = xil_iob->type.in(id_OBUFDS, id_OBUFTDS);
     bool is_pseudo_diff_out = pseudo_diff_iotypes.count(iostandard);
 
     if (is_diff_ibuf || is_diff_out_ibuf || is_diff_iobuf || is_diff_out_iobuf) {
-        NetInfo *pad_p_net =
-                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_I);
+        NetInfo *pad_p_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_I);
         NPNR_ASSERT(pad_p_net != nullptr);
         std::string site_p = pad_site(pad_p_net);
-        NetInfo *pad_n_net =
-                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_IB);
+        NetInfo *pad_n_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_IB);
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
 
@@ -225,10 +225,10 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
         dibuf->attrs[id_BEL] = site_dibuf + "/DIFFINBUF";
         for (int i = 0; i < 2; i++)
             xil_iob->movePortTo(ctx->id("OSC_EN[" + std::to_string(i) + "]"), dibuf,
-                         ctx->id("OSC_EN[" + std::to_string(i) + "]"));
+                                ctx->id("OSC_EN[" + std::to_string(i) + "]"));
         for (int i = 0; i < 4; i++)
             xil_iob->movePortTo(ctx->id("OSC[" + std::to_string(i) + "]"), dibuf,
-                         ctx->id("OSC[" + std::to_string(i) + "]"));
+                                ctx->id("OSC[" + std::to_string(i) + "]"));
         xil_iob->movePortTo(id_VREF, dibuf, id_VREF);
 
         NetInfo *top_out = xil_iob->getPort(id_O);
@@ -252,12 +252,10 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
 
     if (is_diff_obuf || is_diff_out_iobuf || is_diff_iobuf) {
         if (is_pseudo_diff_out) {
-            NetInfo *pad_p_net =
-                    xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_O);
+            NetInfo *pad_p_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_O);
             NPNR_ASSERT(pad_p_net != nullptr);
             std::string site_p = pad_site(pad_p_net);
-            NetInfo *pad_n_net =
-                    xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_OB);
+            NetInfo *pad_n_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_OB);
             NPNR_ASSERT(pad_n_net != nullptr);
             std::string site_n = pad_site(pad_n_net);
 
@@ -271,21 +269,19 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
 
             bool has_dci = xil_iob->type.in(id_IOBUFDS_DCIEN, id_IOBUFDSE3);
 
-            CellInfo *obuf_p = insert_obuf(
-                    int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
-                    (is_diff_iobuf || is_diff_out_iobuf) ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT)
-                                                         : id_OBUF,
-                    xil_iob->getPort(id_I), pad_p_net, xil_iob->getPort(id_T));
+            CellInfo *obuf_p =
+                    insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
+                                (is_diff_iobuf || is_diff_out_iobuf) ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT) : id_OBUF,
+                                xil_iob->getPort(id_I), pad_p_net, xil_iob->getPort(id_T));
 
             obuf_p->attrs[id_BEL] = site_p + "/OUTBUF";
             subcells.push_back(obuf_p);
             obuf_p->connectPort(id_DCITERMDISABLE, xil_iob->getPort(id_DCITERMDISABLE));
 
-            CellInfo *obuf_n = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "N" : "OBUFTDS$subcell$N"),
-                                           (is_diff_iobuf || is_diff_out_iobuf)
-                                                   ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT)
-                                                   : id_OBUF,
-                                           inv_i, pad_n_net, xil_iob->getPort(id_T));
+            CellInfo *obuf_n =
+                    insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "N" : "OBUFTDS$subcell$N"),
+                                (is_diff_iobuf || is_diff_out_iobuf) ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT) : id_OBUF,
+                                inv_i, pad_n_net, xil_iob->getPort(id_T));
 
             obuf_n->attrs[id_BEL] = site_n + "/OUTBUF";
             obuf_n->connectPort(id_DCITERMDISABLE, xil_iob->getPort(id_DCITERMDISABLE));
@@ -339,8 +335,7 @@ CellInfo *XilinxPacker::create_iobuf(CellInfo *npnr_io, IdString &top_port)
                 id_Y);
 
         if (npnr_io->type == ctx->id("$nextpnr_obuf")) {
-            cell = create_cell(ctx, tbuf ? id_OBUFT : id_OBUF,
-                               ctx->id(npnr_io->name.str(ctx) + "$obuf$"));
+            cell = create_cell(ctx, tbuf ? id_OBUFT : id_OBUF, ctx->id(npnr_io->name.str(ctx) + "$obuf$"));
             top_port = id_O;
         } else {
             cell = create_cell(ctx, id_IOBUF, ctx->id(npnr_io->name.str(ctx) + "$iobuf$"));
@@ -454,7 +449,7 @@ void USPacker::pack_io()
     get_top_level_pins(ctx, toplevel_ports);
     // Insert PAD cells on top level IO, and IO buffers where one doesn't exist already
     std::vector<std::pair<CellInfo *, PortRef>> pad_and_buf;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf") ||
             ci->type == ctx->id("$nextpnr_obuf"))
@@ -566,7 +561,7 @@ std::string USPacker::get_ioctrl_site(const std::string &iol_bel)
 
 void USPacker::prepare_iologic()
 {
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         // ODDRE1 must be transformed to an OSERDESE3
         if (ci->type == id_ODDRE1) {
@@ -606,13 +601,11 @@ void USPacker::pack_iologic()
     hp_iol_rules[id_ODELAYE3].new_type = id_ODELAYE3;
     hp_iol_rules[id_IDELAYE3].new_type = id_IDELAYE3;
 
-    auto is_hpio = [&](BelId bel) {
-        return ctx->getBelTileType(bel).in(id_HPIO_L, id_HPIO_RIGHT);
-    };
+    auto is_hpio = [&](BelId bel) { return ctx->getBelTileType(bel).in(id_HPIO_L, id_HPIO_RIGHT); };
 
     dict<IdString, BelId> iodelay_to_io;
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_IDELAYE3) {
             NetInfo *d = ci->getPort(id_IDATAIN);
@@ -660,7 +653,7 @@ void USPacker::pack_iologic()
         }
     }
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type.in(id_IDDRE1, id_ISERDESE3)) {
             NetInfo *d = ci->getPort(id_D);
@@ -734,7 +727,7 @@ void USPacker::pack_iologic()
 void USPacker::pack_idelayctrl()
 {
     CellInfo *idelayctrl = nullptr;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_IDELAYCTRL) {
             if (idelayctrl != nullptr)
@@ -745,7 +738,7 @@ void USPacker::pack_idelayctrl()
     if (idelayctrl == nullptr)
         return;
     std::set<std::string> ioctrl_sites;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type.in(id_IDELAYE3, id_ODELAYE3)) {
             if (!ci->attrs.count(id_BEL))
@@ -760,8 +753,8 @@ void USPacker::pack_idelayctrl()
     std::vector<NetInfo *> dup_rdys;
     int i = 0;
     for (auto site : ioctrl_sites) {
-        auto dup_idc = create_cell(ctx, id_IDELAYCTRL,
-                                   int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i), false));
+        auto dup_idc =
+                create_cell(ctx, id_IDELAYCTRL, int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i), false));
         dup_idc->connectPort(id_REFCLK, idelayctrl->getPort(id_REFCLK));
         dup_idc->connectPort(id_RST, idelayctrl->getPort(id_RST));
         if (rdy != nullptr) {

@@ -123,10 +123,9 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
         xil_iob->disconnectPort(is_se_iobuf ? id_IO : id_O);
         bool has_dci = xil_iob->type == id_IOBUF_DCIEN;
         CellInfo *obuf = insert_obuf(
-                int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == id_OBUFT) ? "OBUFT" : "OBUF",
-                         !is_se_obuf),
-                is_se_iobuf ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT) : xil_iob->type,
-                xil_iob->getPort(id_I), pad_net, xil_iob->getPort(id_T));
+                int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == id_OBUFT) ? "OBUFT" : "OBUF", !is_se_obuf),
+                is_se_iobuf ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT) : xil_iob->type, xil_iob->getPort(id_I), pad_net,
+                xil_iob->getPort(id_T));
         std::string tile = get_tilename_by_sitename(ctx, site);
         if (boost::starts_with(tile, "RIOB18_"))
             obuf->attrs[id_BEL] = site + "/IOB18/OUTBUF_DCIEN";
@@ -139,16 +138,15 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
     bool is_diff_ibuf = xil_iob->type.in(id_IBUFDS, id_IBUFDS_INTERMDISABLE, id_IBUFDS);
     bool is_diff_iobuf = xil_iob->type.in(id_IOBUFDS, id_IOBUFDS_DCIEN);
-    bool is_diff_out_iobuf = xil_iob->type.in(id_IOBUFDS_DIFF_OUT, id_IOBUFDS_DIFF_OUT_DCIEN, id_IOBUFDS_DIFF_OUT_INTERMDISABLE);
+    bool is_diff_out_iobuf =
+            xil_iob->type.in(id_IOBUFDS_DIFF_OUT, id_IOBUFDS_DIFF_OUT_DCIEN, id_IOBUFDS_DIFF_OUT_INTERMDISABLE);
     bool is_diff_obuf = xil_iob->type.in(id_OBUFDS, id_OBUFTDS);
 
     if (is_diff_ibuf || is_diff_iobuf) {
-        NetInfo *pad_p_net =
-                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_I);
+        NetInfo *pad_p_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_I);
         NPNR_ASSERT(pad_p_net != nullptr);
         std::string site_p = pad_site(pad_p_net);
-        NetInfo *pad_n_net =
-                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_IB);
+        NetInfo *pad_n_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_IB);
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
         std::string tile_p = get_tilename_by_sitename(ctx, site_p);
@@ -179,12 +177,10 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
 
     if (is_diff_obuf || is_diff_out_iobuf || is_diff_iobuf) {
         // FIXME: true diff outputs
-        NetInfo *pad_p_net =
-                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_O);
+        NetInfo *pad_p_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IO : id_O);
         NPNR_ASSERT(pad_p_net != nullptr);
         std::string site_p = pad_site(pad_p_net);
-        NetInfo *pad_n_net =
-                xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_OB);
+        NetInfo *pad_n_net = xil_iob->getPort((is_diff_iobuf || is_diff_out_iobuf) ? id_IOB : id_OB);
         NPNR_ASSERT(pad_n_net != nullptr);
         std::string site_n = pad_site(pad_n_net);
         std::string tile_p = get_tilename_by_sitename(ctx, site_p);
@@ -210,8 +206,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
                                        (is_diff_iobuf || is_diff_out_iobuf || (xil_iob->type == id_OBUFTDS))
                                                ? (has_dci ? id_OBUFT_DCIEN : id_OBUFT)
                                                : id_OBUF,
-                                       xil_iob->getPort(id_I), pad_p_net,
-                                       xil_iob->getPort(id_T));
+                                       xil_iob->getPort(id_I), pad_p_net, xil_iob->getPort(id_T));
 
         if (is_riob18) {
             obuf_p->attrs[id_BEL] = site_p + "/IOB18M/OUTBUF_DCIEN";
@@ -281,7 +276,7 @@ void XC7Packer::pack_io()
     get_top_level_pins(ctx, toplevel_ports);
     // Insert PAD cells on top level IO, and IO buffers where one doesn't exist already
     std::vector<std::pair<CellInfo *, PortRef>> pad_and_buf;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_iobuf") ||
             ci->type == ctx->id("$nextpnr_obuf"))
@@ -388,15 +383,15 @@ void XC7Packer::pack_io()
 
     // Special xform for OBUFx and IBUFx.
     dict<IdString, XFormRule> rules;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (!ci->attrs.count(id_BEL))
             continue;
         std::string belname = ci->attrs[id_BEL].c_str();
         size_t pos = belname.find("/");
-        if (belname.substr(pos+1, 5) == "IOB18")
+        if (belname.substr(pos + 1, 5) == "IOB18")
             rules = hpiobuf_rules;
-        else if (belname.substr(pos+1, 5) == "IOB33")
+        else if (belname.substr(pos + 1, 5) == "IOB33")
             rules = hriobuf_rules;
         else
             log_error("Unexpected IOBUF BEL %s\n", belname.c_str());
@@ -416,7 +411,7 @@ void XC7Packer::pack_io()
 
     generic_xform(hrio_rules, true);
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         std::string type = ci->type.str(ctx);
         if (!boost::starts_with(type, "IOB33") && !boost::starts_with(type, "IOB18"))
@@ -428,10 +423,11 @@ void XC7Packer::pack_io()
     }
 
     // check all PAD cells for IOSTANDARD/DRIVE
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         std::string type = ci->type.str(ctx);
-        if (type != "PAD") continue;
+        if (type != "PAD")
+            continue;
         check_valid_pad(ci, type);
     }
 }
@@ -444,26 +440,31 @@ void XC7Packer::check_valid_pad(CellInfo *ci, std::string type)
         log_error("port %s has no IOSTANDARD property", ci->name.c_str(ctx));
 
     auto iostandard = iostandard_attr->second.as_string();
-    if (!boost::starts_with(iostandard, "LVTTL") &&
-        !boost::starts_with(iostandard, "LVCMOS")) return;
+    if (!boost::starts_with(iostandard, "LVTTL") && !boost::starts_with(iostandard, "LVCMOS"))
+        return;
 
     auto drive_attr = ci->attrs.find(id_DRIVE);
     // no drive strength attribute: use default
-    if (drive_attr == ci->attrs.end()) return;
+    if (drive_attr == ci->attrs.end())
+        return;
     auto drive = drive_attr->second.as_int64();
 
     bool is_iob33 = boost::starts_with(type, "IOB33");
     if (is_iob33) {
-        if (drive == 4 || drive == 8 || drive == 12) return;
-        if (iostandard != "LVCMOS12" && drive == 16) return;
-        if ((iostandard == "LVCMOS18" || iostandard == "LVTTL") && drive == 24) return;
+        if (drive == 4 || drive == 8 || drive == 12)
+            return;
+        if (iostandard != "LVCMOS12" && drive == 16)
+            return;
+        if ((iostandard == "LVCMOS18" || iostandard == "LVTTL") && drive == 24)
+            return;
     } else { // IOB18
-        if (drive == 2 || drive == 4 || drive == 6 || drive == 8)     return;
-        if (iostandard != "LVCMOS12" && (drive == 12 || drive == 16)) return;
+        if (drive == 2 || drive == 4 || drive == 6 || drive == 8)
+            return;
+        if (iostandard != "LVCMOS12" && (drive == 12 || drive == 16))
+            return;
     }
 
-    log_error("unsupported DRIVE strength property %s for port %s",
-        drive_attr->second.c_str(), ci->name.c_str(ctx));
+    log_error("unsupported DRIVE strength property %s for port %s", drive_attr->second.c_str(), ci->name.c_str(ctx));
 }
 
 std::string XC7Packer::get_ologic_site(const std::string &io_bel)
@@ -567,10 +568,10 @@ std::string XC7Packer::get_ioctrl_site(const std::string &io_bel)
 {
     std::vector<std::string> parts;
     boost::split(parts, io_bel, boost::is_any_of("/"));
-    auto loc         = parts[0];
-    auto iobank      = parts[1];
+    auto loc = parts[0];
+    auto iobank = parts[1];
     auto pad_bel_str = loc + "/" + iobank + "/PAD";
-    auto msg         = "could not get bel for: '" + pad_bel_str + "'";
+    auto msg = "could not get bel for: '" + pad_bel_str + "'";
 
     BelId pad_bel = ctx->getBelByNameStr(pad_bel_str);
     NPNR_ASSERT_MSG(0 <= pad_bel.tile && 0 <= pad_bel.index, msg.c_str());
@@ -619,7 +620,7 @@ void XC7Packer::pack_iologic()
 
     // IDDR
     iologic_rules[id_IDDR].new_type = id_ILOGICE3_IFF;
-    iologic_rules[id_IDDR].port_multixform[id_C] = { id_CK, id_CKB };
+    iologic_rules[id_IDDR].port_multixform[id_C] = {id_CK, id_CKB};
     iologic_rules[id_IDDR].port_xform[id_S] = id_SR;
     iologic_rules[id_IDDR].port_xform[id_R] = id_SR;
 
@@ -643,14 +644,14 @@ void XC7Packer::pack_iologic()
             } else if (type == id_ODELAYE2) {
                 auto dataout = usr.cell->ports.find(id_DATAOUT);
                 if (dataout != usr.cell->ports.end()) {
-                        for (auto &user : dataout->second.net->users) {
-                            IdString dataout_type = user.cell->type;
-                            if (dataout_type.in(id_IOB18_OUTBUF_DCIEN, id_IOB18M_OUTBUF_DCIEN)) {
-                                if (outbuf != nullptr)
-                                    return (CellInfo *)nullptr; // drives multiple outputs
-                                outbuf = user.cell;
-                            }
+                    for (auto &user : dataout->second.net->users) {
+                        IdString dataout_type = user.cell->type;
+                        if (dataout_type.in(id_IOB18_OUTBUF_DCIEN, id_IOB18M_OUTBUF_DCIEN)) {
+                            if (outbuf != nullptr)
+                                return (CellInfo *)nullptr; // drives multiple outputs
+                            outbuf = user.cell;
                         }
+                    }
                 } else {
                     if (outbuf != nullptr)
                         return (CellInfo *)nullptr; // drives multiple outputs
@@ -660,7 +661,7 @@ void XC7Packer::pack_iologic()
         return outbuf;
     };
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_IDELAYE2) {
             NetInfo *d = ci->getPort(id_IDATAIN);
@@ -668,8 +669,7 @@ void XC7Packer::pack_iologic()
                 log_error("%s '%s' has disconnected IDATAIN input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
             BelId io_bel;
-            if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
-                || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
+            if (boost::contains(drv->type.str(ctx), "INBUF_EN") || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                 io_bel = ctx->getBelByNameStr(drv->attrs.at(id_BEL).as_string());
             else
                 log_error("%s '%s' has IDATAIN input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -688,14 +688,14 @@ void XC7Packer::pack_iologic()
                 CellInfo *user = userport.cell;
                 auto user_type = user->type.str(ctx);
                 // OBUFDS has the negative pin connected to an inverter
-                if (no_users == 2 && user_type == "INVERTER") continue;
-                if (   boost::contains(user_type, "OUTBUF_EN")
-                    || boost::contains(user_type, "OUTBUF_DCIEN"))
+                if (no_users == 2 && user_type == "INVERTER")
+                    continue;
+                if (boost::contains(user_type, "OUTBUF_EN") || boost::contains(user_type, "OUTBUF_DCIEN"))
                     io_bel = ctx->getBelByNameStr(user->attrs.at(id_BEL).as_string());
                 else
                     // TODO: support SIGNAL_PATTERN = CLOCK
-                    log_error("%s '%s' has DATAOUT connected to unsupported cell type %s\n",
-                              ci->type.c_str(ctx), ctx->nameOf(ci), user_type.c_str());
+                    log_error("%s '%s' has DATAOUT connected to unsupported cell type %s\n", ci->type.c_str(ctx),
+                              ctx->nameOf(ci), user_type.c_str());
             }
             std::string iol_site = get_odelay_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[id_BEL] = iol_site + "/ODELAYE2";
@@ -704,7 +704,7 @@ void XC7Packer::pack_iologic()
         }
     }
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_ODDR) {
             NetInfo *q = ci->getPort(id_Q);
@@ -731,7 +731,7 @@ void XC7Packer::pack_iologic()
 
             ci->attrs[id_BEL] = ol_site + "/OUTFF";
         } else if (ci->type == id_OSERDESE2) {
-            NetInfo *q   = ci->getPort(id_OQ);
+            NetInfo *q = ci->getPort(id_OQ);
             NetInfo *ofb = ci->getPort(id_OFB);
             bool q_disconnected = q == nullptr || q->users.empty();
             bool ofb_disconnected = ofb == nullptr || ofb->users.empty();
@@ -754,14 +754,13 @@ void XC7Packer::pack_iologic()
             if (d == nullptr || d->driver.cell == nullptr)
                 log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
-            if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
-                || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
+            if (boost::contains(drv->type.str(ctx), "INBUF_EN") || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                 io_bel = ctx->getBelByNameStr(drv->attrs.at(id_BEL).as_string());
             else if (boost::contains(drv->type.str(ctx), "IDELAYE2") && d->driver.port == id_DATAOUT)
                 io_bel = iodelay_to_io.at(drv->name);
             else
                 log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
-                            ctx->nameOf(ci), drv->type.c_str(ctx));
+                          ctx->nameOf(ci), drv->type.c_str(ctx));
 
             std::string iol_site = get_ilogic_site(ctx->getBelName(io_bel).str(ctx));
             ci->attrs[id_BEL] = iol_site + "/IFF";
@@ -787,8 +786,8 @@ void XC7Packer::pack_iologic()
                 if (d == nullptr || d->driver.cell == nullptr)
                     log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
                 CellInfo *drv = d->driver.cell;
-                if (   boost::contains(drv->type.str(ctx), "INBUF_EN")
-                    || boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
+                if (boost::contains(drv->type.str(ctx), "INBUF_EN") ||
+                    boost::contains(drv->type.str(ctx), "INBUF_DCIEN"))
                     io_bel = ctx->getBelByNameStr(drv->attrs.at(id_BEL).as_string());
                 else
                     log_error("%s '%s' has D input connected to illegal cell type %s\n", ci->type.c_str(ctx),
@@ -811,7 +810,7 @@ void XC7Packer::pack_iologic()
 void XC7Packer::pack_idelayctrl()
 {
     CellInfo *idelayctrl = nullptr;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_IDELAYCTRL) {
             if (idelayctrl != nullptr)
@@ -822,7 +821,7 @@ void XC7Packer::pack_idelayctrl()
     if (idelayctrl == nullptr)
         return;
     std::set<std::string> ioctrl_sites;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type.in(id_IDELAYE2_IDELAYE2, id_ODELAYE2_ODELAYE2)) {
             if (!ci->attrs.count(id_BEL))
@@ -837,8 +836,8 @@ void XC7Packer::pack_idelayctrl()
     std::vector<NetInfo *> dup_rdys;
     int i = 0;
     for (auto site : ioctrl_sites) {
-        auto dup_idc = create_cell(ctx, id_IDELAYCTRL,
-                                   int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i), false));
+        auto dup_idc =
+                create_cell(ctx, id_IDELAYCTRL, int_name(idelayctrl->name, "CTRL_DUP_" + std::to_string(i), false));
         dup_idc->connectPort(id_REFCLK, idelayctrl->getPort(id_REFCLK));
         dup_idc->connectPort(id_RST, idelayctrl->getPort(id_RST));
         if (rdy != nullptr) {

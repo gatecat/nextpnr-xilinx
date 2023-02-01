@@ -189,7 +189,8 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
     int num_bel_wires = locInfo(bel).bel_data[bel.index].num_bel_wires;
     const BelWirePOD *bel_wires = locInfo(bel).bel_data[bel.index].bel_wires.get();
 
-    if (debug_this) log_info("looking for pin %s in bel %s\n", pin.c_str(this), getBelName(bel)[0].c_str(this));
+    if (debug_this)
+        log_info("looking for pin %s in bel %s\n", pin.c_str(this), getBelName(bel)[0].c_str(this));
     for (int i = 0; i < num_bel_wires; i++) {
         const char *wire_name;
         if (debug_this) {
@@ -201,7 +202,8 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
         }
 
         if (bel_wires[i].port == pin.index) {
-            if (debug_this) log_info("got wire %s\n", wire_name);
+            if (debug_this)
+                log_info("got wire %s\n", wire_name);
             return canonicalWireId(chip_info, bel.tile, bel_wires[i].wire_index);
         }
     }
@@ -324,14 +326,15 @@ IdStringList Arch::getPipName(PipId pip) const
     NPNR_ASSERT(pip != PipId());
     if (locInfo(pip).pip_data[pip.index].site != -1 && locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL &&
         locInfo(pip).pip_data[pip.index].bel != -1) {
-        return IdStringList({id(std::string("SITEPIP/") +
-                  chip_info->tile_insts[pip.tile].site_insts[locInfo(pip).pip_data[pip.index].site].name.get() +
-                  std::string("/") + IdString(locInfo(pip).pip_data[pip.index].bel).str(this) + "/" +
-                  IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this))});
+        return IdStringList(
+                {id(std::string("SITEPIP/") +
+                    chip_info->tile_insts[pip.tile].site_insts[locInfo(pip).pip_data[pip.index].site].name.get() +
+                    std::string("/") + IdString(locInfo(pip).pip_data[pip.index].bel).str(this) + "/" +
+                    IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this))});
     } else {
         return IdStringList({id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
-                  std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
-                  std::to_string(locInfo(pip).pip_data[pip.index].dst_index))});
+                                std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
+                                std::to_string(locInfo(pip).pip_data[pip.index].dst_index))});
     }
 }
 
@@ -447,7 +450,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst) const
     if (src == dst)
         return 0;
     int src_x, src_y, dst_x, dst_y;
-    int src_intent = wireIntent(src);//, dst_intent = wireIntent(dst);
+    int src_intent = wireIntent(src); //, dst_intent = wireIntent(dst);
     // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
     //    return 500;
     int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
@@ -618,8 +621,7 @@ delay_t Arch::predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdStr
 {
     if (src_bel == BelId() || dst_bel == BelId())
         return 0;
-    int src_x = src_bel.tile % chip_info->width,
-        src_y = src_bel.tile / chip_info->width;
+    int src_x = src_bel.tile % chip_info->width, src_y = src_bel.tile / chip_info->width;
 
     int dst_x = dst_bel.tile % chip_info->width, dst_y = dst_bel.tile / chip_info->width;
 
@@ -744,7 +746,7 @@ void Arch::routeClock()
 {
     log_info("Routing global clocks...\n");
     // Special pass for faster routing of global clock psuedo-net
-    for (auto& net : nets) {
+    for (auto &net : nets) {
         NetInfo *clk_net = net.second.get();
         if (clk_net->driver.cell == nullptr)
             continue;
@@ -755,7 +757,8 @@ void Arch::routeClock()
             clk_net->driver.port == id_O)
             is_global = true;
         else if (clk_net->driver.cell->type == id_PLLE2_ADV_PLLE2_ADV && clk_net->users.entries() == 1 &&
-                 ((*clk_net->users.begin()).cell->type == id_BUFGCTRL || (*clk_net->users.begin()).cell->type == id_BUFCE_BUFCE ||
+                 ((*clk_net->users.begin()).cell->type == id_BUFGCTRL ||
+                  (*clk_net->users.begin()).cell->type == id_BUFCE_BUFCE ||
                   (*clk_net->users.begin()).cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
             is_global = true;
         else if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id_PLLE2_ADV_PLLE2_ADV &&
@@ -777,7 +780,8 @@ void Arch::routeClock()
                 auto sink_wire_name = "(uninitialized)";
                 if (sink_wire != WireId())
                     sink_wire_name = nameOfWire(sink_wire);
-                log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this), sink_wire_name);
+                log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this),
+                         sink_wire_name);
             }
 
             visit.push(sink_wire);
@@ -892,7 +896,7 @@ void Arch::findSourceSinkLocations()
 {
     // Use a backwards BFS to find the real location of sinks, on a best-effort basis
 #if 1
-    for (auto& net : nets) {
+    for (auto &net : nets) {
         NetInfo *ni = net.second.get();
         for (auto &usr : ni->users) {
             BelId bel = usr.cell->bel;
@@ -1185,8 +1189,8 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
             IdString tiletype = getBelTileType(cell->bel);
             bool is_lut5 = (z & 0xF) == BEL_5LUT;
             bool is_slicem = (tiletype.in(id_CLBLM_L, id_CLBLM_R)) && (z < 64);
-            IdString variant = is_slicem ? (is_lut5 ? id_LUT_OR_MEM5LRAM : id_LUT_OR_MEM6LRAM)
-                                         : (is_lut5 ? id_LUT5 : id_LUT6);
+            IdString variant =
+                    is_slicem ? (is_lut5 ? id_LUT_OR_MEM5LRAM : id_LUT_OR_MEM6LRAM) : (is_lut5 ? id_LUT5 : id_LUT6);
 
             if (fromPort == id_CLK)
                 return false;

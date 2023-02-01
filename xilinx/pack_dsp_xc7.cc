@@ -84,7 +84,7 @@ void XC7Packer::pack_dsps()
 
     std::vector<CellInfo *> all_dsps;
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
 
         auto add_const_pin = [&](PortInfo& port, std::string& pins, std::string& pin_name, std::string net) {

@@ -158,7 +158,7 @@ struct DecalId
 
     bool operator==(const DecalId &other) const { return (type == other.type) && (index == other.index); }
     bool operator!=(const DecalId &other) const { return (type != other.type) || (index != other.index); }
-    unsigned int hash() const { return mkhash(mkhash(tile_type, index), mkhash(int(active),int(type))); }
+    unsigned int hash() const { return mkhash(mkhash(tile_type, index), mkhash(int(active), int(type))); }
 };
 
 struct ArchNetInfo

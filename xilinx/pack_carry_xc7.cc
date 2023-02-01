@@ -68,7 +68,7 @@ bool XC7Packer::has_illegal_fanout(NetInfo *carry)
 
 void XilinxPacker::split_carry4s()
 {
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type != id_CARRY4)
             continue;
@@ -110,7 +110,7 @@ void XC7Packer::pack_carries()
     split_carry4s();
     std::vector<CellInfo *> root_muxcys;
     // Find MUXCYs
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type != id_MUXCY)
             continue;
@@ -216,8 +216,7 @@ void XC7Packer::pack_carries()
     log_info("   Grouped %d MUXCYs and %d XORCYs into %d chains.\n", muxcy_count, xorcy_count, int(root_muxcys.size()));
 
     // N.B. LUT6 is not a valid type here, as CARRY requires dual outputs
-    pool<IdString> lut_types{id_LUT1, id_LUT2, id_LUT3, id_LUT4,
-                                           id_LUT5};
+    pool<IdString> lut_types{id_LUT1, id_LUT2, id_LUT3, id_LUT4, id_LUT5};
 
     pool<IdString> folded_nets;
 
@@ -227,8 +226,7 @@ void XC7Packer::pack_carries()
             int z = i % 4;
             CellInfo *muxcy = grp.muxcys.at(i), *xorcy = grp.xorcys.at(i);
             if (z == 0)
-                carry4s.push_back(
-                        create_cell(ctx, id_CARRY4, ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY4$")));
+                carry4s.push_back(create_cell(ctx, id_CARRY4, ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY4$")));
             CellInfo *c4 = carry4s.back().get();
             CellInfo *root = carry4s.front().get();
             if (i == 0) {
@@ -242,7 +240,7 @@ void XC7Packer::pack_carries()
                 root->constr_children.push_back(c4);
                 c4->constr_x = 0;
                 // Looks no CARRY4 on the tile of which grid_y is a multiple of 26. Skip them
-                c4->constr_y = -(i / 4 + i / (4*25));
+                c4->constr_y = -(i / 4 + i / (4 * 25));
                 c4->constr_abs_z = true;
                 c4->constr_z = BEL_CARRY4;
             }
@@ -347,7 +345,7 @@ void XC7Packer::pack_carries()
                 root->constr_children.push_back(s_lut);
                 s_lut->cluster = root->name;
                 s_lut->constr_x = 0;
-                s_lut->constr_y = -(i / 4 + i / (4*25));
+                s_lut->constr_y = -(i / 4 + i / (4 * 25));
                 s_lut->constr_abs_z = true;
                 s_lut->constr_z = (z << 4 | BEL_6LUT);
             }
@@ -355,7 +353,7 @@ void XC7Packer::pack_carries()
                 root->constr_children.push_back(di_lut);
                 di_lut->cluster = root->name;
                 di_lut->constr_x = 0;
-                di_lut->constr_y = -(i / 4 + i / (4*25));
+                di_lut->constr_y = -(i / 4 + i / (4 * 25));
                 di_lut->constr_abs_z = true;
                 di_lut->constr_z = (z << 4 | BEL_5LUT);
             }
@@ -406,7 +404,7 @@ void XC7Packer::pack_carries()
     c4_rules[id_CARRY4].new_type = id_CARRY4;
     c4_rules[id_CARRY4].port_xform[id_CI] = id_CIN;
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type != id_CARRY4)
             continue;

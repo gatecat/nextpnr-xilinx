@@ -72,7 +72,7 @@ void USPacker::pack_carries()
     split_carry4s();
     std::vector<CellInfo *> root_muxcys;
     // Find MUXCYs
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type != id_MUXCY)
             continue;
@@ -178,8 +178,7 @@ void USPacker::pack_carries()
     log_info("   Grouped %d MUXCYs and %d XORCYs into %d chains.\n", muxcy_count, xorcy_count, int(root_muxcys.size()));
 
     // N.B. LUT6 is not a valid type here, as CARRY requires dual outputs
-    pool<IdString> lut_types{id_LUT1, id_LUT2, id_LUT3, id_LUT4,
-                                           id_LUT5};
+    pool<IdString> lut_types{id_LUT1, id_LUT2, id_LUT3, id_LUT4, id_LUT5};
 
     pool<IdString> folded_nets;
 
@@ -189,8 +188,7 @@ void USPacker::pack_carries()
             int z = i % 8;
             CellInfo *muxcy = grp.muxcys.at(i), *xorcy = grp.xorcys.at(i);
             if (z == 0)
-                carry8s.push_back(
-                        create_cell(ctx, id_CARRY8, ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY8$")));
+                carry8s.push_back(create_cell(ctx, id_CARRY8, ctx->id(muxcy->name.str(ctx) + "$PACKED_CARRY8$")));
             CellInfo *c8 = carry8s.back().get();
             CellInfo *root = carry8s.front().get();
             if (i == 0) {
@@ -370,7 +368,7 @@ void USPacker::pack_carries()
     c8_init_rules[id_CARRY8].port_xform[id_CI] = id_AX;
     c8_init_rules[id_CARRY8].set_params.emplace_back(id_CARRY_TYPE, Property("SINGLE_CY8"));
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type != id_CARRY8)
             continue;

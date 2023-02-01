@@ -112,81 +112,57 @@ struct FasmBackend
         for (std::string s : {"L", "R"})
             for (std::string s2 : {"", "_TBYTESRC", "_TBYTETERM", "_SING"})
                 for (std::string i :
-                     (s2 == "_SING") ? std::vector<std::string>{"", "0", "1"}
-                                     : std::vector<std::string>{    "0", "1"}) {
-                    pp_config[{ ctx->id(s + "IOI3" + s2),
-                                ctx->id(s + "IOI_OLOGIC" + i + "_OQ"), ctx->id("IOI_OLOGIC" + i + "_D1") }] = {
-                                     "OLOGIC_Y" + i + ".OMUX.D1",
-                                     "OLOGIC_Y" + i + ".OQUSED",
-                                     "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"
-                               };
-                    pp_config[{ ctx->id(s + "IOI3" + s2),
-                                ctx->id("IOI_ILOGIC" + i + "_O"), ctx->id(s + "IOI_ILOGIC" + i + "_D") }] = {
-                                     "IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
-                                     "ILOGIC_Y" + i + ".ZINV_D"
-                                };
-                    pp_config[{ ctx->id(s + "IOI3" + s2),
-                                ctx->id("IOI_ILOGIC" + i + "_O"), ctx->id(s + "IOI_ILOGIC" + i + "_DDLY") }] = {
-                                     "ILOGIC_Y" + i + ".IDELMUXE3.P0",
-                                     "ILOGIC_Y" + i + ".ZINV_D"
-                                };
-                    pp_config[{ ctx->id(s + "IOI3" + s2),
-                                ctx->id(s + "IOI_OLOGIC" + i + "_TQ"), ctx->id("IOI_OLOGIC" + i + "_T1")}] = {
-                                    "OLOGIC_Y" + i + ".ZINV_T1"
-                                };
+                     (s2 == "_SING") ? std::vector<std::string>{"", "0", "1"} : std::vector<std::string>{"0", "1"}) {
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_OQ"),
+                               ctx->id("IOI_OLOGIC" + i + "_D1")}] = {"OLOGIC_Y" + i + ".OMUX.D1",
+                                                                      "OLOGIC_Y" + i + ".OQUSED",
+                                                                      "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"};
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
+                               ctx->id(s + "IOI_ILOGIC" + i + "_D")}] = {"IDELAY_Y" + i + ".IDELAY_TYPE_FIXED",
+                                                                         "ILOGIC_Y" + i + ".ZINV_D"};
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
+                               ctx->id(s + "IOI_ILOGIC" + i + "_DDLY")}] = {"ILOGIC_Y" + i + ".IDELMUXE3.P0",
+                                                                            "ILOGIC_Y" + i + ".ZINV_D"};
+                    pp_config[{ctx->id(s + "IOI3" + s2), ctx->id(s + "IOI_OLOGIC" + i + "_TQ"),
+                               ctx->id("IOI_OLOGIC" + i + "_T1")}] = {"OLOGIC_Y" + i + ".ZINV_T1"};
                     if (i == "0") {
-                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_O_IN1,     id_IOB_O_OUT0}]  = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_O_OUT0,    id_IOB_O0}]      = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_T_IN1,     id_IOB_T_OUT0}]  = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_T_OUT0,    id_IOB_T0}]      = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_O_IN1, id_IOB_O_OUT0}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_O_OUT0, id_IOB_O0}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_T_IN1, id_IOB_T_OUT0}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_T_OUT0, id_IOB_T0}] = {};
                         pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_DIFFI_IN0, id_IOB_PADOUT1}] = {};
                     }
                 }
 
         for (std::string s2 : {"", "_TBYTESRC", "_TBYTETERM", "_SING"})
-            for (std::string i :
-                 (s2 == "_SING") ? std::vector<std::string>{"0"     }
-                                 : std::vector<std::string>{"0", "1"}) {
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("RIOI_OLOGIC" + i + "_OQ"), ctx->id("IOI_OLOGIC" + i + "_D1") }] = {
-                                "OLOGIC_Y" + i + ".OMUX.D1",
-                                "OLOGIC_Y" + i + ".OQUSED",
-                                "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"
-                            };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("RIOI_OLOGIC" + i + "_OFB"), ctx->id("RIOI_OLOGIC" + i + "_OQ") }] = { };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("RIOI_O" + i), ctx->id("RIOI_ODELAY" + i + "_DATAOUT") }] = { };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("RIOI_OLOGIC" + i + "_OFB"), ctx->id("IOI_OLOGIC" + i + "_D1") }] = {
-                                "OLOGIC_Y" + i + ".OMUX.D1",
-                                "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"
-                            };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("IOI_ILOGIC" + i + "_O"), ctx->id("RIOI_ILOGIC" + i + "_D") }] = {
-                                "ILOGIC_Y" + i + ".ZINV_D"
-                            };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("IOI_ILOGIC" + i + "_O"), ctx->id("RIOI_ILOGIC" + i + "_DDLY") }] = {
-                                "ILOGIC_Y" + i + ".IDELMUXE3.P0",
-                                "ILOGIC_Y" + i + ".ZINV_D"
-                            };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("RIOI_OLOGIC" + i + "_TQ"), ctx->id("IOI_OLOGIC" + i + "_T1") }] = {
-                                "OLOGIC_Y" + i + ".ZINV_T1"
-                            };
-                pp_config[{ ctx->id("RIOI" + s2),
-                            ctx->id("RIOI_OLOGIC" + i + "_OFB"), ctx->id("RIOI_ODELAY" + i + "_ODATAIN") }] = {
-                                "OLOGIC_Y" + i + ".ZINV_ODATAIN"
-                            };
+            for (std::string i : (s2 == "_SING") ? std::vector<std::string>{"0"} : std::vector<std::string>{"0", "1"}) {
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("RIOI_OLOGIC" + i + "_OQ"),
+                           ctx->id("IOI_OLOGIC" + i + "_D1")}] = {"OLOGIC_Y" + i + ".OMUX.D1",
+                                                                  "OLOGIC_Y" + i + ".OQUSED",
+                                                                  "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("RIOI_OLOGIC" + i + "_OFB"),
+                           ctx->id("RIOI_OLOGIC" + i + "_OQ")}] = {};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("RIOI_O" + i), ctx->id("RIOI_ODELAY" + i + "_DATAOUT")}] = {};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("RIOI_OLOGIC" + i + "_OFB"),
+                           ctx->id("IOI_OLOGIC" + i + "_D1")}] = {"OLOGIC_Y" + i + ".OMUX.D1",
+                                                                  "OLOGIC_Y" + i + ".OSERDES.DATA_RATE_TQ.BUF"};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("IOI_ILOGIC" + i + "_O"), ctx->id("RIOI_ILOGIC" + i + "_D")}] =
+                        {"ILOGIC_Y" + i + ".ZINV_D"};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("IOI_ILOGIC" + i + "_O"),
+                           ctx->id("RIOI_ILOGIC" + i + "_DDLY")}] = {"ILOGIC_Y" + i + ".IDELMUXE3.P0",
+                                                                     "ILOGIC_Y" + i + ".ZINV_D"};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("RIOI_OLOGIC" + i + "_TQ"),
+                           ctx->id("IOI_OLOGIC" + i + "_T1")}] = {"OLOGIC_Y" + i + ".ZINV_T1"};
+                pp_config[{ctx->id("RIOI" + s2), ctx->id("RIOI_OLOGIC" + i + "_OFB"),
+                           ctx->id("RIOI_ODELAY" + i + "_ODATAIN")}] = {"OLOGIC_Y" + i + ".ZINV_ODATAIN"};
                 if (i == "0") {
-                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_O_IN1,     id_IOB_O_OUT0}]  = {};
-                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_O_OUT0,    id_IOB_O0}]      = {};
-                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_T_IN1,     id_IOB_T_OUT0}]  = {};
-                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_T_OUT0,    id_IOB_T0}]      = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_O_IN1, id_IOB_O_OUT0}] = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_O_OUT0, id_IOB_O0}] = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_T_IN1, id_IOB_T_OUT0}] = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_T_OUT0, id_IOB_T0}] = {};
                     pp_config[{ctx->id("RIOB18" + s2), id_IOB_DIFFI_IN0, id_IOB_PADOUT1}] = {};
                 }
-        }
+            }
 
         for (std::string s1 : {"TOP", "BOT"}) {
             for (std::string s2 : {"L", "R"}) {
@@ -194,30 +170,22 @@ struct FasmBackend
                     std::string ii = std::to_string(i);
                     std::string hck = s2 + ii;
                     std::string buf = std::string((s2 == "R") ? "X1Y" : "X0Y") + ii;
-                    pp_config[{ ctx->id("CLK_HROW_" + s1 + "_R"),
-                                ctx->id("CLK_HROW_CK_HCLK_OUT_" + hck), ctx->id("CLK_HROW_CK_MUX_OUT_" + hck) }] = {
-                                    "BUFHCE.BUFHCE_" + buf + ".IN_USE",
-                                    "BUFHCE.BUFHCE_" + buf + ".ZINV_CE"
-                                };
+                    pp_config[{ctx->id("CLK_HROW_" + s1 + "_R"), ctx->id("CLK_HROW_CK_HCLK_OUT_" + hck),
+                               ctx->id("CLK_HROW_CK_MUX_OUT_" + hck)}] = {"BUFHCE.BUFHCE_" + buf + ".IN_USE",
+                                                                          "BUFHCE.BUFHCE_" + buf + ".ZINV_CE"};
                 }
             }
 
             for (int i = 0; i < 16; i++) {
                 std::string ii = std::to_string(i);
-                pp_config[{ ctx->id("CLK_BUFG_" + s1 + "_R"),
-                            ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_O"), ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_I0") }] = {
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IN_USE",
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IS_IGNORE1_INVERTED",
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE0",
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S0"
-                            };
-                pp_config[{ ctx->id("CLK_BUFG_" + s1 + "_R"),
-                            ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_O"), ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_I1") }] = {
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IN_USE",
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IS_IGNORE0_INVERTED",
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE1",
-                                "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S1"
-                            };
+                pp_config[{ctx->id("CLK_BUFG_" + s1 + "_R"), ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_O"),
+                           ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_I0")}] = {
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IN_USE", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IS_IGNORE1_INVERTED",
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE0", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S0"};
+                pp_config[{ctx->id("CLK_BUFG_" + s1 + "_R"), ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_O"),
+                           ctx->id("CLK_BUFG_BUFGCTRL" + ii + "_I1")}] = {
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IN_USE", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".IS_IGNORE0_INVERTED",
+                        "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_CE1", "BUFGCTRL.BUFGCTRL_X0Y" + ii + ".ZINV_S1"};
             }
         }
 
@@ -225,24 +193,18 @@ struct FasmBackend
         for (int y = 0; y < 4; y++) {
             std::string yy = std::to_string(y);
             std::string ii = std::to_string(rclk_y_to_i[y]);
-            pp_config[{ id_HCLK_IOI3,
-                        ctx->id("HCLK_IOI_RCLK_OUT" + ii), ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii) }] = {
-                            "BUFR_Y" + yy + ".IN_USE",
-                            "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"
-                        };
-            pp_config[{ id_HCLK_IOI,
-                        ctx->id("HCLK_IOI_RCLK_OUT" + ii), ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii) }] = {
-                            "BUFR_Y" + yy + ".IN_USE",
-                            "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"
-                        };
+            pp_config[{id_HCLK_IOI3, ctx->id("HCLK_IOI_RCLK_OUT" + ii), ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii)}] = {
+                    "BUFR_Y" + yy + ".IN_USE", "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"};
+            pp_config[{id_HCLK_IOI, ctx->id("HCLK_IOI_RCLK_OUT" + ii), ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii)}] = {
+                    "BUFR_Y" + yy + ".IN_USE", "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"};
         }
 
         // FIXME: shouldn't these be in the X-RAY ppips database?
         for (std::string s : {"L", "R"}) {
             for (int i = 0; i < 24; i++) {
                 std::string ii = std::to_string(i);
-                pp_config[{ ctx->id("INT_INTERFACE_" + s),
-                            ctx->id("INT_INTERFACE_LOGIC_OUTS_" + s + ii), ctx->id("INT_INTERFACE_LOGIC_OUTS_" + s + "_B" + ii) }];
+                pp_config[{ctx->id("INT_INTERFACE_" + s), ctx->id("INT_INTERFACE_LOGIC_OUTS_" + s + ii),
+                           ctx->id("INT_INTERFACE_LOGIC_OUTS_" + s + "_B" + ii)}];
             }
         }
     }
@@ -268,9 +230,8 @@ struct FasmBackend
             auto &pp = pp_config.at(ppk);
             std::string tile_name = get_tile_name(pip.tile);
             for (auto c : pp) {
-                if (boost::starts_with(tile_name, "RIOI3_SING")
-                    || boost::starts_with(tile_name, "LIOI3_SING")
-                    || boost::starts_with(tile_name, "RIOI_SING")) {
+                if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING") ||
+                    boost::starts_with(tile_name, "RIOI_SING")) {
                     // Need to flip for top HCLK
                     bool is_top_sing = pip.tile < ctx->getHclkForIoi(pip.tile);
                     if (is_top_sing) {
@@ -298,12 +259,11 @@ struct FasmBackend
                 return;
             }
             std::string orig_dst_name = dst_name;
-            if (boost::starts_with(tile_name, "RIOI3_SING")
-                || boost::starts_with(tile_name, "LIOI3_SING")
-                || boost::starts_with(tile_name, "RIOI_SING")) {
+            if (boost::starts_with(tile_name, "RIOI3_SING") || boost::starts_with(tile_name, "LIOI3_SING") ||
+                boost::starts_with(tile_name, "RIOI_SING")) {
                 // FIXME: PPIPs missing for SING IOI3s
-                if ((boost::contains(src_name, "IMUX") || boost::contains(src_name, "CTRL0"))
-                     && !boost::contains(dst_name, "CLK"))
+                if ((boost::contains(src_name, "IMUX") || boost::contains(src_name, "CTRL0")) &&
+                    !boost::contains(dst_name, "CLK"))
                     return;
                 auto spos = src_name.find("_SING_");
                 if (spos != std::string::npos)
@@ -366,8 +326,7 @@ struct FasmBackend
         else if (type == id_LUT6)
             return {id_I0, id_I1, id_I2, id_I3, id_I4, id_I5};
         else if (type == id_RAMD64E)
-            return {id_RADR0, id_RADR1, id_RADR2,
-                    id_RADR3, id_RADR4, id_RADR5};
+            return {id_RADR0, id_RADR1, id_RADR2, id_RADR3, id_RADR4, id_RADR5};
         else if (type == id_SRL16E)
             return {id_A0, id_A1, id_A2, id_A3};
         else if (type == id_SRLC32E)
@@ -714,7 +673,7 @@ struct FasmBackend
     void write_routing()
     {
         get_pseudo_pip_data();
-        for (auto& net : ctx->nets) {
+        for (auto &net : ctx->nets) {
             NetInfo *ni = net.second.get();
             for (auto &w : ni->wires) {
                 if (w.second.pip != PipId())
@@ -750,11 +709,11 @@ struct FasmBackend
         std::string tile = get_tile_name(pad->bel.tile);
         push(tile);
 
-        bool is_riob18   = boost::starts_with(tile, "RIOB18_");
-        bool is_sing     = boost::contains(tile, "_SING_");
+        bool is_riob18 = boost::starts_with(tile, "RIOB18_");
+        bool is_sing = boost::contains(tile, "_SING_");
         bool is_top_sing = pad->bel.tile < ctx->getHclkForIob(pad->bel);
         bool is_stepdown = false;
-        bool is_lvcmos   = boost::starts_with(iostandard, "LVCMOS");
+        bool is_lvcmos = boost::starts_with(iostandard, "LVCMOS");
         bool is_low_volt_lvcmos = iostandard == "LVCMOS12" || iostandard == "LVCMOS15" || iostandard == "LVCMOS18";
 
         auto yLoc = is_sing ? (is_top_sing ? 1 : 0) : (1 - ioLoc.y);
@@ -762,7 +721,8 @@ struct FasmBackend
 
         bool has_diff_prefix = boost::starts_with(iostandard, "DIFF_");
         bool is_diff = iostandard == "LVDS" || has_diff_prefix;
-        if (has_diff_prefix) iostandard.erase(0, 5);
+        if (has_diff_prefix)
+            iostandard.erase(0, 5);
         bool is_sstl = iostandard == "SSTL12" || iostandard == "SSTL135" || iostandard == "SSTL15";
 
         int hclk = ctx->getHclkForIob(pad->bel);
@@ -792,17 +752,14 @@ struct FasmBackend
                     write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
                 else if (iostandard == "LVCMOS18" && (drive == 12 || drive == 8))
                     write_bit("LVCMOS18.DRIVE.I12_I8");
-                else if ((iostandard == "LVCMOS33" && drive == 16) ||
-                         (iostandard == "LVTTL"    && drive == 16))
+                else if ((iostandard == "LVCMOS33" && drive == 16) || (iostandard == "LVTTL" && drive == 16))
                     write_bit("LVCMOS33_LVTTL.DRIVE.I12_I16");
                 else if ((iostandard == "LVCMOS33" && (drive == 8 || drive == 12)) ||
-                         (iostandard == "LVTTL"    && (drive == 8 || drive == 12)))
+                         (iostandard == "LVTTL" && (drive == 8 || drive == 12)))
                     write_bit("LVCMOS33_LVTTL.DRIVE.I12_I8");
-                else if ((iostandard == "LVCMOS33" && drive == 4) ||
-                         (iostandard == "LVTTL"    && drive == 4))
+                else if ((iostandard == "LVCMOS33" && drive == 4) || (iostandard == "LVTTL" && drive == 4))
                     write_bit("LVCMOS33_LVTTL.DRIVE.I4");
-                else if (drive == 8 &&
-                         (iostandard == "LVCMOS12" || iostandard == "LVCMOS25"))
+                else if (drive == 8 && (iostandard == "LVCMOS12" || iostandard == "LVCMOS25"))
                     write_bit("LVCMOS12_LVCMOS25.DRIVE.I8");
                 else if (drive == 4 &&
                          (iostandard == "LVCMOS15" || iostandard == "LVCMOS18" || iostandard == "LVCMOS25"))
@@ -812,7 +769,8 @@ struct FasmBackend
             }
 
             // SSTL output used
-            if (is_riob18 && is_sstl) write_bit(iostandard + ".IN_USE");
+            if (is_riob18 && is_sstl)
+                write_bit(iostandard + ".IN_USE");
 
             // SLEW
             if (is_riob18 && slew == "SLOW") {
@@ -838,7 +796,8 @@ struct FasmBackend
                     if (!is_riob18)
                         write_bit("LVCMOS25_LVCMOS33_LVTTL.IN");
                     else
-                        log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
+                        log_error("high performance banks (RIOB18) do not support IO standard %s\n",
+                                  iostandard.c_str());
                 }
 
                 if (is_sstl) {
@@ -882,7 +841,8 @@ struct FasmBackend
                     else
                         write_bit("LVCMOS12_LVCMOS15_LVCMOS18_SSTL12_SSTL135_SSTL15.IN_ONLY");
                 } else
-                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY");
+                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_"
+                              "ONLY");
             }
         }
 
@@ -896,10 +856,9 @@ struct FasmBackend
         }
 
         if (is_riob18 && (is_input || is_output) && (boost::contains(iostandard, "SSTL") || iostandard == "LVDS")) {
-            if (((yLoc == 0) && (iostandard == "LVDS")) ||
-                boost::contains(iostandard, "SSTL")) {
+            if (((yLoc == 0) && (iostandard == "LVDS")) || boost::contains(iostandard, "SSTL")) {
                 // TODO: I get bit conflicts with this, it seems to work anyway. Test more.
-                //write_bit("LVDS.IN_USE");
+                // write_bit("LVDS.IN_USE");
             }
         }
 
@@ -933,7 +892,7 @@ struct FasmBackend
     {
         std::string tile = get_tile_name(ci->bel.tile);
         push(tile);
-        bool is_sing     = boost::contains(tile, "_SING_");
+        bool is_sing = boost::contains(tile, "_SING_");
         bool is_top_sing = ci->bel.tile < ctx->getHclkForIoi(ci->bel.tile);
 
         std::string site = ctx->getBelSite(ci->bel);
@@ -959,21 +918,30 @@ struct FasmBackend
 
             // clock edge
             std::string edge = str_or_default(ci->params, id_DDR_CLK_EDGE, "OPPOSITE_EDGE");
-            if (edge == "SAME_EDGE")          write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
-            else if (edge == "OPPOSITE_EDGE") write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
-            else log_error("unsupported clock edge parameter for cell '%s' at %s: %s. Supported are: SAME_EDGE and OPPOSITE_EDGE",
-                            ci->name.c_str(ctx), site.c_str(), edge.c_str());
+            if (edge == "SAME_EDGE")
+                write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
+            else if (edge == "OPPOSITE_EDGE")
+                write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
+            else
+                log_error("unsupported clock edge parameter for cell '%s' at %s: %s. Supported are: SAME_EDGE and "
+                          "OPPOSITE_EDGE",
+                          ci->name.c_str(ctx), site.c_str(), edge.c_str());
 
             std::string srtype = str_or_default(ci->params, id_SRTYPE, "SYNC");
-            if (srtype == "SYNC") write_bit("IFF.SRTYPE.SYNC"); else write_bit("IFF.SRTYPE.ASYNC");
+            if (srtype == "SYNC")
+                write_bit("IFF.SRTYPE.SYNC");
+            else
+                write_bit("IFF.SRTYPE.ASYNC");
 
             write_bit("IFF.ZINV_C", !bool_or_default(ci->params, id_IS_CLK_INVERTED, false));
             write_bit("ZINV_D", !bool_or_default(ci->params, id_IS_D_INVERTED, false));
 
             auto init = int_or_default(ci->params, id_INIT_Q1, 0);
-            if (init == 0) write_bit("IFF.ZINIT_Q1");
+            if (init == 0)
+                write_bit("IFF.ZINIT_Q1");
             init = int_or_default(ci->params, id_INIT_Q2, 0);
-            if (init == 0) write_bit("IFF.ZINIT_Q2");
+            if (init == 0)
+                write_bit("IFF.ZINIT_Q2");
 
             auto sr_name = str_or_default(ci->attrs, id_X_ORIG_PORT_SR, "R");
             if (sr_name == "R") {
@@ -982,7 +950,8 @@ struct FasmBackend
             }
         } else if (ci->type.in(id_OLOGICE2_OUTFF, id_OLOGICE3_OUTFF)) {
             std::string edge = str_or_default(ci->params, id_DDR_CLK_EDGE, "OPPOSITE_EDGE");
-            if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
+            if (edge == "SAME_EDGE")
+                write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
 
             write_bit("ODDR_TDDR.IN_USE");
             write_bit("OQUSED");
@@ -990,21 +959,25 @@ struct FasmBackend
             write_bit("OSERDES.DATA_RATE_TQ.BUF");
 
             std::string srtype = str_or_default(ci->params, id_SRTYPE, "SYNC");
-            if (srtype == "SYNC") write_bit("OSERDES.SRTYPE.SYNC");
+            if (srtype == "SYNC")
+                write_bit("OSERDES.SRTYPE.SYNC");
 
             for (std::string d : {"D1", "D2"})
                 write_bit("IS_" + d + "_INVERTED",
                           bool_or_default(ci->params, ctx->id("IS_" + d + "_INVERTED"), false));
 
             auto init = int_or_default(ci->params, id_INIT, 1);
-            if (init == 0) write_bit("ZINIT_OQ");
+            if (init == 0)
+                write_bit("ZINIT_OQ");
 
             write_bit("ODDR.SRUSED", ci->getPort(id_SR) != nullptr);
             auto sr_name = str_or_default(ci->attrs, id_X_ORIG_PORT_SR, "R");
-            if (sr_name == "R") write_bit("ZSRVAL_OQ");
+            if (sr_name == "R")
+                write_bit("ZSRVAL_OQ");
 
             auto clk_inv = bool_or_default(ci->params, id_IS_CLK_INVERTED);
-            if (!clk_inv) write_bit("ZINV_CLK");
+            if (!clk_inv)
+                write_bit("ZINV_CLK");
         } else if (ci->type == id_OSERDESE2_OSERDESE2) {
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
             write_bit("ODDR.SRUSED");
@@ -1027,9 +1000,7 @@ struct FasmBackend
             std::string type = str_or_default(ci->params, id_DATA_RATE_OQ, "BUF");
             write_bit(std::string("DATA_RATE_OQ.") + ((ci->getPort(id_OQ) != nullptr) ? type : "BUF"));
             write_bit(std::string("DATA_RATE_TQ.") +
-                      ((ci->getPort(id_TQ) != nullptr)
-                               ? str_or_default(ci->params, id_DATA_RATE_TQ, "BUF")
-                               : "BUF"));
+                      ((ci->getPort(id_TQ) != nullptr) ? str_or_default(ci->params, id_DATA_RATE_TQ, "BUF") : "BUF"));
             int width = int_or_default(ci->params, id_DATA_WIDTH, 8);
 #if 0
             write_bit("DATA_WIDTH.W" + std::to_string(width));
@@ -1041,11 +1012,11 @@ struct FasmBackend
             }
 #else
             if (type == "DDR")
-            write_bit("DATA_WIDTH.DDR.W" + std::to_string(width));
-        else if (type == "SDR")
-            write_bit("DATA_WIDTH.SDR.W" + std::to_string(width));
-        else
-            write_bit("DATA_WIDTH.W" + std::to_string(width));
+                write_bit("DATA_WIDTH.DDR.W" + std::to_string(width));
+            else if (type == "SDR")
+                write_bit("DATA_WIDTH.SDR.W" + std::to_string(width));
+            else
+                write_bit("DATA_WIDTH.W" + std::to_string(width));
 #endif
             write_bit("SRTYPE.SYNC");
             write_bit("TSRTYPE.SYNC");
@@ -1053,7 +1024,8 @@ struct FasmBackend
         } else if (ci->type == id_ISERDESE2_ISERDESE2) {
             std::string data_rate = str_or_default(ci->params, id_DATA_RATE);
             write_bit("IDDR_OR_ISERDES.IN_USE");
-            if (data_rate == "DDR") write_bit("IDDR.IN_USE");
+            if (data_rate == "DDR")
+                write_bit("IDDR.IN_USE");
             write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
             write_bit("IFF.SRTYPE.SYNC");
             for (int i = 1; i <= 4; i++) {
@@ -1082,8 +1054,7 @@ struct FasmBackend
             write_bit("IN_USE");
             write_bit("CINVCTRL_SEL", str_or_default(ci->params, id_CINVCTRL_SEL, "FALSE") == "TRUE");
             write_bit("PIPE_SEL", str_or_default(ci->params, id_PIPE_SEL, "FALSE") == "TRUE");
-            write_bit("HIGH_PERFORMANCE_MODE",
-                      str_or_default(ci->params, id_HIGH_PERFORMANCE_MODE, "FALSE") == "TRUE");
+            write_bit("HIGH_PERFORMANCE_MODE", str_or_default(ci->params, id_HIGH_PERFORMANCE_MODE, "FALSE") == "TRUE");
             write_bit("DELAY_SRC_" + str_or_default(ci->params, id_DELAY_SRC, "IDATAIN"));
             write_bit("IDELAY_TYPE_" + str_or_default(ci->params, id_IDELAY_TYPE, "FIXED"));
             write_int_vector("IDELAY_VALUE[4:0]", int_or_default(ci->params, id_IDELAY_VALUE, 0), 5, false);
@@ -1093,10 +1064,10 @@ struct FasmBackend
         } else if (ci->type == id_ODELAYE2_ODELAYE2) {
             write_bit("IN_USE");
             write_bit("CINVCTRL_SEL", str_or_default(ci->params, id_CINVCTRL_SEL, "FALSE") == "TRUE");
-            write_bit("HIGH_PERFORMANCE_MODE",
-                      str_or_default(ci->params, id_HIGH_PERFORMANCE_MODE, "FALSE") == "TRUE");
+            write_bit("HIGH_PERFORMANCE_MODE", str_or_default(ci->params, id_HIGH_PERFORMANCE_MODE, "FALSE") == "TRUE");
             auto type = str_or_default(ci->params, id_ODELAY_TYPE, "FIXED");
-            if (type != "FIXED") write_bit("ODELAY_TYPE_" + type);
+            if (type != "FIXED")
+                write_bit("ODELAY_TYPE_" + type);
             write_int_vector("ODELAY_VALUE[4:0]", int_or_default(ci->params, id_ODELAY_VALUE, 0), 5, false);
             write_int_vector("ZODELAY_VALUE[4:0]", int_or_default(ci->params, id_ODELAY_VALUE, 0), 5, true);
             write_bit("ZINV_ODATAIN", !bool_or_default(ci->params, id_IS_ODATAIN_INVERTED, false));
@@ -1108,12 +1079,13 @@ struct FasmBackend
 
     void write_io()
     {
-        for (auto& cell : ctx->cells) {
+        for (auto &cell : ctx->cells) {
             CellInfo *ci = cell.second.get();
             if (ci->type == id_PAD) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type.in(id_ILOGICE3_IFF, id_OLOGICE2_OUTFF, id_OLOGICE3_OUTFF, id_OSERDESE2_OSERDESE2, id_ISERDESE2_ISERDESE2, id_IDELAYE2_IDELAYE2, id_ODELAYE2_ODELAYE2)) {
+            } else if (ci->type.in(id_ILOGICE3_IFF, id_OLOGICE2_OUTFF, id_OLOGICE3_OUTFF, id_OSERDESE2_OSERDESE2,
+                                   id_ISERDESE2_ISERDESE2, id_IDELAYE2_IDELAYE2, id_ODELAYE2_ODELAYE2)) {
                 write_iol_config(ci);
                 blank();
             }
@@ -1149,7 +1121,7 @@ struct FasmBackend
         std::set<std::string> all_gclk;
         dict<int, std::set<std::string>> hclk_by_row;
 
-        for (auto& cell : ctx->cells) {
+        for (auto &cell : ctx->cells) {
             CellInfo *ci = cell.second.get();
             if (ci->type == id_BUFGCTRL) {
                 push(get_tile_name(ci->bel.tile));
@@ -1568,7 +1540,7 @@ struct FasmBackend
 
     void write_ip()
     {
-        for (auto& cell : ctx->cells) {
+        for (auto &cell : ctx->cells) {
             CellInfo *ci = cell.second.get();
             if (ci->type == id_DSP48E1_DSP48E1) {
                 write_dsp_cell(ci);

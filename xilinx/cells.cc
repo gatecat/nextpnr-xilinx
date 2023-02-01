@@ -298,7 +298,8 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
 std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, const std::vector<NetInfo *> &inputs,
                                      NetInfo *output, const Property &init)
 {
-    std::unique_ptr<CellInfo> cell = std::make_unique<CellInfo>(ctx, ctx->id(name), ctx->id("LUT" + std::to_string(inputs.size())));
+    std::unique_ptr<CellInfo> cell =
+            std::make_unique<CellInfo>(ctx, ctx->id(name), ctx->id("LUT" + std::to_string(inputs.size())));
     for (size_t i = 0; i < inputs.size(); i++) {
         IdString ip = ctx->id("I" + std::to_string(i));
         cell->ports[ip].name = ip;

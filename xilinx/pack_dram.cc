@@ -77,7 +77,7 @@ CellInfo *XilinxPacker::create_dram32_lut(const std::string &name, CellInfo *bas
     dram_lut->connectPort(id_CLK, ctrlset.wclk);
     dram_lut->connectPort(id_WE, ctrlset.we);
     for (int i = 0; i < int(ctrlset.wa.size()); i++)
-        dram_lut->connectPort(ctx->id("WADR" + std::to_string(i)),ctrlset.wa[i]);
+        dram_lut->connectPort(ctx->id("WADR" + std::to_string(i)), ctrlset.wa[i]);
     dram_lut->params[id_IS_WCLK_INVERTED] = ctrlset.wclk_inv ? 1 : 0;
 
     xform_cell(o5 ? dram32_5_rules : dram32_6_rules, dram_lut.get());
@@ -175,11 +175,9 @@ void XilinxPacker::pack_dram()
     dram_rules[id_RAMD64E].param_xform[id_IS_CLK_INVERTED] = id_IS_WCLK_INVERTED;
     dram_rules[id_RAMD64E].set_attrs.emplace_back(id_X_LUT_AS_DRAM, "1");
     for (int i = 0; i < 6; i++)
-        dram_rules[id_RAMD64E].port_xform[ctx->id("RADR" + std::to_string(i))] =
-                ctx->id("A" + std::to_string(i + 1));
+        dram_rules[id_RAMD64E].port_xform[ctx->id("RADR" + std::to_string(i))] = ctx->id("A" + std::to_string(i + 1));
     for (int i = 0; i < 8; i++)
-        dram_rules[id_RAMD64E].port_xform[ctx->id("WADR" + std::to_string(i))] =
-                ctx->id("WA" + std::to_string(i + 1));
+        dram_rules[id_RAMD64E].port_xform[ctx->id("WADR" + std::to_string(i))] = ctx->id("WA" + std::to_string(i + 1));
     dram_rules[id_RAMD64E].port_xform[id_I] = id_DI1;
     dram_rules[id_RAMD64E].port_xform[id_O] = id_O6;
 
@@ -202,7 +200,7 @@ void XilinxPacker::pack_dram()
 
     // Optimise DRAM with tied-low inputs, to more efficiently routeable tied-high inputs
     int inverted_ports = 0;
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         auto dt_iter = dram_types.find(ci->type);
         if (dt_iter == dram_types.end())
@@ -242,7 +240,7 @@ void XilinxPacker::pack_dram()
     }
     log_info("   Transformed %d tied-low DRAM address inputs to be tied-high\n", inverted_ports);
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         auto dt_iter = dram_types.find(ci->type);
         if (dt_iter == dram_types.end())
@@ -250,7 +248,8 @@ void XilinxPacker::pack_dram()
         auto &dt = dt_iter->second;
         DRAMControlSet dcs;
         for (int i = 0; i < dt.abits; i++)
-            dcs.wa.push_back(ci->getPort(ctx->id(dt.abits <= 6 ? ("A" + std::to_string(i)) : ("A[" + std::to_string(i) + "]"))));
+            dcs.wa.push_back(
+                    ci->getPort(ctx->id(dt.abits <= 6 ? ("A" + std::to_string(i)) : ("A[" + std::to_string(i) + "]"))));
         dcs.wclk = ci->getPort(id_WCLK);
         dcs.we = ci->getPort(id_WE);
         dcs.wclk_inv = bool_or_default(ci->params, id_IS_WCLK_INVERTED);
@@ -429,7 +428,7 @@ void XilinxPacker::pack_dram()
         }
     }
     // Whole-SLICE DRAM
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type.in(id_RAM64M, id_RAM32M)) {
             bool is_64 = (cell.second->type == id_RAM64M);
@@ -470,8 +469,7 @@ void XilinxPacker::pack_dram()
                         if (base == nullptr)
                             base = dram;
                         if (ci->params.count(ctx->idf("INIT%c", 'A' + i))) {
-                            auto orig_init =
-                                    ci->params.at(ctx->idf("INIT%c", 'A' + i)).extract(0, 64).as_bits();
+                            auto orig_init = ci->params.at(ctx->idf("INIT%c", 'A' + i)).extract(0, 64).as_bits();
                             std::string init;
                             for (int k = 0; k < 32; k++) {
                                 init.push_back(orig_init.at(k * 2 + j));

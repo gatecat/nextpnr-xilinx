@@ -769,10 +769,10 @@ struct Arch : BaseArch<ArchRanges>
         int site = locInfo(bel).bel_data[bel.index].site;
         if (site != -1) {
             return IdStringList({id(std::string(chip_info->tile_insts[bel.tile].site_insts[site].name.get()) + "/" +
-                      IdString(locInfo(bel).bel_data[bel.index].name).str(this))});
+                                    IdString(locInfo(bel).bel_data[bel.index].name).str(this))});
         } else {
             return IdStringList({id(std::string(chip_info->tile_insts[bel.tile].name.get()) + "/" +
-                      IdString(locInfo(bel).bel_data[bel.index].name).str(this))});
+                                    IdString(locInfo(bel).bel_data[bel.index].name).str(this))});
         }
     }
 
@@ -895,8 +895,7 @@ struct Arch : BaseArch<ArchRanges>
     {
         // if (chip_info->height > 600 && (bel.tile / chip_info->width) < 752) // constrain to SLR0
         //    return true;
-        if ((getBelType(bel).in(id_PSEUDO_GND, id_PSEUDO_VCC)) &&
-            ((bel.tile % chip_info->width) != 0))
+        if ((getBelType(bel).in(id_PSEUDO_GND, id_PSEUDO_VCC)) && ((bel.tile % chip_info->width) != 0))
             return true; // PSEUDO drivers must be at x=0 to have access to the global pseudo-network
         return false;
     }
@@ -990,15 +989,17 @@ struct Arch : BaseArch<ArchRanges>
     {
         NPNR_ASSERT_MSG(wire != WireId(), "uninitialized wire");
         if (wire.tile != -1 && locInfo(wire).wire_data[wire.index].site != -1) {
-            return IdStringList({id(std::string("SITEWIRE/") +
-                      chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +
-                      std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this))});
+            return IdStringList({id(
+                    std::string("SITEWIRE/") +
+                    chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +
+                    std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this))});
         } else {
-            return IdStringList({id(std::string(chip_info
-                                          ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
-                                                                       : wire.tile]
-                                          .name.get()) +
-                      "/" + IdString(wireInfo(wire).name).c_str(this))});
+            return IdStringList({id(
+                    std::string(chip_info
+                                        ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
+                                                                     : wire.tile]
+                                        .name.get()) +
+                    "/" + IdString(wireInfo(wire).name).c_str(this))});
         }
     }
 
@@ -1550,7 +1551,8 @@ struct Arch : BaseArch<ArchRanges>
     bool isLogicTile(BelId bel) const
     {
         IdString belTileType = getBelTileType(bel);
-        return (belTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L, id_CLBLM_R));
+        return (belTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L,
+                               id_CLBLM_R));
     }
     bool isBRAMTile(BelId bel) const
     {
@@ -1562,7 +1564,8 @@ struct Arch : BaseArch<ArchRanges>
         if (wire.tile == -1)
             return false;
         IdString wireTileType = IdString(chip_info->tile_insts[wire.tile].type);
-        return (wireTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L, id_CLBLM_R));
+        return (wireTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L,
+    id_CLBLM_R));
     }*/
 
     Loc getSiteLocInTile(BelId bel) const

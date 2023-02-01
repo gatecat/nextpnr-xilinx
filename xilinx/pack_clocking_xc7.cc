@@ -39,7 +39,7 @@ void XC7Packer::prepare_clocking()
     upgrade[id_MMCME2_BASE] = id_MMCME2_ADV;
     upgrade[id_PLLE2_BASE] = id_PLLE2_ADV;
 
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (upgrade.count(ci->type)) {
             IdString new_type = upgrade.at(ci->type);
@@ -77,7 +77,7 @@ void XC7Packer::pack_plls()
     pll_rules[id_MMCME2_ADV].new_type = id_MMCME2_ADV_MMCME2_ADV;
     pll_rules[id_PLLE2_ADV].new_type = id_PLLE2_ADV_PLLE2_ADV;
     generic_xform(pll_rules);
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         // Preplace PLLs to make use of dedicated/short routing paths
         if (ci->type.in(id_MMCM_MMCM_TOP, id_PLL_PLL_TOP))
@@ -114,14 +114,14 @@ void XC7Packer::pack_gbs()
     generic_xform(gb_rules);
 
     // Make sure prerequisites are set up first
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_PS7_PS7)
             preplace_unique(ci);
     }
 
     // Preplace global buffers to make use of dedicated/short routing
-    for (auto& cell : ctx->cells) {
+    for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_BUFGCTRL)
             try_preplace(ci, id_I0);
