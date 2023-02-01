@@ -66,11 +66,9 @@ std::string get_tilename_by_sitename(Context *ctx, std::string site)
 
 void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &iostandard)
 {
-    bool is_se_ibuf = xil_iob->type == id_IBUF || xil_iob->type == id_IBUF_IBUFDISABLE ||
-                      xil_iob->type == id_IBUF_INTERMDISABLE;
-    bool is_se_iobuf = xil_iob->type == id_IOBUF || xil_iob->type == id_IOBUF_DCIEN ||
-                       xil_iob->type == id_IOBUF_INTERMDISABLE;
-    bool is_se_obuf = xil_iob->type == id_OBUF || xil_iob->type == id_OBUFT;
+    bool is_se_ibuf = xil_iob->type.in(id_IBUF, id_IBUF_IBUFDISABLE, id_IBUF_INTERMDISABLE);
+    bool is_se_iobuf = xil_iob->type.in(id_IOBUF, id_IOBUF_DCIEN, id_IOBUF_INTERMDISABLE);
+    bool is_se_obuf = xil_iob->type.in(id_OBUF, id_OBUFT);
 
     auto pad_site = [&](NetInfo *n) {
         for (auto user : n->users)
@@ -99,9 +97,9 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
         xil_iob->disconnectPort(id_O);
 
         IdString ibuf_type = id_IBUF;
-        if (xil_iob->type == id_IBUF_IBUFDISABLE || xil_iob->type == id_IOBUF_DCIEN)
+        if (xil_iob->type.in(id_IBUF_IBUFDISABLE, id_IOBUF_DCIEN))
             ibuf_type = id_IBUF_IBUFDISABLE;
-        if (xil_iob->type == id_IBUF_INTERMDISABLE || xil_iob->type == id_IOBUF_INTERMDISABLE)
+        if (xil_iob->type.in(id_IBUF_INTERMDISABLE, id_IOBUF_INTERMDISABLE))
             ibuf_type = id_IBUF_INTERMDISABLE;
 
         CellInfo *inbuf = insert_ibuf(int_name(xil_iob->name, "IBUF", is_se_iobuf), ibuf_type, pad_net, top_out);
@@ -139,13 +137,10 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
             subcells.push_back(obuf);
     }
 
-    bool is_diff_ibuf = xil_iob->type == id_IBUFDS || xil_iob->type == id_IBUFDS_INTERMDISABLE ||
-                        xil_iob->type == id_IBUFDS;
-    bool is_diff_iobuf = xil_iob->type == id_IOBUFDS || xil_iob->type == id_IOBUFDS_DCIEN;
-    bool is_diff_out_iobuf = xil_iob->type == id_IOBUFDS_DIFF_OUT ||
-                             xil_iob->type == id_IOBUFDS_DIFF_OUT_DCIEN ||
-                             xil_iob->type == id_IOBUFDS_DIFF_OUT_INTERMDISABLE;
-    bool is_diff_obuf = xil_iob->type == id_OBUFDS || xil_iob->type == id_OBUFTDS;
+    bool is_diff_ibuf = xil_iob->type.in(id_IBUFDS, id_IBUFDS_INTERMDISABLE, id_IBUFDS);
+    bool is_diff_iobuf = xil_iob->type.in(id_IOBUFDS, id_IOBUFDS_DCIEN);
+    bool is_diff_out_iobuf = xil_iob->type.in(id_IOBUFDS_DIFF_OUT, id_IOBUFDS_DIFF_OUT_DCIEN, id_IOBUFDS_DIFF_OUT_INTERMDISABLE);
+    bool is_diff_obuf = xil_iob->type.in(id_OBUFDS, id_OBUFTDS);
 
     if (is_diff_ibuf || is_diff_iobuf) {
         NetInfo *pad_p_net =
@@ -209,7 +204,7 @@ void XC7Packer::decompose_iob(CellInfo *xil_iob, bool is_hr, const std::string &
             inv->attrs[id_X_IOB_SITE_TYPE] = std::string("IOB33S");
         }
 
-        bool has_dci = xil_iob->type == id_IOBUFDS_DCIEN || xil_iob->type == id_IOBUFDSE3;
+        bool has_dci = xil_iob->type.in(id_IOBUFDS_DCIEN, id_IOBUFDSE3);
 
         CellInfo *obuf_p = insert_obuf(int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
                                        (is_diff_iobuf || is_diff_out_iobuf || (xil_iob->type == id_OBUFTDS))
@@ -641,8 +636,7 @@ void XC7Packer::pack_iologic()
         CellInfo *outbuf = nullptr;
         for (auto &usr : net->users) {
             IdString type = usr.cell->type;
-            if (type == id_IOB33_OUTBUF || type == id_IOB33M_OUTBUF
-                || type == id_IOB18_OUTBUF_DCIEN || type == id_IOB18M_OUTBUF_DCIEN) {
+            if (type.in(id_IOB33_OUTBUF, id_IOB33M_OUTBUF, id_IOB18_OUTBUF_DCIEN, id_IOB18M_OUTBUF_DCIEN)) {
                 if (outbuf != nullptr)
                     return (CellInfo *)nullptr; // drives multiple outputs
                 outbuf = usr.cell;
@@ -651,8 +645,7 @@ void XC7Packer::pack_iologic()
                 if (dataout != usr.cell->ports.end()) {
                         for (auto &user : dataout->second.net->users) {
                             IdString dataout_type = user.cell->type;
-                            if (dataout_type == id_IOB18_OUTBUF_DCIEN ||
-                                dataout_type == id_IOB18M_OUTBUF_DCIEN) {
+                            if (dataout_type.in(id_IOB18_OUTBUF_DCIEN, id_IOB18M_OUTBUF_DCIEN)) {
                                 if (outbuf != nullptr)
                                     return (CellInfo *)nullptr; // drives multiple outputs
                                 outbuf = user.cell;
@@ -831,7 +824,7 @@ void XC7Packer::pack_idelayctrl()
     std::set<std::string> ioctrl_sites;
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id_IDELAYE2_IDELAYE2 || ci->type == id_ODELAYE2_ODELAYE2) {
+        if (ci->type.in(id_IDELAYE2_IDELAYE2, id_ODELAYE2_ODELAYE2)) {
             if (!ci->attrs.count(id_BEL))
                 continue;
             ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(id_X_IO_BEL).as_string()));

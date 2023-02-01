@@ -342,7 +342,7 @@ void XilinxPacker::constrain_muxf_tree(CellInfo *curr, CellInfo *base, int zoffs
         curr->cluster = base->name;
         base->constr_children.push_back(curr);
     }
-    if (curr->type == id_MUXF7 || curr->type == id_MUXF8 || curr->type == id_MUXF9) {
+    if (curr->type.in(id_MUXF7, id_MUXF8, id_MUXF9)) {
         NetInfo *i0 = curr->getPort(id_I0), *i1 = curr->getPort(id_I1);
         if (i0 != nullptr && i0->driver.cell != nullptr)
             constrain_muxf_tree(i0->driver.cell, base, zoffset + input_spacing);
@@ -657,7 +657,7 @@ void USPacker::pack_bram()
     // Rewrite byte enables according to data width
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id_RAMB18E2 || ci->type == id_RAMB36E2) {
+        if (ci->type.in(id_RAMB18E2, id_RAMB36E2)) {
             for (char port : {'A', 'B'}) {
                 int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
                 int we_width;
@@ -772,7 +772,7 @@ void XC7Packer::pack_bram()
     // Rewrite byte enables according to data width
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id_RAMB18E1 || ci->type == id_RAMB36E1) {
+        if (ci->type.in(id_RAMB18E1, id_RAMB36E1)) {
             for (char port : {'A', 'B'}) {
                 int write_width = int_or_default(ci->params, ctx->id(std::string("WRITE_WIDTH_") + port), 18);
                 int we_width;
@@ -1013,8 +1013,7 @@ void Arch::assignCellInfo(CellInfo *cell)
                                 bool_or_default(cell->params, id_IS_PRE_INVERTED, false);
         cell->ffInfo.is_latch = cell->attrs.count(id_X_FF_AS_LATCH);
         cell->ffInfo.ffsync = cell->attrs.count(id_X_FFSYNC);
-    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id_SELMUX2_1) {
+    } else if (cell->type.in(id_F7MUX, id_F8MUX, id_F9MUX, id_SELMUX2_1)) {
         cell->muxInfo.sel = cell->getPort(id_S0);
         cell->muxInfo.out = cell->getPort(id_OUT);
     } else if (cell->type == id_CARRY8) {

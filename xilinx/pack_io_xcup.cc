@@ -119,11 +119,9 @@ static const pool<std::string> pseudo_diff_iotypes = {
 
 void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
 {
-    bool is_se_ibuf = xil_iob->type == id_IBUF || xil_iob->type == id_IBUF_IBUFDISABLE ||
-                      xil_iob->type == id_IBUF_INTERMDISABLE || xil_iob->type == id_IBUFE3;
-    bool is_se_iobuf = xil_iob->type == id_IOBUF || xil_iob->type == id_IOBUF_DCIEN ||
-                       xil_iob->type == id_IOBUF_INTERMDISABLE || xil_iob->type == id_IOBUFE3;
-    bool is_se_obuf = xil_iob->type == id_OBUF || xil_iob->type == id_OBUFT;
+    bool is_se_ibuf = xil_iob->type.in(id_IBUF, id_IBUF_IBUFDISABLE, id_IBUF_INTERMDISABLE, id_IBUFE3);
+    bool is_se_iobuf = xil_iob->type.in(id_IOBUF, id_IOBUF_DCIEN, id_IOBUF_INTERMDISABLE, id_IOBUFE3);
+    bool is_se_obuf = xil_iob->type.in(id_OBUF, id_OBUFT);
 
     auto pad_site = [&](NetInfo *n) {
         for (auto user : n->users)
@@ -186,7 +184,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
         NPNR_ASSERT(pad_net != nullptr);
         std::string site = pad_site(pad_net);
         xil_iob->disconnectPort(is_se_iobuf ? id_IO : id_O);
-        bool has_dci = xil_iob->type == id_IOBUF_DCIEN || xil_iob->type == id_IOBUFE3;
+        bool has_dci = xil_iob->type.in(id_IOBUF_DCIEN, id_IOBUFE3);
         CellInfo *obuf = insert_obuf(
                 int_name(xil_iob->name, (is_se_iobuf || xil_iob->type == id_OBUFT) ? "OBUFT" : "OBUF",
                          !is_se_obuf),
@@ -198,17 +196,11 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
             subcells.push_back(obuf);
     }
 
-    bool is_diff_ibuf = xil_iob->type == id_IBUFDS || xil_iob->type == id_IBUFDS_INTERMDISABLE ||
-                        xil_iob->type == id_IBUFDSE3;
-    bool is_diff_out_ibuf = xil_iob->type == id_IBUFDS_DIFF_OUT ||
-                            xil_iob->type == id_IBUFDS_DIFF_OUT_IBUFDISABLE ||
-                            xil_iob->type == id_IBUFDS_DIFF_OUT_INTERMDISABLE;
-    bool is_diff_iobuf = xil_iob->type == id_IOBUFDS || xil_iob->type == id_IOBUFDS_DCIEN ||
-                         xil_iob->type == id_IOBUFDSE3;
-    bool is_diff_out_iobuf = xil_iob->type == id_IOBUFDS_DIFF_OUT ||
-                             xil_iob->type == id_IOBUFDS_DIFF_OUT_DCIEN ||
-                             xil_iob->type == id_IOBUFDS_DIFF_OUT_INTERMDISABLE;
-    bool is_diff_obuf = xil_iob->type == id_OBUFDS || xil_iob->type == id_OBUFTDS;
+    bool is_diff_ibuf = xil_iob->type.in(id_IBUFDS, id_IBUFDS_INTERMDISABLE, id_IBUFDSE3);
+    bool is_diff_out_ibuf = xil_iob->type.in(id_IBUFDS_DIFF_OUT, id_IBUFDS_DIFF_OUT_IBUFDISABLE, id_IBUFDS_DIFF_OUT_INTERMDISABLE);
+    bool is_diff_iobuf = xil_iob->type.in(id_IOBUFDS, id_IOBUFDS_DCIEN, id_IOBUFDSE3);
+    bool is_diff_out_iobuf = xil_iob->type.in(id_IOBUFDS_DIFF_OUT, id_IOBUFDS_DIFF_OUT_DCIEN, id_IOBUFDS_DIFF_OUT_INTERMDISABLE);
+    bool is_diff_obuf = xil_iob->type.in(id_OBUFDS, id_OBUFTDS);
     bool is_pseudo_diff_out = pseudo_diff_iotypes.count(iostandard);
 
     if (is_diff_ibuf || is_diff_out_ibuf || is_diff_iobuf || is_diff_out_iobuf) {
@@ -277,7 +269,7 @@ void USPacker::decompose_iob(CellInfo *xil_iob, const std::string &iostandard)
                                           xil_iob->getPort(id_I), inv_i);
             inv->attrs[id_BEL] = site_p + "/OUTINV";
 
-            bool has_dci = xil_iob->type == id_IOBUFDS_DCIEN || xil_iob->type == id_IOBUFDSE3;
+            bool has_dci = xil_iob->type.in(id_IOBUFDS_DCIEN, id_IOBUFDSE3);
 
             CellInfo *obuf_p = insert_obuf(
                     int_name(xil_iob->name, is_diff_obuf ? "P" : "OBUFTDS$subcell$P"),
@@ -615,7 +607,7 @@ void USPacker::pack_iologic()
     hp_iol_rules[id_IDELAYE3].new_type = id_IDELAYE3;
 
     auto is_hpio = [&](BelId bel) {
-        return ctx->getBelTileType(bel) == id_HPIO_L || ctx->getBelTileType(bel) == id_HPIO_RIGHT;
+        return ctx->getBelTileType(bel).in(id_HPIO_L, id_HPIO_RIGHT);
     };
 
     dict<IdString, BelId> iodelay_to_io;
@@ -670,7 +662,7 @@ void USPacker::pack_iologic()
 
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id_IDDRE1 || ci->type == id_ISERDESE3) {
+        if (ci->type.in(id_IDDRE1, id_ISERDESE3)) {
             NetInfo *d = ci->getPort(id_D);
             if (d == nullptr || d->driver.cell == nullptr)
                 log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
@@ -755,7 +747,7 @@ void USPacker::pack_idelayctrl()
     std::set<std::string> ioctrl_sites;
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id_IDELAYE3 || ci->type == id_ODELAYE3) {
+        if (ci->type.in(id_IDELAYE3, id_ODELAYE3)) {
             if (!ci->attrs.count(id_BEL))
                 continue;
             ioctrl_sites.insert(get_ioctrl_site(ci->attrs.at(id_BEL).as_string()));

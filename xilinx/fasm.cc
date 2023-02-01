@@ -980,7 +980,7 @@ struct FasmBackend
                 write_bit("IFF.ZSRVAL_Q1");
                 write_bit("IFF.ZSRVAL_Q2");
             }
-        } else if (ci->type == id_OLOGICE2_OUTFF || ci->type == id_OLOGICE3_OUTFF) {
+        } else if (ci->type.in(id_OLOGICE2_OUTFF, id_OLOGICE3_OUTFF)) {
             std::string edge = str_or_default(ci->params, id_DDR_CLK_EDGE, "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
 
@@ -1113,13 +1113,7 @@ struct FasmBackend
             if (ci->type == id_PAD) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == id_ILOGICE3_IFF ||
-                       ci->type == id_OLOGICE2_OUTFF ||
-                       ci->type == id_OLOGICE3_OUTFF ||
-                       ci->type == id_OSERDESE2_OSERDESE2 ||
-                       ci->type == id_ISERDESE2_ISERDESE2 ||
-                       ci->type == id_IDELAYE2_IDELAYE2   ||
-                       ci->type == id_ODELAYE2_ODELAYE2) {
+            } else if (ci->type.in(id_ILOGICE3_IFF, id_OLOGICE2_OUTFF, id_OLOGICE3_OUTFF, id_OSERDESE2_OSERDESE2, id_ISERDESE2_ISERDESE2, id_IDELAYE2_IDELAYE2, id_ODELAYE2_ODELAYE2)) {
                 write_iol_config(ci);
                 blank();
             }

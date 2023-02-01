@@ -375,7 +375,7 @@ void XilinxPacker::pack_dram()
 
                 packed_cells.insert(cell->name);
             }
-        } else if (cs.memtype == id_RAM128X1D || cs.memtype == id_RAM256X1D) {
+        } else if (cs.memtype.in(id_RAM128X1D, id_RAM256X1D)) {
             // Split these cells into write and read ports and associated mux tree
             bool m256 = cs.memtype == id_RAM256X1D;
             for (CellInfo *ci : group.second) {
@@ -431,7 +431,7 @@ void XilinxPacker::pack_dram()
     // Whole-SLICE DRAM
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id_RAM64M || ci->type == id_RAM32M) {
+        if (ci->type.in(id_RAM64M, id_RAM32M)) {
             bool is_64 = (cell.second->type == id_RAM64M);
             int abits = is_64 ? 6 : 5;
             int dbits = is_64 ? 1 : 2;

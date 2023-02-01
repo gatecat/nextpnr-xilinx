@@ -596,7 +596,7 @@ bool Arch::isBelLocationValid(BelId bel, bool explain_invalid) const
             return xc7_logic_tile_valid(belTileType, lts);
         else
             return xcu_logic_tile_valid(belTileType, lts);
-    } else if (belTileType == id_BRAM || belTileType == id_BRAM_L || belTileType == id_BRAM_R) {
+    } else if (belTileType.in(id_BRAM, id_BRAM_L, id_BRAM_R)) {
         if (!tileStatus[bel.tile].bts)
             return true;
         BRAMTileStatus *bts = tileStatus[bel.tile].bts;

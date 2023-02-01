@@ -131,7 +131,7 @@ void USPacker::pack_plls()
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         // Preplace PLLs to make use of dedicated/short routing paths
-        if (ci->type == id_MMCM_MMCM_TOP || ci->type == id_PLL_PLL_TOP)
+        if (ci->type.in(id_MMCM_MMCM_TOP, id_PLL_PLL_TOP))
             try_preplace(ci, id_CLKIN1);
         if (ci->type == id_MMCM_MMCM_TOP) {
             // Fixup parameters
@@ -178,7 +178,7 @@ void USPacker::pack_gbs()
         CellInfo *ci = cell.second.get();
         if (ci->type == id_BUFGCTRL)
             try_preplace(ci, id_I0);
-        if (ci->type == id_BUFCE_BUFG_PS || ci->type == id_BUFGCE_DIV_BUFGCE_DIV || ci->type == id_BUFCE_BUFCE)
+        if (ci->type.in(id_BUFCE_BUFG_PS, id_BUFGCE_DIV_BUFGCE_DIV, id_BUFCE_BUFCE))
             try_preplace(ci, id_I);
     }
 }

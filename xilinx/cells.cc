@@ -49,7 +49,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("I", PORT_IN);
         add_port("WE", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == id_MUXF7 || type == id_MUXF8 || type == id_MUXF9) {
+    } else if (type.in(id_MUXF7, id_MUXF8, id_MUXF9)) {
         add_port("I0", PORT_IN);
         add_port("I1", PORT_IN);
         add_port("S", PORT_IN);
@@ -87,7 +87,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("IBUFDISABLE", PORT_IN);
         add_port("T", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == id_OBUF || type == id_IBUF) {
+    } else if (type.in(id_OBUF, id_IBUF)) {
         add_port("I", PORT_IN);
         add_port("O", PORT_OUT);
     } else if (type == id_OBUFT) {

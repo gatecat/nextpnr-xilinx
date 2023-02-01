@@ -895,7 +895,7 @@ struct Arch : BaseArch<ArchRanges>
     {
         // if (chip_info->height > 600 && (bel.tile / chip_info->width) < 752) // constrain to SLR0
         //    return true;
-        if ((getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC) &&
+        if ((getBelType(bel).in(id_PSEUDO_GND, id_PSEUDO_VCC)) &&
             ((bel.tile % chip_info->width) != 0))
             return true; // PSEUDO drivers must be at x=0 to have access to the global pseudo-network
         return false;
@@ -1550,23 +1550,19 @@ struct Arch : BaseArch<ArchRanges>
     bool isLogicTile(BelId bel) const
     {
         IdString belTileType = getBelTileType(bel);
-        return (belTileType == id_CLEL_L || belTileType == id_CLEL_R || belTileType == id_CLEM ||
-                belTileType == id_CLEM_R || belTileType == id_CLBLL_L || belTileType == id_CLBLL_R ||
-                belTileType == id_CLBLM_L || belTileType == id_CLBLM_R);
+        return (belTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L, id_CLBLM_R));
     }
     bool isBRAMTile(BelId bel) const
     {
         IdString belTileType = getBelTileType(bel);
-        return belTileType == id_BRAM || belTileType == id_BRAM_L || belTileType == id_BRAM_R;
+        return belTileType.in(id_BRAM, id_BRAM_L, id_BRAM_R);
     }
     /*bool isLogicTile(WireId wire) const
     {
         if (wire.tile == -1)
             return false;
         IdString wireTileType = IdString(chip_info->tile_insts[wire.tile].type);
-        return (wireTileType == id_CLEL_L || wireTileType == id_CLEL_R || wireTileType == id_CLEM ||
-                wireTileType == id_CLEM_R || wireTileType == id_CLBLL_L || wireTileType == id_CLBLL_R ||
-                wireTileType == id_CLBLM_L || wireTileType == id_CLBLM_R);
+        return (wireTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L, id_CLBLM_R));
     }*/
 
     Loc getSiteLocInTile(BelId bel) const

@@ -693,7 +693,7 @@ void Arch::routeVcc()
     WireId wire0 = getCtx()->getNetinfoSourceWire(vcc);
     Loc drvloc = getBelLocation(vcc->driver.cell->bel);
     BelId bel = vcc->driver.cell->bel;
-    log_info("%d %d %d %d\n", vcc->driver.cell->bel.tile, drvloc.x, drvloc.y, (getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC));
+    log_info("%d %d %d %d\n", vcc->driver.cell->bel.tile, drvloc.x, drvloc.y, (getBelType(bel).in(id_PSEUDO_GND, id_PSEUDO_VCC)));
     log_info("%s\n", nameOfWire(wire0));
     for (auto pip1 : getPipsDownhill(wire0)) {
         WireId wire1 = getPipDstWire(pip1);
@@ -751,8 +751,7 @@ void Arch::routeClock()
 
         // check if we have a global clock net, skip otherwise
         bool is_global = false;
-        if ((clk_net->driver.cell->type == id_BUFGCTRL || clk_net->driver.cell->type == id_BUFCE_BUFG_PS ||
-             clk_net->driver.cell->type == id_BUFCE_BUFCE || clk_net->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
+        if ((clk_net->driver.cell->type.in(id_BUFGCTRL, id_BUFCE_BUFG_PS, id_BUFCE_BUFCE, id_BUFGCE_DIV_BUFGCE_DIV)) &&
             clk_net->driver.port == id_O)
             is_global = true;
         else if (clk_net->driver.cell->type == id_PLLE2_ADV_PLLE2_ADV && clk_net->users.entries() == 1 &&
@@ -1185,7 +1184,7 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
             int z = locInfo(cell->bel).bel_data[cell->bel.index].z;
             IdString tiletype = getBelTileType(cell->bel);
             bool is_lut5 = (z & 0xF) == BEL_5LUT;
-            bool is_slicem = (tiletype == id_CLBLM_L || tiletype == id_CLBLM_R) && (z < 64);
+            bool is_slicem = (tiletype.in(id_CLBLM_L, id_CLBLM_R)) && (z < 64);
             IdString variant = is_slicem ? (is_lut5 ? id_LUT_OR_MEM5LRAM : id_LUT_OR_MEM6LRAM)
                                          : (is_lut5 ? id_LUT5 : id_LUT6);
 
@@ -1195,9 +1194,8 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
                                           (is_lut5 && toPort == id_O6) ? id_O5 : toPort, delay);
         }
 
-        if (fromPort == id_A1 || fromPort == id_A2 || fromPort == id_A3 || fromPort == id_A4 || fromPort == id_A5 ||
-            fromPort == id_A6) {
-            if (toPort == id_O5 || toPort == id_O6) {
+        if (fromPort.in(id_A1, id_A2, id_A3, id_A4, id_A5, id_A6)) {
+            if (toPort.in(id_O5, id_O6)) {
                 delay = DelayQuad(200); // FIXME
                 return true;
             }
@@ -1206,15 +1204,14 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
         if (xc7 && inst_id != -1) {
             return xc7_cell_timing_lookup(tt_id, inst_id, id_CARRY4, fromPort, toPort, delay);
         }
-    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id_SELMUX2_1) {
+    } else if (cell->type.in(id_F7MUX, id_F8MUX, id_F9MUX, id_SELMUX2_1)) {
         if (xc7 && inst_id != -1) {
             return xc7_cell_timing_lookup(tt_id, inst_id, cell->type, fromPort, toPort, delay);
         }
         delay = DelayQuad(100);
         return true;
     } else if (cell->type == id_BUFGCTRL) {
-        if (fromPort == id_I0 || fromPort == id_I1)
+        if (fromPort.in(id_I0, id_I1))
             if (toPort == id_O) {
                 delay = DelayQuad(200); // FIXME
                 return true;
@@ -1228,9 +1225,9 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
     if (cell->type == id_SLICE_LUTX) {
         if (cell->getPort(id_O5) == nullptr && cell->getPort(id_O6) == nullptr)
             return TMG_IGNORE;
-        if (port == id_A1 || port == id_A2 || port == id_A3 || port == id_A4 || port == id_A5 || port == id_A6)
+        if (port.in(id_A1, id_A2, id_A3, id_A4, id_A5, id_A6))
             return TMG_COMB_INPUT;
-        else if (port == id_O5 || port == id_O6)
+        else if (port.in(id_O5, id_O6))
             return TMG_COMB_OUTPUT;
     } else if (cell->type == id_CARRY4 && cell->bel != BelId()) {
         return cell->ports.at(port).type == PORT_OUT ? TMG_COMB_OUTPUT : TMG_COMB_INPUT;
@@ -1244,8 +1241,7 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
             clockInfoCount = 1;
             return TMG_REGISTER_INPUT;
         }
-    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id_SELMUX2_1) {
+    } else if (cell->type.in(id_F7MUX, id_F8MUX, id_F9MUX, id_SELMUX2_1)) {
         if (port == id_OUT)
             return TMG_COMB_OUTPUT;
         else
@@ -1257,7 +1253,7 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
         if (port == id_I)
             return TMG_ENDPOINT;
     } else if (cell->type == id_BUFGCTRL) {
-        if (port == id_I0 || port == id_I1)
+        if (port.in(id_I0, id_I1))
             return TMG_COMB_INPUT;
         if (port == id_O)
             return TMG_COMB_OUTPUT;
