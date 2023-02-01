@@ -59,15 +59,15 @@ BelId XilinxPacker::find_bel_with_short_route(WireId source, IdString beltype, I
 
 void XilinxPacker::try_preplace(CellInfo *cell, IdString port)
 {
-    if (cell->attrs.count(ctx->id("BEL")))
+    if (cell->attrs.count(id_BEL))
         return;
     NetInfo *n = cell->getPort(port);
     if (n == nullptr || n->driver.cell == nullptr)
         return;
     CellInfo *drv = n->driver.cell;
-    if (!drv->attrs.count(ctx->id("BEL")))
+    if (!drv->attrs.count(id_BEL))
         return;
-    BelId drv_bel = ctx->getBelByNameStr(drv->attrs.at(ctx->id("BEL")).as_string());
+    BelId drv_bel = ctx->getBelByNameStr(drv->attrs.at(id_BEL).as_string());
     if (drv_bel == BelId())
         return;
     WireId drv_wire = ctx->getBelPinWire(drv_bel, n->driver.port);
@@ -76,7 +76,7 @@ void XilinxPacker::try_preplace(CellInfo *cell, IdString port)
     BelId tgt = find_bel_with_short_route(drv_wire, cell->type, port);
     if (tgt != BelId()) {
         used_bels.insert(tgt);
-        cell->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(tgt));
+        cell->attrs[id_BEL] = std::string(ctx->nameOfBel(tgt));
         log_info("    Constrained %s '%s' to bel '%s' based on dedicated routing\n", cell->type.c_str(ctx),
                  ctx->nameOf(cell), ctx->nameOfBel(tgt));
     }
@@ -84,11 +84,11 @@ void XilinxPacker::try_preplace(CellInfo *cell, IdString port)
 
 void XilinxPacker::preplace_unique(CellInfo *cell)
 {
-    if (cell->attrs.count(ctx->id("BEL")))
+    if (cell->attrs.count(id_BEL))
         return;
     for (auto bel : ctx->getBels()) {
         if (ctx->checkBelAvail(bel) && ctx->getBelType(bel) == cell->type && !used_bels.count(bel)) {
-            cell->attrs[ctx->id("BEL")] = std::string(ctx->nameOfBel(bel));
+            cell->attrs[id_BEL] = std::string(ctx->nameOfBel(bel));
             used_bels.insert(bel);
             return;
         }
@@ -99,10 +99,10 @@ void USPacker::prepare_clocking()
 {
     log_info("Preparing clocking...\n");
     dict<IdString, IdString> upgrade;
-    upgrade[ctx->id("MMCME2_ADV")] = ctx->id("MMCME4_ADV");
-    upgrade[ctx->id("MMCME4_BASIC")] = ctx->id("MMCME4_ADV");
-    upgrade[ctx->id("PLLE4_BASIC")] = ctx->id("PLLE4_ADV");
-    upgrade[ctx->id("BUFG")] = ctx->id("BUFGCE");
+    upgrade[id_MMCME2_ADV] = id_MMCME4_ADV;
+    upgrade[id_MMCME4_BASIC] = id_MMCME4_ADV;
+    upgrade[id_PLLE4_BASIC] = id_PLLE4_ADV;
+    upgrade[id_BUFG] = id_BUFGCE;
 
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
@@ -110,8 +110,8 @@ void USPacker::prepare_clocking()
             IdString new_type = upgrade.at(ci->type);
             ci->type = new_type;
         }
-        if (ci->attrs.count(ctx->id("BEL")))
-            used_bels.insert(ctx->getBelByNameStr(ci->attrs.at(ctx->id("BEL")).as_string()));
+        if (ci->attrs.count(id_BEL))
+            used_bels.insert(ctx->getBelByNameStr(ci->attrs.at(id_BEL).as_string()));
     }
 }
 
@@ -125,14 +125,14 @@ void USPacker::pack_plls()
     };
 
     dict<IdString, XFormRule> pll_rules;
-    pll_rules[ctx->id("MMCME4_ADV")].new_type = id_MMCM_MMCM_TOP;
-    pll_rules[ctx->id("PLLE4_ADV")].new_type = id_PLL_PLL_TOP;
+    pll_rules[id_MMCME4_ADV].new_type = id_MMCM_MMCM_TOP;
+    pll_rules[id_PLLE4_ADV].new_type = id_PLL_PLL_TOP;
     generic_xform(pll_rules);
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         // Preplace PLLs to make use of dedicated/short routing paths
         if (ci->type == id_MMCM_MMCM_TOP || ci->type == id_PLL_PLL_TOP)
-            try_preplace(ci, ctx->id("CLKIN1"));
+            try_preplace(ci, id_CLKIN1);
         if (ci->type == id_MMCM_MMCM_TOP) {
             // Fixup parameters
             for (int i = 1; i <= 2; i++)
@@ -144,12 +144,12 @@ void USPacker::pack_plls()
                 set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_PHASE"), Property(0));
                 set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_USE_FINE_PS"), Property("FALSE"));
             }
-            set_default(ci, ctx->id("COMPENSATION"), Property("INTERNAL"));
+            set_default(ci, id_COMPENSATION, Property("INTERNAL"));
 
             // Fixup routing
-            if (str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL") == "INTERNAL") {
-                ci->disconnectPort(ctx->id("CLKFBIN"));
-                ci->connectPort(ctx->id("CLKFBIN"), ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
+            if (str_or_default(ci->params, id_COMPENSATION, "INTERNAL") == "INTERNAL") {
+                ci->disconnectPort(id_CLKFBIN);
+                ci->connectPort(id_CLKFBIN, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
         }
     }
@@ -160,14 +160,14 @@ void USPacker::pack_gbs()
     log_info("Packing global buffers...\n");
     dict<IdString, XFormRule> gb_rules;
     gb_rules[id_BUFGCTRL].new_type = id_BUFGCTRL;
-    gb_rules[ctx->id("BUFG_PS")].new_type = id_BUFCE_BUFG_PS;
-    gb_rules[ctx->id("BUFGCE_DIV")].new_type = id_BUFGCE_DIV_BUFGCE_DIV;
-    gb_rules[ctx->id("BUFGCE")].new_type = id_BUFCE_BUFCE;
+    gb_rules[id_BUFG_PS].new_type = id_BUFCE_BUFG_PS;
+    gb_rules[id_BUFGCE_DIV].new_type = id_BUFGCE_DIV_BUFGCE_DIV;
+    gb_rules[id_BUFGCE].new_type = id_BUFCE_BUFCE;
 
     // Make sure prerequisites are set up first
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == ctx->id("PSS_ALTO_CORE"))
+        if (ci->type == id_PSS_ALTO_CORE)
             preplace_unique(ci);
     }
 
@@ -177,9 +177,9 @@ void USPacker::pack_gbs()
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_BUFGCTRL)
-            try_preplace(ci, ctx->id("I0"));
+            try_preplace(ci, id_I0);
         if (ci->type == id_BUFCE_BUFG_PS || ci->type == id_BUFGCE_DIV_BUFGCE_DIV || ci->type == id_BUFCE_BUFCE)
-            try_preplace(ci, ctx->id("I"));
+            try_preplace(ci, id_I);
     }
 }
 

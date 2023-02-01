@@ -36,31 +36,31 @@ void XC7Packer::prepare_clocking()
 {
     log_info("Preparing clocking...\n");
     dict<IdString, IdString> upgrade;
-    upgrade[ctx->id("MMCME2_BASE")] = ctx->id("MMCME2_ADV");
-    upgrade[ctx->id("PLLE2_BASE")] = ctx->id("PLLE2_ADV");
+    upgrade[id_MMCME2_BASE] = id_MMCME2_ADV;
+    upgrade[id_PLLE2_BASE] = id_PLLE2_ADV;
 
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (upgrade.count(ci->type)) {
             IdString new_type = upgrade.at(ci->type);
             ci->type = new_type;
-        } else if (ci->type == ctx->id("BUFG")) {
-            ci->type = ctx->id("BUFGCTRL");
-            ci->renamePort(ctx->id("I"), ctx->id("I0"));
+        } else if (ci->type == id_BUFG) {
+            ci->type = id_BUFGCTRL;
+            ci->renamePort(id_I, id_I0);
             tie_port(ci, "CE0", true, true);
             tie_port(ci, "S0", true, true);
             tie_port(ci, "S1", false, true);
             tie_port(ci, "IGNORE0", true, true);
-        } else if (ci->type == ctx->id("BUFGCE")) {
-            ci->type = ctx->id("BUFGCTRL");
-            ci->renamePort(ctx->id("I"), ctx->id("I0"));
-            ci->renamePort(ctx->id("CE"), ctx->id("CE0"));
+        } else if (ci->type == id_BUFGCE) {
+            ci->type = id_BUFGCTRL;
+            ci->renamePort(id_I, id_I0);
+            ci->renamePort(id_CE, id_CE0);
             tie_port(ci, "S0", true, true);
             tie_port(ci, "S1", false, true);
             tie_port(ci, "IGNORE0", true, true);
         }
-        if (ci->attrs.count(ctx->id("BEL")))
-            used_bels.insert(ctx->getBelByNameStr(ci->attrs.at(ctx->id("BEL")).as_string()));
+        if (ci->attrs.count(id_BEL))
+            used_bels.insert(ctx->getBelByNameStr(ci->attrs.at(id_BEL).as_string()));
     }
 }
 
@@ -74,14 +74,14 @@ void XC7Packer::pack_plls()
     };
 
     dict<IdString, XFormRule> pll_rules;
-    pll_rules[ctx->id("MMCME2_ADV")].new_type = ctx->id("MMCME2_ADV_MMCME2_ADV");
-    pll_rules[ctx->id("PLLE2_ADV")].new_type = ctx->id("PLLE2_ADV_PLLE2_ADV");
+    pll_rules[id_MMCME2_ADV].new_type = id_MMCME2_ADV_MMCME2_ADV;
+    pll_rules[id_PLLE2_ADV].new_type = id_PLLE2_ADV_PLLE2_ADV;
     generic_xform(pll_rules);
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         // Preplace PLLs to make use of dedicated/short routing paths
         if (ci->type == id_MMCM_MMCM_TOP || ci->type == id_PLL_PLL_TOP)
-            try_preplace(ci, ctx->id("CLKIN1"));
+            try_preplace(ci, id_CLKIN1);
         if (ci->type == id_MMCM_MMCM_TOP) {
             // Fixup parameters
             for (int i = 1; i <= 2; i++)
@@ -93,12 +93,12 @@ void XC7Packer::pack_plls()
                 set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_PHASE"), Property(0));
                 set_default(ci, ctx->id("CLKOUT" + std::to_string(i) + "_USE_FINE_PS"), Property("FALSE"));
             }
-            set_default(ci, ctx->id("COMPENSATION"), Property("INTERNAL"));
+            set_default(ci, id_COMPENSATION, Property("INTERNAL"));
 
             // Fixup routing
-            if (str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL") == "INTERNAL") {
-                ci->disconnectPort(ctx->id("CLKFBIN"));
-                ci->connectPort(ctx->id("CLKFBIN"), ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
+            if (str_or_default(ci->params, id_COMPENSATION, "INTERNAL") == "INTERNAL") {
+                ci->disconnectPort(id_CLKFBIN);
+                ci->connectPort(id_CLKFBIN, ctx->nets[ctx->id("$PACKER_VCC_NET")].get());
             }
         }
     }
@@ -109,14 +109,14 @@ void XC7Packer::pack_gbs()
     log_info("Packing global buffers...\n");
     dict<IdString, XFormRule> gb_rules;
     gb_rules[id_BUFGCTRL].new_type = id_BUFGCTRL;
-    gb_rules[ctx->id("BUFGCTRL")].new_type = ctx->id("BUFGCTRL");
+    gb_rules[id_BUFGCTRL].new_type = id_BUFGCTRL;
 
     generic_xform(gb_rules);
 
     // Make sure prerequisites are set up first
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == ctx->id("PS7_PS7"))
+        if (ci->type == id_PS7_PS7)
             preplace_unique(ci);
     }
 
@@ -124,9 +124,9 @@ void XC7Packer::pack_gbs()
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id_BUFGCTRL)
-            try_preplace(ci, ctx->id("I0"));
-        if (ci->type == ctx->id("BUFG_BUFG"))
-            try_preplace(ci, ctx->id("I"));
+            try_preplace(ci, id_I0);
+        if (ci->type == id_BUFG_BUFG)
+            try_preplace(ci, id_I);
     }
 }
 

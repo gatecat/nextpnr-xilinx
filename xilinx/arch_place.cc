@@ -716,8 +716,8 @@ void Arch::fixupPlacement()
                 ++index;
             }
             lut5->renamePort(id_O6, id_O5);
-            lut5->attrs.erase(id("X_ORIG_PORT_O6"));
-            lut5->attrs[id("X_ORIG_PORT_O5")] = std::string("O");
+            lut5->attrs.erase(id_X_ORIG_PORT_O6);
+            lut5->attrs[id_X_ORIG_PORT_O5] = std::string("O");
 
             if (lut6) {
                 if (!lut6->ports.count(id_A6)) {
@@ -730,7 +730,7 @@ void Arch::fixupPlacement()
     }
     for (auto& cell : cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id("PSS_ALTO_CORE")) {
+        if (ci->type == id_PSS_ALTO_CORE) {
             log_info("Tieing unused PSS inputs to constants...\n");
             for (IdString pname : getBelPins(ci->bel)) {
                 if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr &&
@@ -784,15 +784,15 @@ void Arch::fixupPlacement()
                 }
                 ci->connectPort(pname, nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get());
             }
-        } else if (ci->type == id("BITSLICE_CONTROL_BEL")) {
+        } else if (ci->type == id_BITSLICE_CONTROL_BEL) {
             dict<IdString, bool> constpins;
-            constpins[id("EN_VTC")] = true;
-            constpins[id("DLY_TEST_IN")] = false;
-            constpins[id("RIU_NIBBLE_SEL")] = false;
-            constpins[id("TBYTE_IN0")] = false;
-            constpins[id("TBYTE_IN1")] = false;
-            constpins[id("TBYTE_IN2")] = false;
-            constpins[id("TBYTE_IN3")] = false;
+            constpins[id_EN_VTC] = true;
+            constpins[id_DLY_TEST_IN] = false;
+            constpins[id_RIU_NIBBLE_SEL] = false;
+            constpins[id_TBYTE_IN0] = false;
+            constpins[id_TBYTE_IN1] = false;
+            constpins[id_TBYTE_IN2] = false;
+            constpins[id_TBYTE_IN3] = false;
 
             for (auto p : constpins) {
                 if (ci->getPort(p.first) != nullptr)
@@ -1069,8 +1069,8 @@ void Arch::fixupRouting()
     };
     for (auto& cell : cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id("IOB_PAD")) {
-            NetInfo *pad_net = ci->ports[id("PAD")].net;
+        if (ci->type == id_IOB_PAD) {
+            NetInfo *pad_net = ci->ports[id_PAD].net;
             NPNR_ASSERT(pad_net != nullptr && nets.count(pad_net->name));
             std::vector<WireId> unbind;
             for (auto w : pad_net->wires)
@@ -1078,7 +1078,7 @@ void Arch::fixupRouting()
                     unbind.push_back(w.first);
             for (auto w : unbind)
                 unbindWire(w);
-            WireId pad_wire = getBelPinWire(ci->bel, id("PAD"));
+            WireId pad_wire = getBelPinWire(ci->bel, id_PAD);
             bindWire(pad_wire, pad_net, STRENGTH_LOCKED);
             if (pad_net->driver.cell != nullptr) {
                 WireId drv_wire = getCtx()->getNetinfoSourceWire(pad_net);
@@ -1099,10 +1099,10 @@ void Arch::fixupRouting()
      */
     for (auto& cell : cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type == id("OSERDESE3")) {
-            if (ci->getPort(id("T_OUT")) != nullptr)
+        if (ci->type == id_OSERDESE3) {
+            if (ci->getPort(id_T_OUT) != nullptr)
                 continue;
-            ci->params[id("OSERDES_T_BYPASS")] = std::string("TRUE");
+            ci->params[id_OSERDES_T_BYPASS] = std::string("TRUE");
         }
     }
 }

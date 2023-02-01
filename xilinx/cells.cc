@@ -31,7 +31,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("CE", PORT_IN);
         add_port("CLK", PORT_IN);
         add_port("Q", PORT_OUT);
-    } else if (type == ctx->id("RAMD64E")) {
+    } else if (type == id_RAMD64E) {
         for (int i = 0; i < 6; i++)
             add_port("RADR" + std::to_string(i), PORT_IN);
         for (int i = 0; i < 8; i++)
@@ -40,7 +40,7 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("I", PORT_IN);
         add_port("WE", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("RAMD32")) {
+    } else if (type == id_RAMD32) {
         for (int i = 0; i < 5; i++)
             add_port("RADR" + std::to_string(i), PORT_IN);
         for (int i = 0; i < 5; i++)
@@ -49,12 +49,12 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("I", PORT_IN);
         add_port("WE", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("MUXF7") || type == ctx->id("MUXF8") || type == ctx->id("MUXF9")) {
+    } else if (type == id_MUXF7 || type == id_MUXF8 || type == id_MUXF9) {
         add_port("I0", PORT_IN);
         add_port("I1", PORT_IN);
         add_port("S", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("CARRY8")) {
+    } else if (type == id_CARRY8) {
         add_port("CI", PORT_IN);
         add_port("CI_TOP", PORT_IN);
 
@@ -64,47 +64,47 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
             add_port("CO[" + std::to_string(i) + "]", PORT_OUT);
             add_port("O[" + std::to_string(i) + "]", PORT_OUT);
         }
-    } else if (type == ctx->id("MUXCY")) {
+    } else if (type == id_MUXCY) {
         add_port("CI", PORT_IN);
         add_port("DI", PORT_IN);
         add_port("S", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("XORCY")) {
+    } else if (type == id_XORCY) {
         add_port("CI", PORT_IN);
         add_port("LI", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("PAD")) {
+    } else if (type == id_PAD) {
         add_port("PAD", PORT_INOUT);
-    } else if (type == ctx->id("INBUF")) {
+    } else if (type == id_INBUF) {
         add_port("VREF", PORT_IN);
         add_port("PAD", PORT_IN);
         add_port("OSC_EN", PORT_IN);
         for (int i = 0; i < 4; i++)
             add_port("OSC[" + std::to_string(i) + "]", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("IBUFCTRL")) {
+    } else if (type == id_IBUFCTRL) {
         add_port("I", PORT_IN);
         add_port("IBUFDISABLE", PORT_IN);
         add_port("T", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("OBUF") || type == ctx->id("IBUF")) {
+    } else if (type == id_OBUF || type == id_IBUF) {
         add_port("I", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("OBUFT")) {
+    } else if (type == id_OBUFT) {
         add_port("I", PORT_IN);
         add_port("T", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("IOBUF")) {
+    } else if (type == id_IOBUF) {
         add_port("I", PORT_IN);
         add_port("T", PORT_IN);
         add_port("O", PORT_OUT);
         add_port("IO", PORT_INOUT);
-    } else if (type == ctx->id("OBUFT_DCIEN")) {
+    } else if (type == id_OBUFT_DCIEN) {
         add_port("I", PORT_IN);
         add_port("T", PORT_IN);
         add_port("DCITERMDISABLE", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("DIFFINBUF")) {
+    } else if (type == id_DIFFINBUF) {
         add_port("DIFF_IN_P", PORT_IN);
         add_port("DIFF_IN_N", PORT_IN);
         add_port("OSC_EN[0]", PORT_IN);
@@ -114,36 +114,36 @@ std::unique_ptr<CellInfo> create_cell(Context *ctx, IdString type, IdString name
         add_port("VREF", PORT_IN);
         add_port("O", PORT_OUT);
         add_port("O_B", PORT_OUT);
-    } else if (type == ctx->id("HPIO_VREF")) {
+    } else if (type == id_HPIO_VREF) {
         for (int i = 0; i < 7; i++)
             add_port("FABRIC_VREF_TUNE[" + std::to_string(i) + "]", PORT_IN);
         add_port("VREF", PORT_OUT);
-    } else if (type == ctx->id("INV")) {
+    } else if (type == id_INV) {
         add_port("I", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("IDELAYCTRL")) {
+    } else if (type == id_IDELAYCTRL) {
         add_port("REFCLK", PORT_IN);
         add_port("RST", PORT_IN);
         add_port("RDY", PORT_OUT);
-    } else if (type == ctx->id("IBUF")) {
+    } else if (type == id_IBUF) {
         add_port("I", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("IBUF_INTERMDISABLE")) {
+    } else if (type == id_IBUF_INTERMDISABLE) {
         add_port("I", PORT_IN);
         add_port("IBUFDISABLE", PORT_IN);
         add_port("INTERMDISABLE", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("IBUFDS")) {
+    } else if (type == id_IBUFDS) {
         add_port("I", PORT_IN);
         add_port("IB", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("IBUFDS_INTERMDISABLE_INT")) {
+    } else if (type == id_IBUFDS_INTERMDISABLE_INT) {
         add_port("I", PORT_IN);
         add_port("IB", PORT_IN);
         add_port("IBUFDISABLE", PORT_IN);
         add_port("INTERMDISABLE", PORT_IN);
         add_port("O", PORT_OUT);
-    } else if (type == ctx->id("CARRY4")) {
+    } else if (type == id_CARRY4) {
         add_port("CI", PORT_IN);
         add_port("CYINIT", PORT_IN);
         for (int i = 0; i < 4; i++) {
@@ -169,7 +169,7 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         for (int i = 0; i < width; i++)
             add_port(name + "[" + std::to_string(i) + "]", dir);
     };
-    if (type == ctx->id("DSP_PREADD_DATA")) {
+    if (type == id_DSP_PREADD_DATA) {
         add_bus("A1_DATA", PORT_IN, 27);
         add_bus("A2_DATA", PORT_IN, 27);
         add_bus("AD", PORT_IN, 27);
@@ -190,13 +190,13 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         add_bus("D_DATA", PORT_OUT, 27);
         add_port("INMODE_2", PORT_OUT);
         add_bus("PREADD_AB", PORT_OUT, 27);
-    } else if (type == ctx->id("DSP_PREADD")) {
+    } else if (type == id_DSP_PREADD) {
         add_port("ADDSUB", PORT_IN);
         add_bus("D_DATA", PORT_IN, 27);
         add_port("INMODE2", PORT_IN);
         add_bus("PREADD_AB", PORT_IN, 27);
         add_bus("AD", PORT_OUT, 27);
-    } else if (type == ctx->id("DSP_A_B_DATA")) {
+    } else if (type == id_DSP_A_B_DATA) {
         add_bus("ACIN", PORT_IN, 30);
         add_bus("A", PORT_IN, 30);
         add_bus("BCIN", PORT_IN, 18);
@@ -216,7 +216,7 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         add_bus("B2_DATA", PORT_OUT, 18);
         add_bus("BCOUT", PORT_OUT, 18);
         add_bus("B_ALU", PORT_OUT, 18);
-    } else if (type == ctx->id("DSP_MULTIPLIER")) {
+    } else if (type == id_DSP_MULTIPLIER) {
         add_bus("A2A1", PORT_IN, 27);
         add_bus("AD_DATA", PORT_IN, 27);
         add_bus("B2B1", PORT_IN, 18);
@@ -224,13 +224,13 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         add_port("BMULT17", PORT_OUT);
         add_bus("U", PORT_OUT, 45);
         add_bus("V", PORT_OUT, 45);
-    } else if (type == ctx->id("DSP_C_DATA")) {
+    } else if (type == id_DSP_C_DATA) {
         add_port("CEC", PORT_IN);
         add_port("CLK", PORT_IN);
         add_bus("C", PORT_IN, 48);
         add_port("RSTC", PORT_IN);
         add_bus("C_DATA", PORT_OUT, 48);
-    } else if (type == ctx->id("DSP_M_DATA")) {
+    } else if (type == id_DSP_M_DATA) {
         add_port("CEM", PORT_IN);
         add_port("CLK", PORT_IN);
         add_port("RSTM", PORT_IN);
@@ -238,7 +238,7 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         add_bus("V", PORT_IN, 45);
         add_bus("U_DATA", PORT_OUT, 45);
         add_bus("V_DATA", PORT_OUT, 45);
-    } else if (type == ctx->id("DSP_ALU")) {
+    } else if (type == id_DSP_ALU) {
         add_bus("ALUMODE", PORT_IN, 4);
         add_port("AMULT26", PORT_IN);
         add_bus("A_ALU", PORT_IN, 30);
@@ -268,7 +268,7 @@ std::unique_ptr<CellInfo> create_dsp_cell(Context *ctx, IdString type, IdString 
         add_bus("COUT", PORT_OUT, 4);
         add_port("MULTSIGN_ALU", PORT_OUT);
         add_bus("XOR_MX", PORT_OUT, 8);
-    } else if (type == ctx->id("DSP_OUTPUT")) {
+    } else if (type == id_DSP_OUTPUT) {
         add_port("ALUMODE10", PORT_IN);
         add_bus("ALU_OUT", PORT_IN, 48);
         add_port("CEP", PORT_IN);
@@ -305,10 +305,10 @@ std::unique_ptr<CellInfo> create_lut(Context *ctx, const std::string &name, cons
         cell->ports[ip].type = PORT_IN;
         cell->connectPort(ip, inputs.at(i));
     }
-    cell->ports[ctx->id("O")].name = ctx->id("O");
-    cell->ports[ctx->id("O")].type = PORT_OUT;
-    cell->connectPort(ctx->id("O"), output);
-    cell->params[ctx->id("INIT")] = init;
+    cell->ports[id_O].name = id_O;
+    cell->ports[id_O].type = PORT_OUT;
+    cell->connectPort(id_O, output);
+    cell->params[id_INIT] = init;
     return cell;
 }
 

@@ -26,12 +26,12 @@ NEXTPNR_NAMESPACE_BEGIN
 void USPacker::pack_dsps()
 {
     const std::vector<IdString> dsp_subcell_names = {
-            ctx->id("DSP_PREADD_DATA"), ctx->id("DSP_PREADD"), ctx->id("DSP_A_B_DATA"), ctx->id("DSP_MULTIPLIER"),
-            ctx->id("DSP_C_DATA"),      ctx->id("DSP_M_DATA"), ctx->id("DSP_ALU"),      ctx->id("DSP_OUTPUT")};
+            id_DSP_PREADD_DATA, id_DSP_PREADD, id_DSP_A_B_DATA, id_DSP_MULTIPLIER,
+            id_DSP_C_DATA,      id_DSP_M_DATA, id_DSP_ALU,      id_DSP_OUTPUT};
 
     for (auto& cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
-        if (ci->type != ctx->id("DSP48E2"))
+        if (ci->type != id_DSP48E2)
             continue;
 
         // First of all, trim pins that are connected to "ground" in synthesis but really should be floating if
@@ -101,7 +101,7 @@ void USPacker::pack_dsps()
             sc->params = ci->params;
         // Add ports of DSP "super-cell" as attributes
         for (auto sc : subcells) {
-            sc->attrs[ctx->id("X_ORIG_MACRO_PRIM")] = ci->type.str(ctx);
+            sc->attrs[id_X_ORIG_MACRO_PRIM] = ci->type.str(ctx);
             for (auto &p : sc->ports) {
                 std::string macro_ports;
                 for (auto &orig : orig_ports) {

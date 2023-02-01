@@ -135,11 +135,11 @@ struct FasmBackend
                                     "OLOGIC_Y" + i + ".ZINV_T1"
                                 };
                     if (i == "0") {
-                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_IN1"),     ctx->id("IOB_O_OUT0")}]  = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_O_OUT0"),    ctx->id("IOB_O0")}]      = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_IN1"),     ctx->id("IOB_T_OUT0")}]  = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_T_OUT0"),    ctx->id("IOB_T0")}]      = {};
-                        pp_config[{ctx->id(s + "IOB33" + s2), ctx->id("IOB_DIFFI_IN0"), ctx->id("IOB_PADOUT1")}] = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_O_IN1,     id_IOB_O_OUT0}]  = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_O_OUT0,    id_IOB_O0}]      = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_T_IN1,     id_IOB_T_OUT0}]  = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_T_OUT0,    id_IOB_T0}]      = {};
+                        pp_config[{ctx->id(s + "IOB33" + s2), id_IOB_DIFFI_IN0, id_IOB_PADOUT1}] = {};
                     }
                 }
 
@@ -180,11 +180,11 @@ struct FasmBackend
                                 "OLOGIC_Y" + i + ".ZINV_ODATAIN"
                             };
                 if (i == "0") {
-                    pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_O_IN1"),     ctx->id("IOB_O_OUT0")}]  = {};
-                    pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_O_OUT0"),    ctx->id("IOB_O0")}]      = {};
-                    pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_T_IN1"),     ctx->id("IOB_T_OUT0")}]  = {};
-                    pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_T_OUT0"),    ctx->id("IOB_T0")}]      = {};
-                    pp_config[{ctx->id("RIOB18" + s2), ctx->id("IOB_DIFFI_IN0"), ctx->id("IOB_PADOUT1")}] = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_O_IN1,     id_IOB_O_OUT0}]  = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_O_OUT0,    id_IOB_O0}]      = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_T_IN1,     id_IOB_T_OUT0}]  = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_T_OUT0,    id_IOB_T0}]      = {};
+                    pp_config[{ctx->id("RIOB18" + s2), id_IOB_DIFFI_IN0, id_IOB_PADOUT1}] = {};
                 }
         }
 
@@ -225,12 +225,12 @@ struct FasmBackend
         for (int y = 0; y < 4; y++) {
             std::string yy = std::to_string(y);
             std::string ii = std::to_string(rclk_y_to_i[y]);
-            pp_config[{ ctx->id("HCLK_IOI3"),
+            pp_config[{ id_HCLK_IOI3,
                         ctx->id("HCLK_IOI_RCLK_OUT" + ii), ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii) }] = {
                             "BUFR_Y" + yy + ".IN_USE",
                             "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"
                         };
-            pp_config[{ ctx->id("HCLK_IOI"),
+            pp_config[{ id_HCLK_IOI,
                         ctx->id("HCLK_IOI_RCLK_OUT" + ii), ctx->id("HCLK_IOI_RCLK_BEFORE_DIV" + ii) }] = {
                             "BUFR_Y" + yy + ".IN_USE",
                             "BUFR_Y" + yy + ".BUFR_DIVIDE.BYPASS"
@@ -352,28 +352,28 @@ struct FasmBackend
     // Get the set of input signals for a LUT-type cell
     std::vector<IdString> get_inputs(CellInfo *cell)
     {
-        IdString type = ctx->id(str_or_default(cell->attrs, ctx->id("X_ORIG_TYPE"), ""));
-        if (type == ctx->id("LUT1"))
-            return {ctx->id("I0")};
-        else if (type == ctx->id("LUT2"))
-            return {ctx->id("I0"), ctx->id("I1")};
-        else if (type == ctx->id("LUT3"))
-            return {ctx->id("I0"), ctx->id("I1"), ctx->id("I2")};
-        else if (type == ctx->id("LUT4"))
-            return {ctx->id("I0"), ctx->id("I1"), ctx->id("I2"), ctx->id("I3")};
-        else if (type == ctx->id("LUT5"))
-            return {ctx->id("I0"), ctx->id("I1"), ctx->id("I2"), ctx->id("I3"), ctx->id("I4")};
-        else if (type == ctx->id("LUT6"))
-            return {ctx->id("I0"), ctx->id("I1"), ctx->id("I2"), ctx->id("I3"), ctx->id("I4"), ctx->id("I5")};
-        else if (type == ctx->id("RAMD64E"))
-            return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"),
-                    ctx->id("RADR3"), ctx->id("RADR4"), ctx->id("RADR5")};
-        else if (type == ctx->id("SRL16E"))
-            return {ctx->id("A0"), ctx->id("A1"), ctx->id("A2"), ctx->id("A3")};
-        else if (type == ctx->id("SRLC32E"))
+        IdString type = ctx->id(str_or_default(cell->attrs, id_X_ORIG_TYPE, ""));
+        if (type == id_LUT1)
+            return {id_I0};
+        else if (type == id_LUT2)
+            return {id_I0, id_I1};
+        else if (type == id_LUT3)
+            return {id_I0, id_I1, id_I2};
+        else if (type == id_LUT4)
+            return {id_I0, id_I1, id_I2, id_I3};
+        else if (type == id_LUT5)
+            return {id_I0, id_I1, id_I2, id_I3, id_I4};
+        else if (type == id_LUT6)
+            return {id_I0, id_I1, id_I2, id_I3, id_I4, id_I5};
+        else if (type == id_RAMD64E)
+            return {id_RADR0, id_RADR1, id_RADR2,
+                    id_RADR3, id_RADR4, id_RADR5};
+        else if (type == id_SRL16E)
+            return {id_A0, id_A1, id_A2, id_A3};
+        else if (type == id_SRLC32E)
             return {ctx->id("A[0]"), ctx->id("A[1]"), ctx->id("A[2]"), ctx->id("A[3]"), ctx->id("A[4]")};
-        else if (type == ctx->id("RAMD32"))
-            return {ctx->id("RADR0"), ctx->id("RADR1"), ctx->id("RADR2"), ctx->id("RADR3"), ctx->id("RADR4")};
+        else if (type == id_RAMD32)
+            return {id_RADR0, id_RADR1, id_RADR2, id_RADR3, id_RADR4};
         else
             NPNR_ASSERT_FALSE("unsupported LUT-type cell");
     }
@@ -410,7 +410,7 @@ struct FasmBackend
                 lbound = (i == 1) ? 0 : 32;
                 ubound = (i == 1) ? 32 : 64;
             }
-            Property init = get_or_default(lut->params, ctx->id("INIT"), Property()).extract(0, 64);
+            Property init = get_or_default(lut->params, id_INIT, Property()).extract(0, 64);
             for (int j = lbound; j < ubound; j++) {
                 int log_index = 0;
                 for (int k = 0; k < 6; k++) {
@@ -508,9 +508,9 @@ struct FasmBackend
                     continue;
                 push(get_bel_name(ff->bel));
                 bool zrst = false, zinit = false;
-                zinit = (int_or_default(ff->params, ctx->id("INIT"), 0) != 1);
+                zinit = (int_or_default(ff->params, id_INIT, 0) != 1);
                 IdString srsig;
-                std::string type = str_or_default(ff->attrs, ctx->id("X_ORIG_TYPE"), "");
+                std::string type = str_or_default(ff->attrs, id_X_ORIG_TYPE, "");
                 if (type == "FDRE") {
                     zrst = true;
                     SET_CHECK(negedge_ff, false);
@@ -560,15 +560,15 @@ struct FasmBackend
 
                 pop();
                 if (negedge_ff) SET_CHECK(is_clkinv, true);
-                else SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
+                else SET_CHECK(is_clkinv, int_or_default(ff->params, id_IS_C_INVERTED) == 1);
 
-                NetInfo *sr = ff->getPort(ctx->id("SR")), *ce = ff->getPort(ctx->id("CE"));
+                NetInfo *sr = ff->getPort(id_SR), *ce = ff->getPort(id_CE);
 
                 SET_CHECK(is_srused, sr != nullptr && sr->name != ctx->id("$PACKER_GND_NET"));
                 SET_CHECK(is_ceused, ce != nullptr && ce->name != ctx->id("$PACKER_VCC_NET"));
 
                 // Input mux
-                write_routing_bel(ctx->getBelPinWire(ff->bel, ctx->id("D")));
+                write_routing_bel(ctx->getBelPinWire(ff->bel, id_D));
 
                 found_ff = true;
             }
@@ -634,7 +634,7 @@ struct FasmBackend
                     CellInfo *lut = (j == 1) ? lut5 : lut6;
                     if (lut == nullptr)
                         continue;
-                    std::string type = str_or_default(lut->attrs, ctx->id("X_ORIG_TYPE"));
+                    std::string type = str_or_default(lut->attrs, id_X_ORIG_TYPE);
                     if (type == "RAMD64E" || type == "RAMS64E") {
                         is_ram = true;
                     } else if (type == "RAMD32" || type == "RAMS32") {
@@ -646,8 +646,8 @@ struct FasmBackend
                     } else if (type == "SRLC32E") {
                         is_srl = true;
                     }
-                    wa7_used |= (lut->getPort(ctx->id("WA7")) != nullptr);
-                    wa8_used |= (lut->getPort(ctx->id("WA8")) != nullptr);
+                    wa7_used |= (lut->getPort(id_WA7) != nullptr);
+                    wa8_used |= (lut->getPort(id_WA8) != nullptr);
                 }
                 if (is_slicem && i != 3) {
                     write_routing_bel(
@@ -685,7 +685,7 @@ struct FasmBackend
         push(get_half_name(half, is_mtile));
 
         write_routing_bel(get_site_wire(carry->bel, "PRECYINIT_OUT"));
-        if (carry->getPort(ctx->id("CIN")) != nullptr)
+        if (carry->getPort(id_CIN) != nullptr)
             write_bit("PRECYINIT.CIN");
         push("CARRY4");
         for (char c : {'A', 'B', 'C', 'D'})
@@ -734,11 +734,11 @@ struct FasmBackend
 
     void write_io_config(CellInfo *pad)
     {
-        NetInfo *pad_net = pad->getPort(ctx->id("PAD"));
+        NetInfo *pad_net = pad->getPort(id_PAD);
         NPNR_ASSERT(pad_net != nullptr);
-        std::string iostandard = str_or_default(pad->attrs, ctx->id("IOSTANDARD"), "LVCMOS33");
-        std::string pulltype = str_or_default(pad->attrs, ctx->id("PULLTYPE"), "NONE");
-        std::string slew = str_or_default(pad->attrs, ctx->id("SLEW"), "SLOW");
+        std::string iostandard = str_or_default(pad->attrs, id_IOSTANDARD, "LVCMOS33");
+        std::string pulltype = str_or_default(pad->attrs, id_PULLTYPE, "NONE");
+        std::string slew = str_or_default(pad->attrs, id_SLEW, "SLOW");
 
         Loc ioLoc = ctx->getSiteLocInTile(pad->bel);
         bool is_output = false, is_input = false;
@@ -770,7 +770,7 @@ struct FasmBackend
         if (is_output) {
             // DRIVE
             int default_drive = (is_riob18 && iostandard == "LVCMOS12") ? 8 : 12;
-            int drive = int_or_default(pad->attrs, ctx->id("DRIVE"), default_drive);
+            int drive = int_or_default(pad->attrs, id_DRIVE, default_drive);
 
             if ((iostandard == "LVCMOS33" || iostandard == "LVTTL") && is_riob18)
                 log_error("high performance banks (RIOB18) do not support IO standard %s\n", iostandard.c_str());
@@ -850,8 +850,8 @@ struct FasmBackend
                         write_bit("SSTL12_SSTL135_SSTL15.IN");
                     }
 
-                    if (!is_riob18 && pad->attrs.count(ctx->id("IN_TERM")))
-                        write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
+                    if (!is_riob18 && pad->attrs.count(id_IN_TERM))
+                        write_bit("IN_TERM." + pad->attrs.at(id_IN_TERM).as_string());
                 }
 
                 if (is_low_volt_lvcmos) {
@@ -869,8 +869,8 @@ struct FasmBackend
                     write_bit("LVDS_25_SSTL135_SSTL15.IN_DIFF");
                 }
 
-                if (pad->attrs.count(ctx->id("IN_TERM")))
-                    write_bit("IN_TERM." + pad->attrs.at(ctx->id("IN_TERM")).as_string());
+                if (pad->attrs.count(id_IN_TERM))
+                    write_bit("IN_TERM." + pad->attrs.at(id_IN_TERM).as_string());
             }
 
             // IN_ONLY
@@ -941,14 +941,14 @@ struct FasmBackend
         Loc siteloc = ctx->getSiteLocInTile(ci->bel);
         push(sitetype + "_Y" + std::to_string(is_sing ? (is_top_sing ? 1 : 0) : (1 - siteloc.y)));
 
-        if (ci->type == ctx->id("ILOGICE3_IFF")) {
+        if (ci->type == id_ILOGICE3_IFF) {
             write_bit("IDDR.IN_USE");
             write_bit("IDDR_OR_ISERDES.IN_USE");
             write_bit("ISERDES.MODE.MASTER");
             write_bit("ISERDES.NUM_CE.N1");
 
             // Switch IDELMUXE3 to include the IDELAY element, if we have an IDELAYE2 driving D
-            NetInfo *d = ci->getPort(ctx->id("D"));
+            NetInfo *d = ci->getPort(id_D);
             if (d == nullptr || d->driver.cell == nullptr)
                 log_error("%s '%s' has disconnected D input\n", ci->type.c_str(ctx), ctx->nameOf(ci));
             CellInfo *drv = d->driver.cell;
@@ -958,30 +958,30 @@ struct FasmBackend
                 write_bit("IDELMUXE3.P1");
 
             // clock edge
-            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
+            std::string edge = str_or_default(ci->params, id_DDR_CLK_EDGE, "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE")          write_bit("IFF.DDR_CLK_EDGE.SAME_EDGE");
             else if (edge == "OPPOSITE_EDGE") write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
             else log_error("unsupported clock edge parameter for cell '%s' at %s: %s. Supported are: SAME_EDGE and OPPOSITE_EDGE",
                             ci->name.c_str(ctx), site.c_str(), edge.c_str());
 
-            std::string srtype = str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC");
+            std::string srtype = str_or_default(ci->params, id_SRTYPE, "SYNC");
             if (srtype == "SYNC") write_bit("IFF.SRTYPE.SYNC"); else write_bit("IFF.SRTYPE.ASYNC");
 
-            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
-            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false));
+            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, id_IS_CLK_INVERTED, false));
+            write_bit("ZINV_D", !bool_or_default(ci->params, id_IS_D_INVERTED, false));
 
-            auto init = int_or_default(ci->params, ctx->id("INIT_Q1"), 0);
+            auto init = int_or_default(ci->params, id_INIT_Q1, 0);
             if (init == 0) write_bit("IFF.ZINIT_Q1");
-            init = int_or_default(ci->params, ctx->id("INIT_Q2"), 0);
+            init = int_or_default(ci->params, id_INIT_Q2, 0);
             if (init == 0) write_bit("IFF.ZINIT_Q2");
 
-            auto sr_name = str_or_default(ci->attrs, ctx->id("X_ORIG_PORT_SR"), "R");
+            auto sr_name = str_or_default(ci->attrs, id_X_ORIG_PORT_SR, "R");
             if (sr_name == "R") {
                 write_bit("IFF.ZSRVAL_Q1");
                 write_bit("IFF.ZSRVAL_Q2");
             }
-        } else if (ci->type == ctx->id("OLOGICE2_OUTFF") || ci->type == ctx->id("OLOGICE3_OUTFF")) {
-            std::string edge = str_or_default(ci->params, ctx->id("DDR_CLK_EDGE"), "OPPOSITE_EDGE");
+        } else if (ci->type == id_OLOGICE2_OUTFF || ci->type == id_OLOGICE3_OUTFF) {
+            std::string edge = str_or_default(ci->params, id_DDR_CLK_EDGE, "OPPOSITE_EDGE");
             if (edge == "SAME_EDGE") write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
 
             write_bit("ODDR_TDDR.IN_USE");
@@ -989,48 +989,48 @@ struct FasmBackend
             write_bit("OSERDES.DATA_RATE_OQ.DDR");
             write_bit("OSERDES.DATA_RATE_TQ.BUF");
 
-            std::string srtype = str_or_default(ci->params, ctx->id("SRTYPE"), "SYNC");
+            std::string srtype = str_or_default(ci->params, id_SRTYPE, "SYNC");
             if (srtype == "SYNC") write_bit("OSERDES.SRTYPE.SYNC");
 
             for (std::string d : {"D1", "D2"})
                 write_bit("IS_" + d + "_INVERTED",
                           bool_or_default(ci->params, ctx->id("IS_" + d + "_INVERTED"), false));
 
-            auto init = int_or_default(ci->params, ctx->id("INIT"), 1);
+            auto init = int_or_default(ci->params, id_INIT, 1);
             if (init == 0) write_bit("ZINIT_OQ");
 
-            write_bit("ODDR.SRUSED", ci->getPort(ctx->id("SR")) != nullptr);
-            auto sr_name = str_or_default(ci->attrs, ctx->id("X_ORIG_PORT_SR"), "R");
+            write_bit("ODDR.SRUSED", ci->getPort(id_SR) != nullptr);
+            auto sr_name = str_or_default(ci->attrs, id_X_ORIG_PORT_SR, "R");
             if (sr_name == "R") write_bit("ZSRVAL_OQ");
 
-            auto clk_inv = bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"));
+            auto clk_inv = bool_or_default(ci->params, id_IS_CLK_INVERTED);
             if (!clk_inv) write_bit("ZINV_CLK");
-        } else if (ci->type == ctx->id("OSERDESE2_OSERDESE2")) {
+        } else if (ci->type == id_OSERDESE2_OSERDESE2) {
             write_bit("ODDR.DDR_CLK_EDGE.SAME_EDGE");
             write_bit("ODDR.SRUSED");
             write_bit("ODDR_TDDR.IN_USE");
-            write_bit("OQUSED", ci->getPort(ctx->id("OQ")) != nullptr);
-            write_bit("ZINV_CLK", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
+            write_bit("OQUSED", ci->getPort(id_OQ) != nullptr);
+            write_bit("ZINV_CLK", !bool_or_default(ci->params, id_IS_CLK_INVERTED, false));
             for (std::string t : {"T1", "T2", "T3", "T4"})
                 write_bit("ZINV_" + t, (ci->getPort(ctx->id(t)) != nullptr || t == "T1") &&
                                                !bool_or_default(ci->params, ctx->id("IS_" + t + "_INVERTED"), false));
             for (std::string d : {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"})
                 write_bit("IS_" + d + "_INVERTED",
                           bool_or_default(ci->params, ctx->id("IS_" + d + "_INVERTED"), false));
-            write_bit("ZINIT_OQ", !bool_or_default(ci->params, ctx->id("INIT_OQ"), false));
-            write_bit("ZINIT_TQ", !bool_or_default(ci->params, ctx->id("INIT_TQ"), false));
-            write_bit("ZSRVAL_OQ", !bool_or_default(ci->params, ctx->id("SRVAL_OQ"), false));
-            write_bit("ZSRVAL_TQ", !bool_or_default(ci->params, ctx->id("SRVAL_TQ"), false));
+            write_bit("ZINIT_OQ", !bool_or_default(ci->params, id_INIT_OQ, false));
+            write_bit("ZINIT_TQ", !bool_or_default(ci->params, id_INIT_TQ, false));
+            write_bit("ZSRVAL_OQ", !bool_or_default(ci->params, id_SRVAL_OQ, false));
+            write_bit("ZSRVAL_TQ", !bool_or_default(ci->params, id_SRVAL_TQ, false));
 
             push("OSERDES");
             write_bit("IN_USE");
-            std::string type = str_or_default(ci->params, ctx->id("DATA_RATE_OQ"), "BUF");
-            write_bit(std::string("DATA_RATE_OQ.") + ((ci->getPort(ctx->id("OQ")) != nullptr) ? type : "BUF"));
+            std::string type = str_or_default(ci->params, id_DATA_RATE_OQ, "BUF");
+            write_bit(std::string("DATA_RATE_OQ.") + ((ci->getPort(id_OQ) != nullptr) ? type : "BUF"));
             write_bit(std::string("DATA_RATE_TQ.") +
-                      ((ci->getPort(ctx->id("TQ")) != nullptr)
-                               ? str_or_default(ci->params, ctx->id("DATA_RATE_TQ"), "BUF")
+                      ((ci->getPort(id_TQ) != nullptr)
+                               ? str_or_default(ci->params, id_DATA_RATE_TQ, "BUF")
                                : "BUF"));
-            int width = int_or_default(ci->params, ctx->id("DATA_WIDTH"), 8);
+            int width = int_or_default(ci->params, id_DATA_WIDTH, 8);
 #if 0
             write_bit("DATA_WIDTH.W" + std::to_string(width));
             if (type == "DDR" && (width == 6 || width == 8)) {
@@ -1050,8 +1050,8 @@ struct FasmBackend
             write_bit("SRTYPE.SYNC");
             write_bit("TSRTYPE.SYNC");
             pop();
-        } else if (ci->type == ctx->id("ISERDESE2_ISERDESE2")) {
-            std::string data_rate = str_or_default(ci->params, ctx->id("DATA_RATE"));
+        } else if (ci->type == id_ISERDESE2_ISERDESE2) {
+            std::string data_rate = str_or_default(ci->params, id_DATA_RATE);
             write_bit("IDDR_OR_ISERDES.IN_USE");
             if (data_rate == "DDR") write_bit("IDDR.IN_USE");
             write_bit("IFF.DDR_CLK_EDGE.OPPOSITE_EDGE");
@@ -1062,44 +1062,44 @@ struct FasmBackend
                 write_bit("IFF.ZSRVAL_Q" + std::to_string(i),
                           !bool_or_default(ci->params, ctx->id("SRVAL_Q" + std::to_string(i)), false));
             }
-            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED"), false));
-            write_bit("IFF.ZINV_OCLK", !bool_or_default(ci->params, ctx->id("IS_OCLK_INVERTED"), false));
+            write_bit("IFF.ZINV_C", !bool_or_default(ci->params, id_IS_CLK_INVERTED, false));
+            write_bit("IFF.ZINV_OCLK", !bool_or_default(ci->params, id_IS_OCLK_INVERTED, false));
 
-            std::string iobdelay = str_or_default(ci->params, ctx->id("IOBDELAY"), "NONE");
+            std::string iobdelay = str_or_default(ci->params, id_IOBDELAY, "NONE");
             write_bit("IFFDELMUXE3.P0", (iobdelay == "IFD"));
-            write_bit("ZINV_D", !bool_or_default(ci->params, ctx->id("IS_D_INVERTED"), false) && (iobdelay != "IFD"));
+            write_bit("ZINV_D", !bool_or_default(ci->params, id_IS_D_INVERTED, false) && (iobdelay != "IFD"));
 
             push("ISERDES");
             write_bit("IN_USE");
-            int width = int_or_default(ci->params, ctx->id("DATA_WIDTH"), 8);
-            std::string mode = str_or_default(ci->params, ctx->id("INTERFACE_TYPE"), "NETWORKING");
-            std::string rate = str_or_default(ci->params, ctx->id("DATA_RATE"), "DDR");
+            int width = int_or_default(ci->params, id_DATA_WIDTH, 8);
+            std::string mode = str_or_default(ci->params, id_INTERFACE_TYPE, "NETWORKING");
+            std::string rate = str_or_default(ci->params, id_DATA_RATE, "DDR");
             write_bit(mode + "." + rate + ".W" + std::to_string(width));
-            write_bit("MODE." + str_or_default(ci->params, ctx->id("SERDES_MODE"), "MASTER"));
-            write_bit("NUM_CE.N" + std::to_string(int_or_default(ci->params, ctx->id("NUM_CE"), 1)));
+            write_bit("MODE." + str_or_default(ci->params, id_SERDES_MODE, "MASTER"));
+            write_bit("NUM_CE.N" + std::to_string(int_or_default(ci->params, id_NUM_CE, 1)));
             pop();
-        } else if (ci->type == ctx->id("IDELAYE2_IDELAYE2")) {
+        } else if (ci->type == id_IDELAYE2_IDELAYE2) {
             write_bit("IN_USE");
-            write_bit("CINVCTRL_SEL", str_or_default(ci->params, ctx->id("CINVCTRL_SEL"), "FALSE") == "TRUE");
-            write_bit("PIPE_SEL", str_or_default(ci->params, ctx->id("PIPE_SEL"), "FALSE") == "TRUE");
+            write_bit("CINVCTRL_SEL", str_or_default(ci->params, id_CINVCTRL_SEL, "FALSE") == "TRUE");
+            write_bit("PIPE_SEL", str_or_default(ci->params, id_PIPE_SEL, "FALSE") == "TRUE");
             write_bit("HIGH_PERFORMANCE_MODE",
-                      str_or_default(ci->params, ctx->id("HIGH_PERFORMANCE_MODE"), "FALSE") == "TRUE");
-            write_bit("DELAY_SRC_" + str_or_default(ci->params, ctx->id("DELAY_SRC"), "IDATAIN"));
-            write_bit("IDELAY_TYPE_" + str_or_default(ci->params, ctx->id("IDELAY_TYPE"), "FIXED"));
-            write_int_vector("IDELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, false);
-            write_int_vector("ZIDELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("IDELAY_VALUE"), 0), 5, true);
-            write_bit("IS_DATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_DATAIN_INVERTED"), false));
-            write_bit("IS_IDATAIN_INVERTED", bool_or_default(ci->params, ctx->id("IS_IDATAIN_INVERTED"), false));
-        } else if (ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
+                      str_or_default(ci->params, id_HIGH_PERFORMANCE_MODE, "FALSE") == "TRUE");
+            write_bit("DELAY_SRC_" + str_or_default(ci->params, id_DELAY_SRC, "IDATAIN"));
+            write_bit("IDELAY_TYPE_" + str_or_default(ci->params, id_IDELAY_TYPE, "FIXED"));
+            write_int_vector("IDELAY_VALUE[4:0]", int_or_default(ci->params, id_IDELAY_VALUE, 0), 5, false);
+            write_int_vector("ZIDELAY_VALUE[4:0]", int_or_default(ci->params, id_IDELAY_VALUE, 0), 5, true);
+            write_bit("IS_DATAIN_INVERTED", bool_or_default(ci->params, id_IS_DATAIN_INVERTED, false));
+            write_bit("IS_IDATAIN_INVERTED", bool_or_default(ci->params, id_IS_IDATAIN_INVERTED, false));
+        } else if (ci->type == id_ODELAYE2_ODELAYE2) {
             write_bit("IN_USE");
-            write_bit("CINVCTRL_SEL", str_or_default(ci->params, ctx->id("CINVCTRL_SEL"), "FALSE") == "TRUE");
+            write_bit("CINVCTRL_SEL", str_or_default(ci->params, id_CINVCTRL_SEL, "FALSE") == "TRUE");
             write_bit("HIGH_PERFORMANCE_MODE",
-                      str_or_default(ci->params, ctx->id("HIGH_PERFORMANCE_MODE"), "FALSE") == "TRUE");
-            auto type = str_or_default(ci->params, ctx->id("ODELAY_TYPE"), "FIXED");
+                      str_or_default(ci->params, id_HIGH_PERFORMANCE_MODE, "FALSE") == "TRUE");
+            auto type = str_or_default(ci->params, id_ODELAY_TYPE, "FIXED");
             if (type != "FIXED") write_bit("ODELAY_TYPE_" + type);
-            write_int_vector("ODELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("ODELAY_VALUE"), 0), 5, false);
-            write_int_vector("ZODELAY_VALUE[4:0]", int_or_default(ci->params, ctx->id("ODELAY_VALUE"), 0), 5, true);
-            write_bit("ZINV_ODATAIN", !bool_or_default(ci->params, ctx->id("IS_ODATAIN_INVERTED"), false));
+            write_int_vector("ODELAY_VALUE[4:0]", int_or_default(ci->params, id_ODELAY_VALUE, 0), 5, false);
+            write_int_vector("ZODELAY_VALUE[4:0]", int_or_default(ci->params, id_ODELAY_VALUE, 0), 5, true);
+            write_bit("ZINV_ODATAIN", !bool_or_default(ci->params, id_IS_ODATAIN_INVERTED, false));
         } else {
             NPNR_ASSERT_FALSE("unsupported IOLOGIC");
         }
@@ -1110,16 +1110,16 @@ struct FasmBackend
     {
         for (auto& cell : ctx->cells) {
             CellInfo *ci = cell.second.get();
-            if (ci->type == ctx->id("PAD")) {
+            if (ci->type == id_PAD) {
                 write_io_config(ci);
                 blank();
-            } else if (ci->type == ctx->id("ILOGICE3_IFF") ||
-                       ci->type == ctx->id("OLOGICE2_OUTFF") ||
-                       ci->type == ctx->id("OLOGICE3_OUTFF") ||
-                       ci->type == ctx->id("OSERDESE2_OSERDESE2") ||
-                       ci->type == ctx->id("ISERDESE2_ISERDESE2") ||
-                       ci->type == ctx->id("IDELAYE2_IDELAYE2")   ||
-                       ci->type == ctx->id("ODELAYE2_ODELAYE2")) {
+            } else if (ci->type == id_ILOGICE3_IFF ||
+                       ci->type == id_OLOGICE2_OUTFF ||
+                       ci->type == id_OLOGICE3_OUTFF ||
+                       ci->type == id_OSERDESE2_OSERDESE2 ||
+                       ci->type == id_ISERDESE2_ISERDESE2 ||
+                       ci->type == id_IDELAYE2_IDELAYE2   ||
+                       ci->type == id_ODELAYE2_ODELAYE2) {
                 write_iol_config(ci);
                 blank();
             }
@@ -1157,20 +1157,20 @@ struct FasmBackend
 
         for (auto& cell : ctx->cells) {
             CellInfo *ci = cell.second.get();
-            if (ci->type == ctx->id("BUFGCTRL")) {
+            if (ci->type == id_BUFGCTRL) {
                 push(get_tile_name(ci->bel.tile));
                 auto xy = ctx->getSiteLocInTile(ci->bel);
                 push("BUFGCTRL.BUFGCTRL_X" + std::to_string(xy.x) + "Y" + std::to_string(xy.y));
                 write_bit("IN_USE");
-                write_bit("INIT_OUT", bool_or_default(ci->params, ctx->id("INIT_OUT")));
-                write_bit("IS_IGNORE0_INVERTED", bool_or_default(ci->params, ctx->id("IS_IGNORE0_INVERTED")));
-                write_bit("IS_IGNORE1_INVERTED", bool_or_default(ci->params, ctx->id("IS_IGNORE1_INVERTED")));
-                write_bit("ZINV_CE0", !bool_or_default(ci->params, ctx->id("IS_CE0_INVERTED")));
-                write_bit("ZINV_CE1", !bool_or_default(ci->params, ctx->id("IS_CE1_INVERTED")));
-                write_bit("ZINV_S0", !bool_or_default(ci->params, ctx->id("IS_S0_INVERTED")));
-                write_bit("ZINV_S1", !bool_or_default(ci->params, ctx->id("IS_S1_INVERTED")));
+                write_bit("INIT_OUT", bool_or_default(ci->params, id_INIT_OUT));
+                write_bit("IS_IGNORE0_INVERTED", bool_or_default(ci->params, id_IS_IGNORE0_INVERTED));
+                write_bit("IS_IGNORE1_INVERTED", bool_or_default(ci->params, id_IS_IGNORE1_INVERTED));
+                write_bit("ZINV_CE0", !bool_or_default(ci->params, id_IS_CE0_INVERTED));
+                write_bit("ZINV_CE1", !bool_or_default(ci->params, id_IS_CE1_INVERTED));
+                write_bit("ZINV_S0", !bool_or_default(ci->params, id_IS_S0_INVERTED));
+                write_bit("ZINV_S1", !bool_or_default(ci->params, id_IS_S1_INVERTED));
                 pop(2);
-            } else if (ci->type == ctx->id("PLLE2_ADV_PLLE2_ADV")) {
+            } else if (ci->type == id_PLLE2_ADV_PLLE2_ADV) {
                 write_pll(ci);
             }
             blank();
@@ -1313,9 +1313,9 @@ struct FasmBackend
             write_bram_width(ci, "READ_WIDTH_B", is_36, half == 1);
             write_bram_width(ci, "WRITE_WIDTH_A", is_36, half == 1);
             write_bram_width(ci, "WRITE_WIDTH_B", is_36, half == 1);
-            write_bit("DOA_REG", bool_or_default(ci->params, ctx->id("DOA_REG"), false));
-            write_bit("DOB_REG", bool_or_default(ci->params, ctx->id("DOB_REG"), false));
-            for (auto &invpin : invertible_pins[ctx->id(ci->attrs[ctx->id("X_ORIG_TYPE")].as_string())])
+            write_bit("DOA_REG", bool_or_default(ci->params, id_DOA_REG, false));
+            write_bit("DOB_REG", bool_or_default(ci->params, id_DOB_REG, false));
+            for (auto &invpin : invertible_pins[ctx->id(ci->attrs[id_X_ORIG_TYPE].as_string())])
                 write_bit("ZINV_" + invpin.str(ctx),
                           !bool_or_default(ci->params, ctx->id("IS_" + invpin.str(ctx) + "_INVERTED"), false));
             for (auto wrmode : {"WRITE_MODE_A", "WRITE_MODE_B"}) {
@@ -1429,9 +1429,9 @@ struct FasmBackend
         push("PLLE2_ADV");
         write_bit("IN_USE");
         // FIXME: should be INV not ZINV (XRay error?)
-        write_bit("ZINV_PWRDWN", bool_or_default(ci->params, ctx->id("IS_PWRDWN_INVERTED"), false));
-        write_bit("ZINV_RST", bool_or_default(ci->params, ctx->id("IS_RST_INVERTED"), false));
-        write_bit("INV_CLKINSEL", bool_or_default(ci->params, ctx->id("IS_CLKINSEL_INVERTED"), false));
+        write_bit("ZINV_PWRDWN", bool_or_default(ci->params, id_IS_PWRDWN_INVERTED, false));
+        write_bit("ZINV_RST", bool_or_default(ci->params, id_IS_RST_INVERTED, false));
+        write_bit("INV_CLKINSEL", bool_or_default(ci->params, id_IS_CLKINSEL_INVERTED, false));
         write_pll_clkout("DIVCLK", ci);
         write_pll_clkout("CLKFBOUT", ci);
         write_pll_clkout("CLKOUT0", ci);
@@ -1441,7 +1441,7 @@ struct FasmBackend
         write_pll_clkout("CLKOUT4", ci);
         write_pll_clkout("CLKOUT5", ci);
 
-        std::string comp = str_or_default(ci->params, ctx->id("COMPENSATION"), "INTERNAL");
+        std::string comp = str_or_default(ci->params, id_COMPENSATION, "INTERNAL");
         push("COMPENSATION");
         if (comp == "INTERNAL") {
             // write_bit("INTERNAL");
@@ -1576,7 +1576,7 @@ struct FasmBackend
     {
         for (auto& cell : ctx->cells) {
             CellInfo *ci = cell.second.get();
-            if (ci->type == ctx->id("DSP48E1_DSP48E1")) {
+            if (ci->type == id_DSP48E1_DSP48E1) {
                 write_dsp_cell(ci);
                 blank();
             }

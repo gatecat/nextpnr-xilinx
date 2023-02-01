@@ -746,7 +746,7 @@ struct Arch : BaseArch<ArchRanges>
 
     std::string getChipName() const;
 
-    IdString archId() const { return id("xilinx"); }
+    IdString archId() const { return id_xilinx; }
     ArchArgs archArgs() const { return args; }
     IdString archArgsToId(ArchArgs args) const;
 

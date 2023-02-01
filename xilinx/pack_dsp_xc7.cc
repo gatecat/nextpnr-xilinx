@@ -78,8 +78,8 @@ void XC7Packer::pack_dsps()
 {
     log_info("Packing DSPs..\n");
 
-    std::unordered_map<IdString, XFormRule> dsp_rules;
-    dsp_rules[ctx->id("DSP48E1")].new_type = ctx->id("DSP48E1_DSP48E1");
+    dict<IdString, XFormRule> dsp_rules;
+    dsp_rules[id_DSP48E1].new_type = id_DSP48E1_DSP48E1;
     generic_xform(dsp_rules, true);
 
     std::vector<CellInfo *> all_dsps;

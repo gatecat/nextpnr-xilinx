@@ -268,7 +268,7 @@ WireId Arch::getWireByName(IdStringList name) const
 IdString Arch::getWireType(WireId wire) const { return IdString(wireIntent(wire)); }
 std::vector<std::pair<IdString, std::string>> Arch::getWireAttrs(WireId wire) const
 {
-    return {{id("INTENT"), IdString(wireIntent(wire)).str(this)}};
+    return {{id_INTENT, IdString(wireIntent(wire)).str(this)}};
 }
 
 // -----------------------------------------------------------------------
@@ -399,7 +399,7 @@ void Arch::setup_pip_blacklist()
     }
 }
 
-IdString Arch::getPipType(PipId pip) const { return id("PIP"); }
+IdString Arch::getPipType(PipId pip) const { return id_PIP; }
 
 std::vector<std::pair<IdString, std::string>> Arch::getPipAttrs(PipId pip) const { return {}; }
 
@@ -476,10 +476,10 @@ delay_t Arch::estimateDelay(WireId src, WireId dst) const
     if (src.tile == -1) {
         if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC) {
             if (gnd_glbl == IdString()) {
-                gnd_glbl = id("PSEUDO_GND_WIRE_GLBL");
-                gnd_row = id("PSEUDO_GND_WIRE_ROW");
-                vcc_glbl = id("PSEUDO_VCC_WIRE_GLBL");
-                vcc_row = id("PSEUDO_VCC_WIRE_ROW");
+                gnd_glbl = id_PSEUDO_GND_WIRE_GLBL;
+                gnd_row = id_PSEUDO_GND_WIRE_ROW;
+                vcc_glbl = id_PSEUDO_VCC_WIRE_GLBL;
+                vcc_row = id_PSEUDO_VCC_WIRE_ROW;
             }
             if (getCtx()->debug)
                 log_info("%s %d %d\n", IdString(wireInfo(src).name).c_str(this), wireInfo(src).name, gnd_glbl.index);
@@ -647,13 +647,13 @@ bool Arch::getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay
 
 bool Arch::place()
 {
-    std::string placer = str_or_default(settings, id("placer"), defaultPlacer);
+    std::string placer = str_or_default(settings, id_placer, defaultPlacer);
 
     if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
         cfg.criticalityExponent = 7;
-        cfg.ioBufTypes.insert(id("IOB_IBUFCTRL"));
-        cfg.ioBufTypes.insert(id("IOB_OUTBUF"));
+        cfg.ioBufTypes.insert(id_IOB_IBUFCTRL);
+        cfg.ioBufTypes.insert(id_IOB_OUTBUF);
         cfg.ioBufTypes.insert(id_PSEUDO_GND);
         cfg.ioBufTypes.insert(id_PSEUDO_VCC);
         cfg.alpha = 0.08;
@@ -678,7 +678,7 @@ bool Arch::place()
         log_error("US+ architecture does not support placer '%s'\n", placer.c_str());
     }
     fixupPlacement();
-    getCtx()->attrs[getCtx()->id("step")] = std::string("place");
+    getCtx()->attrs[id_step] = std::string("place");
     archInfoToAttributes();
     return true;
 }
@@ -753,14 +753,14 @@ void Arch::routeClock()
         bool is_global = false;
         if ((clk_net->driver.cell->type == id_BUFGCTRL || clk_net->driver.cell->type == id_BUFCE_BUFG_PS ||
              clk_net->driver.cell->type == id_BUFCE_BUFCE || clk_net->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
-            clk_net->driver.port == id("O"))
+            clk_net->driver.port == id_O)
             is_global = true;
-        else if (clk_net->driver.cell->type == id("PLLE2_ADV_PLLE2_ADV") && clk_net->users.entries() == 1 &&
+        else if (clk_net->driver.cell->type == id_PLLE2_ADV_PLLE2_ADV && clk_net->users.entries() == 1 &&
                  ((*clk_net->users.begin()).cell->type == id_BUFGCTRL || (*clk_net->users.begin()).cell->type == id_BUFCE_BUFCE ||
                   (*clk_net->users.begin()).cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
             is_global = true;
-        else if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
-                 (*clk_net->users.begin()).port == id("CLKIN1"))
+        else if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id_PLLE2_ADV_PLLE2_ADV &&
+                 (*clk_net->users.begin()).port == id_CLKIN1)
             is_global = true;
         if (!is_global)
             continue;
@@ -811,8 +811,8 @@ void Arch::routeClock()
             }
             if (dest == WireId()) {
                 log_info("            failed to find a route using dedicated resources.\n");
-                if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
-                    (*clk_net->users.begin()).port == id("CLKIN1")) {
+                if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id_PLLE2_ADV_PLLE2_ADV &&
+                    (*clk_net->users.begin()).port == id_CLKIN1) {
                     // Due to some missing pips, currently special case more lenient solution
                     std::queue<WireId> empty;
                     std::swap(visit, empty);
@@ -857,7 +857,7 @@ void Arch::routeClock()
     for (auto& net : nets) {
         NetInfo *ni = net.second.get();
         for (auto &usr : ni->users) {
-            if (usr.cell->type != id_BUFGCTRL || usr.port != id("I0"))
+            if (usr.cell->type != id_BUFGCTRL || usr.port != id_I0)
                 continue;
             WireId dst = getCtx()->getNetinfoSinkWire(ni, usr, 0);
             std::queue<WireId> visit;
@@ -1000,7 +1000,7 @@ void Arch::findSourceSinkLocations()
 bool Arch::route()
 {
     assign_budget(getCtx(), true);
-    std::string router = str_or_default(settings, id("router"), defaultRouter);
+    std::string router = str_or_default(settings, id_router, defaultRouter);
     if (router != "router2")
         routeVcc();
     routeClock();
@@ -1021,7 +1021,7 @@ bool Arch::route()
         log_error("Xilinx architecture does not support router '%s'\n", router.c_str());
     }
     fixupRouting();
-    getCtx()->settings[getCtx()->id("route")] = 1;
+    getCtx()->settings[id_route] = 1;
     archInfoToAttributes();
     return result;
 }
@@ -1186,8 +1186,8 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
             IdString tiletype = getBelTileType(cell->bel);
             bool is_lut5 = (z & 0xF) == BEL_5LUT;
             bool is_slicem = (tiletype == id_CLBLM_L || tiletype == id_CLBLM_R) && (z < 64);
-            IdString variant = is_slicem ? (is_lut5 ? id("LUT_OR_MEM5LRAM") : id("LUT_OR_MEM6LRAM"))
-                                         : (is_lut5 ? id("LUT5") : id("LUT6"));
+            IdString variant = is_slicem ? (is_lut5 ? id_LUT_OR_MEM5LRAM : id_LUT_OR_MEM6LRAM)
+                                         : (is_lut5 ? id_LUT5 : id_LUT6);
 
             if (fromPort == id_CLK)
                 return false;
@@ -1204,18 +1204,18 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
         }
     } else if (cell->type == id_CARRY4) {
         if (xc7 && inst_id != -1) {
-            return xc7_cell_timing_lookup(tt_id, inst_id, id("CARRY4"), fromPort, toPort, delay);
+            return xc7_cell_timing_lookup(tt_id, inst_id, id_CARRY4, fromPort, toPort, delay);
         }
     } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id("SELMUX2_1")) {
+               cell->type == id_SELMUX2_1) {
         if (xc7 && inst_id != -1) {
             return xc7_cell_timing_lookup(tt_id, inst_id, cell->type, fromPort, toPort, delay);
         }
         delay = DelayQuad(100);
         return true;
     } else if (cell->type == id_BUFGCTRL) {
-        if (fromPort == id("I0") || fromPort == id("I1"))
-            if (toPort == id("O")) {
+        if (fromPort == id_I0 || fromPort == id_I1)
+            if (toPort == id_O) {
                 delay = DelayQuad(200); // FIXME
                 return true;
             }
@@ -1245,21 +1245,21 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
             return TMG_REGISTER_INPUT;
         }
     } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id("SELMUX2_1")) {
+               cell->type == id_SELMUX2_1) {
         if (port == id_OUT)
             return TMG_COMB_OUTPUT;
         else
             return TMG_COMB_INPUT;
     } else if (cell->type == id_IOB_IBUFCTRL) {
-        if (port == id("O"))
+        if (port == id_O)
             return TMG_STARTPOINT;
     } else if (cell->type == id_IOB_OUTBUF) {
-        if (port == id("I"))
+        if (port == id_I)
             return TMG_ENDPOINT;
     } else if (cell->type == id_BUFGCTRL) {
-        if (port == id("I0") || port == id("I1"))
+        if (port == id_I0 || port == id_I1)
             return TMG_COMB_INPUT;
-        if (port == id("O"))
+        if (port == id_O)
             return TMG_COMB_OUTPUT;
     }
     return TMG_IGNORE;
