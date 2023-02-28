@@ -17,6 +17,8 @@
  *
  */
 
+#include <set>
+
 #include "nextpnr.h"
 
 NEXTPNR_NAMESPACE_BEGIN
