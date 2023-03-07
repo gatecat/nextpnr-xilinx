@@ -1473,18 +1473,7 @@ struct FasmBackend
         push("DSP48");
         auto xy = ctx->getSiteLocInTile(ci->bel);
         push("DSP_" + std::to_string(xy.y));
-        // FIXME: waiting for proper DSP48E1 docs in xray, this is
-        // enough for minimal combinational DSPs
-        write_bit("ZALUMODEREG[0]");
-        write_bit("ZCARRYINREG[0]");
-        write_bit("ZCARRYINSELREG[0]");
-        write_bit("ZINMODEREG[0]");
-        write_bit("ZMREG[0]");
-        write_bit("ZOPMODEREG[0]");
-        write_bit("ZPREG[0]");
-        write_bit("USE_DPORT[0]", str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE") == "TRUE");
-        write_bit("ZIS_CLK_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED")));
-        write_bit("ZIS_CARRYIN_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CARRYIN_INVERTED")));
+
         auto write_bus_zinv = [&](std::string name, int width) {
             for (int i = 0; i < width; i++) {
                 std::string b = stringf("[%d]", i);
@@ -1493,11 +1482,40 @@ struct FasmBackend
                 write_bit("ZIS_" + name + "_INVERTED" + b, !inv);
             }
         };
+
         write_bit("AREG_" + std::to_string(int_or_default(ci->params, ctx->id("AREG"), 0)));
         write_bit("BREG_" + std::to_string(int_or_default(ci->params, ctx->id("BREG"), 0)));
+
+        // MASK
+        auto mask_str = str_or_default(ci->params, ctx->id("MASK"), "001111111111111111111111111111111111111111111111");
+        // Yosys gives us 48 bit, but prjxray only recognizes 46 bits
+        // The most significant two bits seem to be zero, so let us just truncate them
+        const size_t mask_size = 46;
+        std::vector<bool> mask_vector(mask_size, true);
+        size_t i = 0;
+        for (auto it = mask_str.crbegin(); it != mask_str.crend() && i < mask_size; ++i, ++it) {
+            mask_vector[i] = *it == '1';
+        }
+        write_vector("MASK[45:0]", mask_vector);
+
+        write_bit("ZADREG[0]", !bool_or_default(ci->params, ctx->id("ADREG"), true));
+        write_bit("ZALUMODEREG[0]", !bool_or_default(ci->params, ctx->id("ALUMODEREG")));
+        write_bit("ZAREG_2_ACASCREG_1", !bool_or_default(ci->params, ctx->id("ACASCREG")));
+        write_bit("ZBREG_2_BCASCREG_1", !bool_or_default(ci->params, ctx->id("BCASCREG")));
+        write_bit("ZCARRYINREG[0]", !bool_or_default(ci->params, ctx->id("CARRYINREG")));
+        write_bit("ZCARRYINSELREG[0]", !bool_or_default(ci->params, ctx->id("CARRYINSELREG")));
+        write_bit("ZCREG[0]", !bool_or_default(ci->params, ctx->id("CREG"), true));
+        write_bit("ZDREG[0]", !bool_or_default(ci->params, ctx->id("DREG"), true));
+        write_bit("ZINMODEREG[0]", !bool_or_default(ci->params, ctx->id("INMODEREG")));
         write_bus_zinv("ALUMODE", 4);
         write_bus_zinv("INMODE", 5);
         write_bus_zinv("OPMODE", 7);
+        write_bit("ZMREG[0]", !bool_or_default(ci->params, ctx->id("MREG")));
+        write_bit("ZOPMODEREG[0]", !bool_or_default(ci->params, ctx->id("OPMODEREG")));
+        write_bit("ZPREG[0]", !bool_or_default(ci->params, ctx->id("PREG")));
+        write_bit("USE_DPORT[0]", str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE") == "TRUE");
+        write_bit("ZIS_CLK_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED")));
+        write_bit("ZIS_CARRYIN_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CARRYIN_INVERTED")));
         pop(3);
     }
 

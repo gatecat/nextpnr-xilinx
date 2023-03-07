@@ -33,9 +33,6 @@ void XC7Packer::pack_dsps()
         if (ci->type == ctx->id("DSP48E1_DSP48E1")) {
             // DRC
             NetInfo *clk = get_net_or_empty(ci, id_CLK);
-            if (clk != nullptr && clk->name != ctx->id("$PACKER_GND_NET"))
-                log_error("Clocked DSP48E1s are currently unsupported (while processing cell %s, clocked by %s).\n",
-                          ctx->nameOf(ci), ctx->nameOf(clk));
             for (auto &port : ci->ports) {
                 std::string n = port.first.str(ctx);
                 if (boost::starts_with(n, "ACIN") || boost::starts_with(n, "BCIN") || boost::starts_with(n, "PCIN")) {
