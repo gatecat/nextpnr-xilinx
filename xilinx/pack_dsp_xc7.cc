@@ -31,8 +31,6 @@ void XC7Packer::pack_dsps()
     for (auto cell : sorted(ctx->cells)) {
         CellInfo *ci = cell.second;
         if (ci->type == ctx->id("DSP48E1_DSP48E1")) {
-            // DRC
-            NetInfo *clk = get_net_or_empty(ci, id_CLK);
             for (auto &port : ci->ports) {
                 std::string n = port.first.str(ctx);
                 if (boost::starts_with(n, "ACIN") || boost::starts_with(n, "BCIN") || boost::starts_with(n, "PCIN")) {
@@ -40,9 +38,6 @@ void XC7Packer::pack_dsps()
                         continue;
                     if (port.second.net->name == ctx->id("$PACKER_GND_NET"))
                         disconnect_port(ctx, ci, port.first);
-                    else
-                        log_error("Cascaded DSP48E1s are currently unsupported (while processing cell %s).\n",
-                                  ctx->nameOf(ci));
                 }
             }
         }
