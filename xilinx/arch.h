@@ -112,6 +112,12 @@ enum BRAMBelTypeZ
     BEL_FIFO18_L = 10,
 };
 
+enum DSP48E1BelTypeZ
+{
+    BEL_LOWER_DSP=25,
+    BEL_UPPER_DSP=6,
+};
+
 enum DSP48E2BelTypeZ
 {
     BEL_DSP_PREADD_DATA = 0,

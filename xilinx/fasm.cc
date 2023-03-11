@@ -1469,10 +1469,13 @@ struct FasmBackend
 
     void write_dsp_cell(CellInfo *ci)
     {
-        push(get_tile_name(ci->bel.tile));
+        auto tile_name = get_tile_name(ci->bel.tile);
+        auto tile_side = tile_name.at(4);
+        push(tile_name);
         push("DSP48");
         auto xy = ctx->getSiteLocInTile(ci->bel);
-        push("DSP_" + std::to_string(xy.y));
+        auto dsp = "DSP_" + std::to_string(xy.y);
+        push(dsp);
 
         auto write_bus_zinv = [&](std::string name, int width) {
             for (int i = 0; i < width; i++) {
@@ -1520,7 +1523,28 @@ struct FasmBackend
         write_bit("USE_DPORT[0]", str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE") == "TRUE");
         write_bit("ZIS_CLK_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED")));
         write_bit("ZIS_CARRYIN_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CARRYIN_INVERTED")));
-        pop(3);
+        pop(2);
+
+        auto write_const_pins = [&](std::string const_net_name) {
+            std::vector<std::string> pins;
+            const auto attr_name = "DSP_" + const_net_name + "_PINS";
+            const auto attr_value = str_or_default(ci->attrs, ctx->id(attr_name), "");
+            // std::cerr << "==============  ATTR: " << attr_name << " value: " << attr_value << std::endl;
+            boost::split(pins, attr_value, boost::is_any_of(" "));
+            for (auto pin : pins) {
+                if (boost::empty(pin)) continue;
+                auto pin_basename = pin;
+                boost::erase_all(pin_basename, "0123456789");
+                auto inv = bool_or_default(ci->params, ctx->id("IS_" + pin_basename + "_INVERTED"), 0);
+                auto net_name = inv ? (const_net_name == "GND" ? "VCC" : "GND") : const_net_name;
+                write_bit(dsp + "_" + pin + ".DSP_" + net_name + "_" + tile_side);
+            }
+        };
+
+        write_const_pins("GND");
+        write_const_pins("VCC");
+
+        pop();
     }
 
     void write_ip()
