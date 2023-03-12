@@ -62,7 +62,7 @@ void XC7Packer::walk_dsp(CellInfo *current_cell, int constr_z)
         // the connected cell has to be above the current cell,
         // otherwise it cannot be routed, because the cascading ports
         // are only connected to the DSP above
-        cascaded_cell->constr_y = constr_z == BEL_UPPER_DSP ? -5 : 0;
+        cascaded_cell->constr_y = constr_z == BEL_LOWER_DSP ? -5 : 0;
         cascaded_cell->constr_z = constr_z;
         cascaded_cell->constr_abs_z = true;
 

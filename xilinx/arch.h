@@ -114,8 +114,8 @@ enum BRAMBelTypeZ
 
 enum DSP48E1BelTypeZ
 {
-    BEL_LOWER_DSP=25,
-    BEL_UPPER_DSP=6,
+    BEL_LOWER_DSP=6,
+    BEL_UPPER_DSP=25,
 };
 
 enum DSP48E2BelTypeZ
