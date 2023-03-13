@@ -1490,8 +1490,20 @@ struct FasmBackend
         // also, prjxray only has bits for values 0 and 2
         auto areg = int_or_default(ci->params, ctx->id("AREG"), 0);
         write_bit("AREG_" + std::to_string(areg == 1 ? 2 : areg));
+        auto ainput = str_or_default(ci->params, ctx->id("A_INPUT"), "DIRECT");
+        if (ainput == "CASCADE") write_bit("A_INPUT[0]");
+
         auto breg = int_or_default(ci->params, ctx->id("BREG"), 0);
         write_bit("BREG_" + std::to_string(breg == 1 ? 2 : breg));
+        auto binput = str_or_default(ci->params, ctx->id("B_INPUT"), "DIRECT");
+        if (binput == "CASCADE") write_bit("B_INPUT[0]");
+
+        auto use_dport = str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE");
+        if (use_dport == "TRUE") write_bit("USE_DPORT[0]");
+
+        auto use_simd = str_or_default(ci->params, ctx->id("USE_SIMD"), "ONE48");
+        if   (use_simd == "TWO24")  write_bit("USE_SIMD_FOUR12_TWO24");
+        else (use_simd == "FOUR12") write_bit("USE_SIMD_FOUR12");
 
         // MASK
         auto mask_str = str_or_default(ci->params, ctx->id("MASK"), "001111111111111111111111111111111111111111111111");
