@@ -1502,8 +1502,24 @@ struct FasmBackend
         if (use_dport == "TRUE") write_bit("USE_DPORT[0]");
 
         auto use_simd = str_or_default(ci->params, ctx->id("USE_SIMD"), "ONE48");
-        if   (use_simd == "TWO24")  write_bit("USE_SIMD_FOUR12_TWO24");
-        else (use_simd == "FOUR12") write_bit("USE_SIMD_FOUR12");
+        if (use_simd == "TWO24")  write_bit("USE_SIMD_FOUR12_TWO24");
+        if (use_simd == "FOUR12") write_bit("USE_SIMD_FOUR12");
+
+        // PATTERN
+        auto pattern_str = str_or_default(ci->params, ctx->id("PATTERN"), "");
+        if (!boost::empty(pattern_str)) {
+            const size_t pattern_size = 48;
+            std::vector<bool> pattern_vector(pattern_size, true);
+            size_t i = 0;
+            for (auto it = pattern_str.crbegin(); it != pattern_str.crend() && i < pattern_size; ++i, ++it) {
+                pattern_vector[i] = *it == '1';
+            }
+            write_vector("PATTERN[47:0]", pattern_vector);
+        }
+
+        auto autoreset_patdet = str_or_default(ci->params, ctx->id("AUTORESET_PATDET"), "NO_RESET");
+        if (autoreset_patdet == "RESET_MATCH")     write_bit("AUTORESET_PATDET_RESET");
+        if (autoreset_patdet == "RESET_NOT_MATCH") write_bit("AUTORESET_PATDET_RESET_NOT_MATCH");
 
         // MASK
         auto mask_str = str_or_default(ci->params, ctx->id("MASK"), "001111111111111111111111111111111111111111111111");
@@ -1516,6 +1532,11 @@ struct FasmBackend
             mask_vector[i] = *it == '1';
         }
         write_vector("MASK[45:0]", mask_vector);
+
+        auto sel_mask = str_or_default(ci->params, ctx->id("SEL_MASK"), "MASK");
+        if (sel_mask == "C")              write_bit("SEL_MASK_C");
+        if (sel_mask == "ROUNDING_MODE1") write_bit("SEL_MASK_ROUNDING_MODE1");
+        if (sel_mask == "ROUNDING_MODE2") write_bit("SEL_MASK_ROUNDING_MODE2");
 
         write_bit("ZADREG[0]", !bool_or_default(ci->params, ctx->id("ADREG"), true));
         write_bit("ZALUMODEREG[0]", !bool_or_default(ci->params, ctx->id("ALUMODEREG")));
