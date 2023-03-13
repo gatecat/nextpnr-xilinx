@@ -134,16 +134,16 @@ void XC7Packer::pack_dsps()
 
     std::vector<CellInfo *> dsp_roots;
     for (auto ci : all_dsps) {
-        bool found_connected_net = false;
+        bool cascade_input_used = false;
         for (auto port : ci->ports) {
             if (!boost::contains(port.first.str(ctx), "CIN")) continue;
             if (port.second.net != nullptr) {
-                found_connected_net = true;
+                cascade_input_used = true;
                 break;
             }
         }
 
-        if (!found_connected_net) {
+        if (!cascade_input_used) {
             dsp_roots.push_back(ci);
         }
     }
