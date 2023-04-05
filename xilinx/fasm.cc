@@ -567,7 +567,7 @@ struct FasmBackend
                 write_bit("ZRST", zrst);
 
                 pop();
-                if (negedge_ff) is_clkinv = true;
+                if (negedge_ff) SET_CHECK(is_clkinv, true);
                 else SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
 
                 NetInfo *sr = get_net_or_empty(ff, ctx->id("SR")), *ce = get_net_or_empty(ff, ctx->id("CE"));
