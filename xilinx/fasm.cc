@@ -482,12 +482,14 @@ struct FasmBackend
     // Process flipflops in a half-tile
     void write_ffs_config(int tile, int half)
     {
-        bool found_ff = false;
-        bool is_latch = false;
-        bool is_sync = false;
-        bool is_clkinv = false;
-        bool is_srused = false;
-        bool is_ceused = false;
+        bool found_ff   = false;
+        bool negedge_ff = false;
+        bool is_latch   = false;
+        bool is_sync    = false;
+        bool is_clkinv  = false;
+        bool is_srused  = false;
+        bool is_ceused  = false;
+
 #define SET_CHECK(dst, src)                                                                                            \
     do {                                                                                                               \
         if (found_ff)                                                                                                  \
@@ -495,6 +497,7 @@ struct FasmBackend
         else                                                                                                           \
             dst = (src);                                                                                               \
     } while (0)
+
         std::string tname = get_tile_name(tile);
 
         auto lts = ctx->tileStatus[tile].lts;
@@ -512,48 +515,48 @@ struct FasmBackend
                 if (ff == nullptr)
                     continue;
                 push(get_bel_name(ff->bel));
-                bool zrst = false, zinit = false, negedge_ff = false;
+                bool zrst = false, zinit = false;
                 zinit = (int_or_default(ff->params, ctx->id("INIT"), 0) != 1);
                 IdString srsig;
                 std::string type = str_or_default(ff->attrs, ctx->id("X_ORIG_TYPE"), "");
                 if (type == "FDRE") {
                     zrst = true;
-                    negedge_ff = false;
+                    SET_CHECK(negedge_ff, false);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDRE_1") {
                     zrst = true;
-                    negedge_ff = true;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDSE") {
                     zrst = false;
-                    negedge_ff = false;
+                    SET_CHECK(negedge_ff, false);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDSE_1") {
                     zrst = false;
-                    negedge_ff = true;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDCE") {
                     zrst = true;
-                    negedge_ff = false;
+                    SET_CHECK(negedge_ff, false);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else if (type == "FDCE_1") {
                     zrst = true;
-                    negedge_ff = true;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else if (type == "FDPE") {
                     zrst = false;
-                    negedge_ff = false;
+                    SET_CHECK(negedge_ff, false);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else if (type == "FDPE_1") {
                     zrst = false;
-                    negedge_ff = true;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else {
