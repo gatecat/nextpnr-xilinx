@@ -512,35 +512,60 @@ struct FasmBackend
                 if (ff == nullptr)
                     continue;
                 push(get_bel_name(ff->bel));
-                bool zrst = false, zinit = false;
+                bool zrst = false, zinit = false, negedge_ff = false;
                 zinit = (int_or_default(ff->params, ctx->id("INIT"), 0) != 1);
                 IdString srsig;
                 std::string type = str_or_default(ff->attrs, ctx->id("X_ORIG_TYPE"), "");
                 if (type == "FDRE") {
                     zrst = true;
+                    negedge_ff = false;
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, true);
+                } else if (type == "FDRE_1") {
+                    zrst = true;
+                    negedge_ff = true;
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDSE") {
                     zrst = false;
+                    negedge_ff = false;
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, true);
+                } else if (type == "FDSE_1") {
+                    zrst = false;
+                    negedge_ff = true;
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDCE") {
                     zrst = true;
+                    negedge_ff = false;
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, false);
+                } else if (type == "FDCE_1") {
+                    zrst = true;
+                    negedge_ff = true;
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else if (type == "FDPE") {
                     zrst = false;
+                    negedge_ff = false;
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, false);
+                } else if (type == "FDPE_1") {
+                    zrst = false;
+                    negedge_ff = true;
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else {
-                    NPNR_ASSERT_FALSE("unsupported FF type");
+                    log_error("unsupported FF type: '%s'\n", type.c_str());
                 }
 
                 write_bit("ZINI", zinit);
                 write_bit("ZRST", zrst);
 
                 pop();
-                SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
+                if (negedge_ff) is_clkinv = true;
+                else SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
 
                 NetInfo *sr = get_net_or_empty(ff, ctx->id("SR")), *ce = get_net_or_empty(ff, ctx->id("CE"));
 
@@ -555,7 +580,8 @@ struct FasmBackend
         }
         write_bit("LATCH", is_latch);
         write_bit("FFSYNC", is_sync);
-        write_bit("CLKINV", is_clkinv);
+        write_bit("CLKINV",    is_clkinv);
+        write_bit("NOCLKINV", !is_clkinv);
         write_bit("SRUSEDMUX", is_srused);
         write_bit("CEUSEDMUX", is_ceused);
         pop(2);
