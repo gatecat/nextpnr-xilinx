@@ -18,16 +18,15 @@
  */
 
 #include "mainwindow.h"
-#include <QAction>
+#include <fstream>
+#include "bitstream.h"
+#include "embed.h"
+#include "log.h"
+#include "machxo2_available.h"
+
 #include <QFileDialog>
-#include <QFileInfo>
-#include <QIcon>
 #include <QInputDialog>
 #include <QLineEdit>
-#include <QSet>
-#include <fstream>
-#include "design_utils.h"
-#include "log.h"
 
 static void initMainResource() { Q_INIT_RESOURCE(nextpnr); }
 
@@ -38,7 +37,7 @@ MainWindow::MainWindow(std::unique_ptr<Context> context, CommandHandler *handler
 {
     initMainResource();
 
-    std::string title = "nextpnr-xo2 - [EMPTY]";
+    std::string title = "nextpnr-machxo2 - [EMPTY]";
     setWindowTitle(title.c_str());
 
     connect(this, &BaseMainWindow::contextChanged, this, &MainWindow::newContext);
@@ -48,60 +47,118 @@ MainWindow::MainWindow(std::unique_ptr<Context> context, CommandHandler *handler
 
 MainWindow::~MainWindow() {}
 
+void MainWindow::newContext(Context *ctx)
+{
+    std::string title = "nextpnr-machxo2 - " + std::string(ctx->device_name) + " (" + std::string(ctx->package_name) +
+                        ") - Part : " + ctx->getChipName();
+    setWindowTitle(title.c_str());
+}
+
 void MainWindow::createMenu()
 {
     // Add arch specific actions
+    actionLoadLPF = new QAction("Open LPF", this);
+    actionLoadLPF->setIcon(QIcon(":/icons/resources/open_lpf.png"));
+    actionLoadLPF->setStatusTip("Open LPF file");
+    actionLoadLPF->setEnabled(false);
+    connect(actionLoadLPF, &QAction::triggered, this, &MainWindow::open_lpf);
+
+    actionSaveConfig = new QAction("Save Bitstream", this);
+    actionSaveConfig->setIcon(QIcon(":/icons/resources/save_config.png"));
+    actionSaveConfig->setStatusTip("Save Bitstream config file");
+    actionSaveConfig->setEnabled(false);
+    connect(actionSaveConfig, &QAction::triggered, this, &MainWindow::save_config);
 
     // Add actions in menus
+    mainActionBar->addSeparator();
+    mainActionBar->addAction(actionLoadLPF);
+    mainActionBar->addAction(actionSaveConfig);
+
+    menuDesign->addSeparator();
+    menuDesign->addAction(actionLoadLPF);
+    menuDesign->addAction(actionSaveConfig);
 }
 
 void MainWindow::new_proj()
 {
-    QMap<QString, int> arch;
-    if (Arch::is_available(ArchArgs::LCMXO2_256HC))
-        arch.insert("LCMXO2-256HC", ArchArgs::LCMXO2_256HC);
-    if (Arch::is_available(ArchArgs::LCMXO2_640HC))
-        arch.insert("LCMXO2-640HC", ArchArgs::LCMXO2_640HC);
-    if (Arch::is_available(ArchArgs::LCMXO2_1200HC))
-        arch.insert("LCMXO2-1200HC", ArchArgs::LCMXO2_1200HC);
-    if (Arch::is_available(ArchArgs::LCMXO2_2000HC))
-        arch.insert("LCMXO2-2000HC", ArchArgs::LCMXO2_2000HC);
-    if (Arch::is_available(ArchArgs::LCMXO2_4000HC))
-        arch.insert("LCMXO2-4000HC", ArchArgs::LCMXO2_4000HC);
-    if (Arch::is_available(ArchArgs::LCMXO2_7000HC))
-        arch.insert("LCMXO2-7000HC", ArchArgs::LCMXO2_7000HC);
+    QList<QString> arch;
+
+    std::stringstream ss(available_devices);
+    std::string name;
+    while (getline(ss, name, ';')) {
+        std::string chipdb = stringf("machxo2/chipdb-%s.bin", name.c_str());
+        auto db_ptr = reinterpret_cast<const RelPtr<ChipInfoPOD> *>(get_chipdb(chipdb));
+        if (!db_ptr)
+            continue; // chipdb not available
+        for (auto &chip : db_ptr->get()->variants) {
+            for (auto &pkg : chip.packages) {
+                for (auto &speedgrade : chip.speed_grades) {
+                    for (auto &rating : chip.suffixes) {
+                        std::string devname = stringf("%s-%d%s%s", chip.name.get(), speedgrade.speed,
+                                                      pkg.short_name.get(), rating.suffix.get());
+                        arch.append(QString::fromLocal8Bit(devname.c_str()));
+                    }
+                }
+            }
+        }
+    }
+
     bool ok;
-    QString item = QInputDialog::getItem(this, "Select new context", "Chip:", arch.keys(), 0, false, &ok);
+    QString item = QInputDialog::getItem(this, "Select new context", "Part:", arch, 0, false, &ok);
     if (ok && !item.isEmpty()) {
         ArchArgs chipArgs;
-        chipArgs.type = (ArchArgs::ArchArgsTypes)arch.value(item);
+        chipArgs.device = item.toUtf8().constData();
+        ;
 
-        QStringList packages;
-        for (auto package : Arch::get_supported_packages(chipArgs.type))
-            packages.append(QLatin1String(package.data(), package.size()));
-        QString package = QInputDialog::getItem(this, "Select package", "Package:", packages, 0, false, &ok);
+        handler->clear();
+        currentProj = "";
+        disableActions();
+        ctx = std::unique_ptr<Context>(new Context(chipArgs));
+        actionLoadJSON->setEnabled(true);
 
-        if (ok && !item.isEmpty()) {
-            handler->clear();
-            currentProj = "";
-            disableActions();
-            chipArgs.package = package.toStdString().c_str();
-            ctx = std::unique_ptr<Context>(new Context(chipArgs));
-            actionLoadJSON->setEnabled(true);
-
-            Q_EMIT contextChanged(ctx.get());
-        }
+        Q_EMIT contextChanged(ctx.get());
     }
 }
 
-void MainWindow::newContext(Context *ctx)
+void MainWindow::open_lpf()
 {
-    std::string title = "nextpnr-xo2 - " + ctx->getChipName();
-    setWindowTitle(title.c_str());
+    QString fileName = QFileDialog::getOpenFileName(this, QString("Open LPF"), QString(), QString("*.lpf"));
+    if (!fileName.isEmpty()) {
+        /*std::ifstream in(fileName.toStdString());
+        if (ctx->apply_lpf(fileName.toStdString(), in)) {
+            log("Loading LPF successful.\n");
+            actionPack->setEnabled(true);
+            actionLoadLPF->setEnabled(false);
+        } else {
+            actionLoadLPF->setEnabled(true);
+            log("Loading LPF failed.\n");
+        }*/
+    }
 }
 
-void MainWindow::onDisableActions() {}
+void MainWindow::save_config()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, QString("Save Bitstream"), QString(), QString("*.config"));
+    if (!fileName.isEmpty()) {
+        std::string fn = fileName.toStdString();
+        disableActions();
+        write_bitstream(ctx.get(), fileName.toStdString());
+        log("Saving Bitstream successful.\n");
+    }
+}
 
-void MainWindow::onUpdateActions() {}
+void MainWindow::onDisableActions()
+{
+    actionLoadLPF->setEnabled(false);
+    actionSaveConfig->setEnabled(false);
+}
+
+void MainWindow::onUpdateActions()
+{
+    if (ctx->settings.find(ctx->id("pack")) == ctx->settings.end())
+        actionLoadLPF->setEnabled(true);
+    if (ctx->settings.find(ctx->id("route")) != ctx->settings.end())
+        actionSaveConfig->setEnabled(true);
+}
 
 NEXTPNR_NAMESPACE_END

@@ -86,14 +86,14 @@ bool CommandHandler::parseOptions()
 bool CommandHandler::executeBeforeContext()
 {
     if (vm.count("help") || argc == 1) {
-        std::cerr << boost::filesystem::basename(argv[0])
+        std::cerr << boost::filesystem::path(argv[0]).stem()
                   << " -- Next Generation Place and Route (Version " GIT_DESCRIBE_STR ")\n";
         std::cerr << options << "\n";
         return argc != 1;
     }
 
     if (vm.count("version")) {
-        std::cerr << boost::filesystem::basename(argv[0])
+        std::cerr << boost::filesystem::path(argv[0]).stem()
                   << " -- Next Generation Place and Route (Version " GIT_DESCRIBE_STR ")\n";
         return true;
     }
@@ -103,6 +103,10 @@ bool CommandHandler::executeBeforeContext()
         log_streams.push_back(std::make_pair(&std::cerr, LogLevel::WARNING_MSG));
     } else {
         log_streams.push_back(std::make_pair(&std::cerr, LogLevel::LOG_MSG));
+    }
+
+    if (vm.count("Werror")) {
+        log_warn_as_error = true;
     }
 
     if (vm.count("log")) {
@@ -121,6 +125,7 @@ po::options_description CommandHandler::getGeneralOptions()
     general.add_options()("help,h", "show help");
     general.add_options()("verbose,v", "verbose output");
     general.add_options()("quiet,q", "quiet mode, only errors and warnings displayed");
+    general.add_options()("Werror", "Turn warnings into errors");
     general.add_options()("log,l", po::value<std::string>(),
                           "log file, all log messages are written to this file regardless of -q");
     general.add_options()("debug", "debug output");
@@ -195,7 +200,7 @@ po::options_description CommandHandler::getGeneralOptions()
                           "allow placer to attempt up to max(10000, total cells^2 / N) iterations to place a cell (int "
                           "N, default: 8, 0 for no timeout)");
 
-#if !defined(__wasm)
+#if !defined(NPNR_DISABLE_THREADS)
     general.add_options()("parallel-refine", "use new experimental parallelised engine for placement refinement");
 #endif
 
@@ -258,7 +263,9 @@ void CommandHandler::setupContext(Context *ctx)
     if (vm.count("randomize-seed")) {
         std::random_device randDev{};
         std::uniform_int_distribution<int> distrib{1};
-        ctx->rngseed(distrib(randDev));
+        auto seed = distrib(randDev);
+        ctx->rngseed(seed);
+        log_info("Generated random seed: %d\n", seed);
     }
 
     if (vm.count("slack_redist_iter")) {

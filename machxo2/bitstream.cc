@@ -30,10 +30,8 @@ NEXTPNR_NAMESPACE_BEGIN
 
 // These seem simple enough to do inline for now.
 namespace BaseConfigs {
-void config_empty_lcmxo2_1200hc(ChipConfig &cc)
+void config_empty_lcmxo2_1200(ChipConfig &cc)
 {
-    cc.chip_name = "LCMXO2-1200HC";
-
     cc.tiles["EBR_R6C11:EBR1"].add_unknown(0, 12);
     cc.tiles["EBR_R6C15:EBR1"].add_unknown(0, 12);
     cc.tiles["EBR_R6C18:EBR1"].add_unknown(0, 12);
@@ -134,7 +132,7 @@ static std::string get_trellis_wirename(Context *ctx, Location loc, WireId wire)
 static void set_pip(Context *ctx, ChipConfig &cc, PipId pip)
 {
     std::string tile = ctx->get_pip_tilename(pip);
-    std::string tile_type = ctx->chip_info->tiletype_names[ctx->tile_info(pip)->pips_data[pip.index].tile_type].get();
+    std::string tile_type = ctx->chip_info->tiletype_names[ctx->tile_info(pip)->pip_data[pip.index].tile_type].get();
     std::string source = get_trellis_wirename(ctx, pip.location, ctx->getPipSrcWire(pip));
     std::string sink = get_trellis_wirename(ctx, pip.location, ctx->getPipDstWire(pip));
     cc.tiles[tile].add_arc(sink, source);
@@ -176,18 +174,24 @@ std::string intstr_or_default(const dict<IdString, Property> &ct, const IdString
 // Get the PIC tile corresponding to a PIO bel
 static std::string get_pic_tile(Context *ctx, BelId bel)
 {
-    static const std::set<std::string> pio_l = {"PIC_L0", "PIC_LS0", "PIC_L0_VREF3"};
-    static const std::set<std::string> pio_r = {"PIC_R0", "PIC_RS0"};
+    static const std::set<std::string> pio_t = {"PIC_T0", "PIC_T0_256", "PIC_TS0"};
+    static const std::set<std::string> pio_b = {"PIC_B0", "PIC_B0_256", "PIC_BS0_256"};
+    static const std::set<std::string> pio_l = {"PIC_L0",       "PIC_L1",       "PIC_L2",       "PIC_L3",
+                                                "PIC_LS0",      "PIC_L0_VREF3", "PIC_L0_VREF4", "PIC_L0_VREF5",
+                                                "PIC_L1_VREF3", "PIC_L1_VREF4", "PIC_L1_VREF5", "PIC_L2_VREF4",
+                                                "PIC_L2_VREF5", "PIC_L3_VREF4", "PIC_L3_VREF5"};
+    static const std::set<std::string> pio_r = {"PIC_R0",     "PIC_R1",     "PIC_RS0",
+                                                "PIC_R0_256", "PIC_R1_640", "PIC_RS0_256"};
 
     std::string pio_name = ctx->tile_info(bel)->bel_data[bel.index].name.get();
     if (bel.location.y == 0) {
-        return ctx->get_tile_by_type_and_loc(0, bel.location.x, "PIC_T0");
+        return ctx->get_tile_by_type_loc(0, bel.location.x, pio_t);
     } else if (bel.location.y == ctx->chip_info->height - 1) {
-        return ctx->get_tile_by_type_and_loc(bel.location.y, bel.location.x, "PIC_B0");
+        return ctx->get_tile_by_type_loc(bel.location.y, bel.location.x, pio_b);
     } else if (bel.location.x == 0) {
-        return ctx->get_tile_by_type_and_loc(bel.location.y, 0, pio_l);
+        return ctx->get_tile_by_type_loc(bel.location.y, 0, pio_l);
     } else if (bel.location.x == ctx->chip_info->width - 1) {
-        return ctx->get_tile_by_type_and_loc(bel.location.y, bel.location.x, pio_r);
+        return ctx->get_tile_by_type_loc(bel.location.y, bel.location.x, pio_r);
     } else {
         NPNR_ASSERT_FALSE("bad PIO location");
     }
@@ -196,16 +200,16 @@ static std::string get_pic_tile(Context *ctx, BelId bel)
 void write_bitstream(Context *ctx, std::string text_config_file)
 {
     ChipConfig cc;
-
-    switch (ctx->args.type) {
-    case ArchArgs::LCMXO2_1200HC:
-        BaseConfigs::config_empty_lcmxo2_1200hc(cc);
-        break;
-    default:
+    IdString base_id = ctx->id(ctx->chip_info->device_name.get());
+    // IdString device_id = ctx->id(ctx->device_name);
+    if (base_id == ctx->id("LCMXO2-1200"))
+        BaseConfigs::config_empty_lcmxo2_1200(cc);
+    else
         NPNR_ASSERT_FALSE("Unsupported device type");
-    }
+    cc.chip_name = ctx->chip_info->device_name.get();
+    cc.chip_variant = ctx->device_name;
 
-    cc.metadata.push_back("Part: " + ctx->get_full_chip_name());
+    cc.metadata.push_back("Part: " + ctx->getChipName());
 
     // Add all set, configurable pips to the config
     for (auto pip : ctx->getPips()) {
@@ -227,8 +231,8 @@ void write_bitstream(Context *ctx, std::string text_config_file)
             continue;
         }
         BelId bel = ci->bel;
-        if (ci->type == id_FACADE_SLICE) {
-            std::string tname = ctx->get_tile_by_type_and_loc(bel.location.y, bel.location.x, "PLC");
+        if (ci->type == id_TRELLIS_SLICE) {
+            std::string tname = ctx->get_tile_by_type_loc(bel.location.y, bel.location.x, "PLC");
             std::string slice = ctx->tile_info(bel)->bel_data[bel.index].name.get();
 
             NPNR_ASSERT(slice.substr(0, 5) == "SLICE");
@@ -255,7 +259,7 @@ void write_bitstream(Context *ctx, std::string text_config_file)
             cc.tiles[tname].add_enum(slice + ".REG1.SD", intstr_or_default(ci->params, id_REG1_SD, "0"));
             cc.tiles[tname].add_enum(slice + ".REG0.REGSET", str_or_default(ci->params, id_REG0_REGSET, "RESET"));
             cc.tiles[tname].add_enum(slice + ".REG1.REGSET", str_or_default(ci->params, id_REG1_REGSET, "RESET"));
-        } else if (ci->type == id_FACADE_IO) {
+        } else if (ci->type == id_TRELLIS_IO) {
             std::string pio = ctx->tile_info(bel)->bel_data[bel.index].name.get();
             std::string iotype = str_or_default(ci->attrs, id_IO_TYPE, "LVCMOS33");
             std::string dir = str_or_default(ci->params, id_DIR, "INPUT");

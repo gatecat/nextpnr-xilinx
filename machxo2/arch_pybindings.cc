@@ -30,7 +30,7 @@ NEXTPNR_NAMESPACE_BEGIN
 void arch_wrap_python(py::module &m)
 {
     using namespace PythonConversion;
-    py::class_<ArchArgs>(m, "ArchArgs").def_readwrite("type", &ArchArgs::type);
+    py::class_<ArchArgs>(m, "ArchArgs").def_readwrite("device", &ArchArgs::device);
 
     py::class_<BelId>(m, "BelId").def_readwrite("index", &BelId::index);
 
@@ -54,8 +54,8 @@ void arch_wrap_python(py::module &m)
     readonly_wrapper<BelPin, decltype(&BelPin::bel), &BelPin::bel, conv_to_str<BelId>>::def_wrap(belpin_cls, "bel");
     readonly_wrapper<BelPin, decltype(&BelPin::pin), &BelPin::pin, conv_to_str<IdString>>::def_wrap(belpin_cls, "pin");
 
-    typedef const PipRange UphillPipRange;
-    typedef const PipRange DownhillPipRange;
+    typedef PipRange UphillPipRange;
+    typedef PipRange DownhillPipRange;
 
     typedef const std::vector<BelBucketId> &BelBucketRange;
     typedef const std::vector<BelId> &BelRangeForBelBucket;

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 project(nextpnr CXX C)
 
+include(CheckCXXCompilerFlag)
+
 # Allow family.cmake add additional dependencies to gui_${family}.
 cmake_policy(SET CMP0079 NEW)
 
@@ -12,7 +14,6 @@ check_ipo_supported(RESULT ipo_supported)
 option(BUILD_GUI "Build GUI" OFF)
 option(BUILD_PYTHON "Build Python Integration" ON)
 option(BUILD_TESTS "Build tests" OFF)
-option(BUILD_HEAP "Build HeAP analytic placer" ON)
 option(USE_OPENMP "Use OpenMP to accelerate analytic placer" OFF)
 option(COVERAGE "Add code coverage info" OFF)
 option(STATIC_BUILD "Create static build" OFF)
@@ -42,26 +43,25 @@ endif()
 
 set(Boost_NO_BOOST_CMAKE ON)
 
-if(WASI)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lwasi-emulated-mman")
-    set(USE_THREADS OFF)
-    add_definitions(
-        -DBOOST_EXCEPTION_DISABLE
-        -DBOOST_NO_EXCEPTIONS
-        -DBOOST_SP_NO_ATOMIC_ACCESS
-        -DBOOST_AC_DISABLE_THREADS
-        -DBOOST_NO_CXX11_HDR_MUTEX
-    )
-else()
-    set(USE_THREADS ON)
+find_package(Threads)
+if (Threads_FOUND)
     find_package(TBB QUIET)
     if (TBB_FOUND)
         add_definitions(-DNEXTPNR_USE_TBB)
     endif()
+else()
+    add_definitions(-DNPNR_DISABLE_THREADS)
 endif()
 
-if (NOT USE_THREADS)
-    add_definitions(-DNPNR_DISABLE_THREADS)
+if(WASI)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lwasi-emulated-mman")
+    add_definitions(
+        -DBOOST_EXCEPTION_DISABLE
+        -DBOOST_NO_EXCEPTIONS
+    )
+    if (NOT Threads_FOUND)
+        add_definitions(-DBOOST_NO_CXX11_HDR_MUTEX)
+    endif()
 endif()
 
 set(link_param "")
@@ -134,7 +134,13 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W4 /wd4100 /wd4244 /wd4125 /wd4800 /wd4456 /wd4458 /wd4305 /wd4459 /wd4121 /wd4996 /wd4127")
 else()
     # N.B. the -Wno-array-bounds is to work around a false positive in GCC 9
-    set(WARN_FLAGS "-Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-array-bounds -Wno-format-truncation")
+    set(WARN_FLAGS "-Wall -Wextra")
+    foreach(TRY_WARN_FLAG no-unused-parameter no-missing-field-initializers no-array-bounds no-format-truncation)
+        check_cxx_compiler_flag("-W${TRY_WARN_FLAG}" HAS_W${TRY_WARN_FLAG})
+        if (HAS_W${TRY_WARN_FLAG})
+            set(WARN_FLAGS "${WARN_FLAGS} -W${TRY_WARN_FLAG}")
+        endif()
+    endforeach()
     if (WERROR)
         set(WARN_FLAGS "${WARN_FLAGS} -Werror")
     endif()
@@ -160,7 +166,7 @@ find_package(Sanitizers)
 
 # List of Boost libraries to include
 set(boost_libs filesystem program_options iostreams system)
-if (USE_THREADS)
+if (Threads_FOUND)
     list(APPEND boost_libs thread)
 endif()
 
@@ -223,11 +229,8 @@ endif()
 
 include_directories(common/kernel/ common/place/ common/route/ json/ frontend/ 3rdparty/json11/ ${PYBIND11_INCLUDE_DIR} ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
 
-if(BUILD_HEAP)
-    find_package (Eigen3 REQUIRED NO_MODULE)
-    link_libraries(Eigen3::Eigen)
-    add_definitions(-DWITH_HEAP)
-endif()
+find_package (Eigen3 REQUIRED NO_MODULE)
+link_libraries(Eigen3::Eigen)
 
 aux_source_directory(common/kernel/ KERNEL_SRC_FILES)
 aux_source_directory(common/place/ PLACE_SRC_FILES)

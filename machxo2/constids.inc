@@ -1,4 +1,4 @@
-X(FACADE_SLICE)
+X(TRELLIS_SLICE)
 X(A0)
 X(B0)
 X(C0)
@@ -60,15 +60,14 @@ X(CCU2_INJECT1_1)
 X(WREMUX)
 
 
-X(FACADE_FF)
+X(TRELLIS_FF)
 X(DI)
 X(Q)
 
 X(REGSET)
 
 
-X(FACADE_IO)
-X(PAD)
+X(TRELLIS_IO)
 X(I)
 X(EN)
 X(O)
@@ -123,12 +122,9 @@ X(IO_TYPE)
 X(LOC)
 X(NOM_FREQ)
 X(VCC)
-X(lcmxo2_1200hc)
-X(lcmxo2_2000hc)
-X(lcmxo2_256hc)
-X(lcmxo2_4000hc)
-X(lcmxo2_640hc)
-X(lcmxo2_7000hc)
+
+X(WIRE_TYPE_NONE)
+
 X(machxo2)
 X(pack)
 X(place)

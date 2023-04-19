@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
+ *  Copyright (C) 2023  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -17,39 +17,26 @@
  *
  */
 
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#ifndef MACHXO2_GFX_H
+#define MACHXO2_GFX_H
 
-#include "../basewindow.h"
+#include "nextpnr.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
-class MainWindow : public BaseMainWindow
+enum GfxTileWireId
 {
-    Q_OBJECT
-
-  public:
-    explicit MainWindow(std::unique_ptr<Context> context, CommandHandler *handler, QWidget *parent = 0);
-    virtual ~MainWindow();
-
-  public:
-    void createMenu();
-
-  protected:
-    void onDisableActions() override;
-    void onUpdateActions() override;
-
-  protected Q_SLOTS:
-    void new_proj() override;
-    void newContext(Context *ctx);
-    void open_lpf();
-    void save_config();
-
-  private:
-    QAction *actionLoadLPF;
-    QAction *actionSaveConfig;
+    TILE_WIRE_NONE,
 };
+
+void gfxTileBel(std::vector<GraphicElement> &g, int x, int y, int z, int w, int h, IdString bel_type,
+                GraphicElement::style_t style);
+void gfxTileWire(std::vector<GraphicElement> &g, int x, int y, int w, int h, IdString wire_type, GfxTileWireId tilewire,
+                 GraphicElement::style_t style);
+void gfxTilePip(std::vector<GraphicElement> &g, int x, int y, int w, int h, WireId src, IdString src_type,
+                GfxTileWireId src_id, WireId dst, IdString dst_type, GfxTileWireId dst_id,
+                GraphicElement::style_t style);
 
 NEXTPNR_NAMESPACE_END
 
-#endif // MAINWINDOW_H
+#endif

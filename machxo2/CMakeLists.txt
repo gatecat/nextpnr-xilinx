@@ -1,8 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(chipdb-machxo2 NONE)
 
-# set(ALL_MACHXO2_DEVICES 256 640 1200 2000 4000 7000)
-set(ALL_MACHXO2_DEVICES 1200)
+set(ALL_MACHXO2_DEVICES 256X 640X 1200X 2280X 256 640 1200 2000 4000 7000)
 set(MACHXO2_DEVICES 1200 CACHE STRING
     "Include support for these MachXO2 devices (available: ${ALL_MACHXO2_DEVICES})")
 message(STATUS "Enabled MachXO2 devices: ${MACHXO2_DEVICES}")
@@ -63,6 +62,7 @@ else()
                 -L ${TRELLIS_DATADIR}/util/common
                 -L ${TRELLIS_DATADIR}/timing/util
                 -p ${CMAKE_CURRENT_SOURCE_DIR}/constids.inc
+                -g ${CMAKE_CURRENT_SOURCE_DIR}/gfx.h
                 ${device}
                 > ${device_bba}.new
             # atomically update
@@ -70,6 +70,7 @@ else()
             DEPENDS
                 ${CMAKE_CURRENT_SOURCE_DIR}/facade_import.py
                 ${CMAKE_CURRENT_SOURCE_DIR}/constids.inc
+                ${CMAKE_CURRENT_SOURCE_DIR}/gfx.h
                 ${PREVIOUS_CHIPDB_TARGET}
             VERBATIM)
         list(APPEND all_device_bbas ${device_bba})

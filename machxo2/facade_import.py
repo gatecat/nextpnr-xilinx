@@ -5,6 +5,8 @@ import sys
 from os import path
 
 tiletype_names = dict()
+gfx_wire_ids = dict()
+gfx_wire_names = list()
 
 parser = argparse.ArgumentParser(description="import MachXO2 routing and bels from Project Trellis")
 parser.add_argument("device", type=str, help="target device")
@@ -17,6 +19,24 @@ sys.path += args.libdir
 import pytrellis
 import database
 
+with open(args.gfxh) as f:
+    state = 0
+    for line in f:
+        if state == 0 and line.startswith("enum GfxTileWireId"):
+            state = 1
+        elif state == 1 and line.startswith("};"):
+            state = 0
+        elif state == 1 and (line.startswith("{") or line.strip() == ""):
+            pass
+        elif state == 1:
+            idx = len(gfx_wire_ids)
+            name = line.strip().rstrip(",")
+            gfx_wire_ids[name] = idx
+            gfx_wire_names.append(name)
+
+def wire_type(name):
+    return "WIRE_TYPE_NONE"
+
 # Get the index for a tiletype
 def get_tiletype_index(name):
     if name in tiletype_names:
@@ -25,6 +45,49 @@ def get_tiletype_index(name):
     tiletype_names[name] = idx
     return idx
 
+def package_shortname(long_name, family):
+    if long_name.startswith("CABGA"):
+        if (family == "MachXO"):
+            return "B" + long_name[5:]
+        else:
+            return "BG" + long_name[5:]
+    elif long_name.startswith("CSBGA"):
+        if (family == "MachXO"):
+            return "M" + long_name[5:]
+        else:
+            return "MG" + long_name[5:]
+    elif long_name.startswith("CSFBGA"):
+        return "MG" + long_name[6:]
+    elif long_name.startswith("UCBGA"):
+        return "UMG" + long_name[5:]
+    elif long_name.startswith("FPBGA"):
+        return "FG" + long_name[5:]
+    elif long_name.startswith("FTBGA"):
+        if (family == "MachXO"):
+            return "FT" + long_name[5:]
+        else:
+            return "FTG" + long_name[5:]
+    elif long_name.startswith("WLCSP"):
+        if (family == "MachXO3D"):
+            return "UTG" + long_name[5:]
+        else:
+            return "UWG" + long_name[5:]
+    elif long_name.startswith("TQFP"):
+        if (family == "MachXO"):
+            return "T" + long_name[4:]
+        else:
+            return "TG" + long_name[4:]
+    elif long_name.startswith("QFN"):
+        if (family == "MachXO3D"):
+            return "SG" + long_name[3:]
+        else:
+            if long_name[3]=="8":
+                return "QN" + long_name[3:]
+            else:
+                return "SG" + long_name[3:]
+    else:
+        print("unknown package name " + long_name)
+        sys.exit(-1)
 
 constids = dict()
 
@@ -42,17 +105,27 @@ class BinaryBlobAssembler:
         else:
             print("ref %s %s" % (name, comment))
 
+    def r_slice(self, name, length, comment):
+        if comment is None:
+            print("ref %s" % (name,))
+        else:
+            print("ref %s %s" % (name, comment))
+        print ("u32 %d" % (length, ))
+
     def s(self, s, comment):
         assert "|" not in s
         print("str |%s| %s" % (s, comment))
 
     def u8(self, v, comment):
+        assert -128 <= int(v) <= 127
         if comment is None:
             print("u8 %d" % (v,))
         else:
             print("u8 %d %s" % (v, comment))
 
     def u16(self, v, comment):
+        # is actually used as signed 16 bit
+        assert -32768 <= int(v) <= 32767
         if comment is None:
             print("u16 %d" % (v,))
         else:
@@ -90,9 +163,17 @@ def get_bel_index(rg, loc, name):
 
 packages = {}
 pindata = []
+variants = {}
+
+def process_devices_db(family, device):
+    devicefile = path.join(database.get_db_root(), "devices.json")
+    with open(devicefile, 'r') as f:
+        devicedb = json.load(f)
+        for varname, vardata in sorted(devicedb["families"][family]["devices"][device]["variants"].items()):
+            variants[varname] = vardata
 
 def process_pio_db(rg, device):
-    piofile = path.join(database.get_db_root(), "MachXO2", dev_names[device], "iodb.json")
+    piofile = path.join(database.get_db_root(), dev_family[device], dev_names[device], "iodb.json")
     with open(piofile, 'r') as f:
         piodb = json.load(f)
         for pkgname, pkgdata in sorted(piodb["packages"].items()):
@@ -100,14 +181,7 @@ def process_pio_db(rg, device):
             for name, pinloc in sorted(pkgdata.items()):
                 x = pinloc["col"]
                 y = pinloc["row"]
-                if x == 0 or x == max_col:
-                    # FIXME: Oversight in read_pinout.py. We use 0-based
-                    # columns for 0 and max row, but we otherwise extract
-                    # the names from the CSV, and...
-                    loc = pytrellis.Location(x, y)
-                else:
-                    # Lattice uses 1-based columns!
-                    loc = pytrellis.Location(x - 1, y)
+                loc = pytrellis.Location(x, y)
                 pio = "PIO" + pinloc["pio"]
                 bel_idx = get_bel_index(rg, loc, pio)
                 if bel_idx is not None:
@@ -116,10 +190,7 @@ def process_pio_db(rg, device):
         for metaitem in piodb["pio_metadata"]:
             x = metaitem["col"]
             y = metaitem["row"]
-            if x == 0 or x == max_col:
-                loc = pytrellis.Location(x, y)
-            else:
-                loc = pytrellis.Location(x - 1, y)
+            loc = pytrellis.Location(x, y)
             pio = "PIO" + metaitem["pio"]
             bank = metaitem["bank"]
             if "function" in metaitem:
@@ -222,18 +293,14 @@ def write_database(dev_name, chip, rg, endianness):
             for wire_idx in range(len(t.wires)):
                 wire = t.wires[wire_idx]
                 bba.s(rg.to_str(wire.name), "name")
-                # TODO: Padding until GUI support is added.
-                # bba.u32(constids[wire_type(ddrg.to_str(wire.name))], "type")
-                # if ("TILE_WIRE_" + ddrg.to_str(wire.name)) in gfx_wire_ids:
-                #     bba.u32(gfx_wire_ids["TILE_WIRE_" + ddrg.to_str(wire.name)], "tile_wire")
-                # else:
-                bba.u32(0, "tile_wire")
-                bba.u32(len(wire.arcsUphill), "num_uphill")
-                bba.u32(len(wire.arcsDownhill), "num_downhill")
-                bba.r("loc%d_%d_wire%d_uppips" % (l.y, l.x, wire_idx) if len(wire.arcsUphill) > 0 else None, "pips_uphill")
-                bba.r("loc%d_%d_wire%d_downpips" % (l.y, l.x, wire_idx) if len(wire.arcsDownhill) > 0 else None, "pips_downhill")
-                bba.u32(len(wire.belPins), "num_bel_pins")
-                bba.r("loc%d_%d_wire%d_belpins" % (l.y, l.x, wire_idx) if len(wire.belPins) > 0 else None, "bel_pins")
+                bba.u16(constids[wire_type(rg.to_str(wire.name))], "type")
+                if ("TILE_WIRE_" + rg.to_str(wire.name)) in gfx_wire_ids:
+                    bba.u16(gfx_wire_ids["TILE_WIRE_" + rg.to_str(wire.name)], "tile_wire")
+                else:
+                    bba.u16(0, "tile_wire")
+                bba.r_slice("loc%d_%d_wire%d_uppips" % (l.y, l.x, wire_idx) if len(wire.arcsUphill) > 0 else None, len(wire.arcsUphill), "pips_uphill")
+                bba.r_slice("loc%d_%d_wire%d_downpips" % (l.y, l.x, wire_idx) if len(wire.arcsDownhill) > 0 else None, len(wire.arcsDownhill), "pips_downhill")
+                bba.r_slice("loc%d_%d_wire%d_belpins" % (l.y, l.x, wire_idx) if len(wire.belPins) > 0 else None, len(wire.belPins), "bel_pins")
 
         if len(t.bels) > 0:
             for bel_idx in range(len(t.bels)):
@@ -243,15 +310,14 @@ def write_database(dev_name, chip, rg, endianness):
                     write_loc(pin.wire.rel, "rel_wire_loc")
                     bba.u32(pin.wire.id, "wire_index")
                     bba.u32(constids[rg.to_str(pin.pin)], "port")
-                    bba.u32(int(pin.dir), "dir")
+                    bba.u32(int(pin.dir), "type")
             bba.l("loc%d_%d_bels" % (l.y, l.x), "BelInfoPOD")
             for bel_idx in range(len(t.bels)):
                 bel = t.bels[bel_idx]
                 bba.s(rg.to_str(bel.name), "name")
                 bba.u32(constids[rg.to_str(bel.type)], "type")
                 bba.u32(bel.z, "z")
-                bba.u32(len(bel.wires), "num_bel_wires")
-                bba.r("loc%d_%d_bel%d_wires" % (l.y, l.x, bel_idx), "bel_wires")
+                bba.r_slice("loc%d_%d_bel%d_wires" % (l.y, l.x, bel_idx), len(bel.wires), "bel_wires")
 
     bba.l("tiles", "TileTypePOD")
     for l in loc_iter:
@@ -260,12 +326,9 @@ def write_database(dev_name, chip, rg, endianness):
         if (l.y, l.x) == (-2, -2):
             continue
 
-        bba.u32(len(t.bels), "num_bels")
-        bba.u32(len(t.wires), "num_wires")
-        bba.u32(len(t.arcs), "num_pips")
-        bba.r("loc%d_%d_bels" % (l.y, l.x) if len(t.bels) > 0 else None, "bel_data")
-        bba.r("loc%d_%d_wires" % (l.y, l.x) if len(t.wires) > 0 else None, "wire_data")
-        bba.r("loc%d_%d_pips" % (l.y, l.x) if len(t.arcs) > 0 else None, "pips_data")
+        bba.r_slice("loc%d_%d_bels" % (l.y, l.x) if len(t.bels) > 0 else None, len(t.bels), "bel_data")
+        bba.r_slice("loc%d_%d_wires" % (l.y, l.x) if len(t.wires) > 0 else None, len(t.wires), "wire_data")
+        bba.r_slice("loc%d_%d_pips" % (l.y, l.x) if len(t.arcs) > 0 else None, len(t.arcs), "pips_data")
 
     for y in range(0, max_row+1):
         for x in range(0, max_col+1):
@@ -278,8 +341,7 @@ def write_database(dev_name, chip, rg, endianness):
     bba.l("tiles_info", "TileInfoPOD")
     for y in range(0, max_row+1):
         for x in range(0, max_col+1):
-            bba.u32(len(chip.get_tiles_by_position(y, x)), "num_tiles")
-            bba.r("tile_info_%d_%d" % (x, y), "tile_names")
+            bba.r_slice("tile_info_%d_%d" % (x, y), len(chip.get_tiles_by_position(y, x)), "tile_names")
 
     for package, pkgdata in sorted(packages.items()):
         bba.l("package_data_%s" % package, "PackagePinPOD")
@@ -292,8 +354,7 @@ def write_database(dev_name, chip, rg, endianness):
     bba.l("package_data", "PackageInfoPOD")
     for package, pkgdata in sorted(packages.items()):
         bba.s(package, "name")
-        bba.u32(len(pkgdata), "num_pins")
-        bba.r("package_data_%s" % package, "pin_data")
+        bba.r_slice("package_data_%s" % package, len(pkgdata), "pin_data")
 
     bba.l("pio_info", "PIOInfoPOD")
     for pin in pindata:
@@ -312,25 +373,71 @@ def write_database(dev_name, chip, rg, endianness):
     for tt, idx in sorted(tiletype_names.items(), key=lambda x: x[1]):
         bba.s(tt, "name")
 
+    for name, var_data in sorted(variants.items()):
+        bba.l("supported_packages_%s" % name, "PackageSupportedPOD")
+        for package in var_data["packages"]:
+            bba.s(package, "name")
+            bba.s(package_shortname(package, chip.info.family), "short_name")
+        bba.l("supported_speed_grades_%s" % name, "SpeedSupportedPOD")
+        for speed in var_data["speeds"]:
+            bba.u32(speed, "speed")
+        bba.l("supported_suffixes_%s" % name, "SuffixeSupportedPOD")
+        for suffix in var_data["suffixes"]:
+            bba.s(suffix, "suffix")
+
+    bba.l("variant_data", "VariantInfoPOD")
+    for name, var_data in sorted(variants.items()):
+        bba.s(name, "variant_name")
+        bba.r_slice("supported_packages_%s" % name, len(var_data["packages"]), "supported_packages")
+        bba.r_slice("supported_speed_grades_%s" % name, len(var_data["speeds"]), "supported_speed_grades")
+        bba.r_slice("supported_suffixes_%s" % name, len(var_data["suffixes"]), "supported_suffixes")
 
     bba.l("chip_info")
+    bba.s(chip.info.family, "family")
+    bba.s(chip.info.name, "device_name")
     bba.u32(max_col + 1, "width")
     bba.u32(max_row + 1, "height")
     bba.u32((max_col + 1) * (max_row + 1), "num_tiles")
-    bba.u32(len(packages), "num_packages")
-    bba.u32(len(pindata), "num_pios")
     bba.u32(const_id_count, "const_id_count")
 
-    bba.r("tiles", "tiles")
-    bba.r("tiletype_names", "tiletype_names")
-    bba.r("package_data", "package_info")
-    bba.r("pio_info", "pio_info")
-    bba.r("tiles_info", "tile_info")
+    bba.r_slice("tiles", (max_col + 1) * (max_row + 1), "tiles")
+    bba.r_slice("tiletype_names", len(tiletype_names), "tiletype_names")
+    bba.r_slice("package_data", len(packages), "package_info")
+    bba.r_slice("pio_info", len(pindata), "pio_info")
+    bba.r_slice("tiles_info", (max_col + 1) * (max_row + 1), "tile_info")
+    bba.r_slice("variant_data", len(variants), "variant_info")
 
     bba.pop()
+    return bba
 
 
-dev_names = {"1200": "LCMXO2-1200HC"}
+dev_family = {
+    "256X": "MachXO",
+    "640X": "MachXO",
+    "1200X":"MachXO",
+    "2280X":"MachXO",
+
+    "256":  "MachXO2",
+    "640":  "MachXO2",
+    "1200": "MachXO2",
+    "2000": "MachXO2",
+    "4000": "MachXO2",
+    "7000": "MachXO2"
+}
+
+dev_names = {
+    "256X": "LCMXO256",
+    "640X": "LCMXO640",
+    "1200X":"LCMXO1200",
+    "2280X":"LCMXO2280",
+
+    "256":  "LCMXO2-256",
+    "640":  "LCMXO2-640",
+    "1200": "LCMXO2-1200",
+    "2000": "LCMXO2-2000",
+    "4000": "LCMXO2-4000",
+    "7000": "LCMXO2-7000"
+}
 
 def main():
     global max_row, max_col, const_id_count
@@ -352,14 +459,15 @@ def main():
             constids[line[1]] = idx
             const_id_count += 1
 
-    constids["SLICE"] = constids["FACADE_SLICE"]
-    constids["PIO"] = constids["FACADE_IO"]
+    constids["SLICE"] = constids["TRELLIS_SLICE"]
+    constids["PIO"] = constids["TRELLIS_IO"]
 
     chip = pytrellis.Chip(dev_names[args.device])
-    rg = pytrellis.make_optimized_chipdb(chip)
+    rg = pytrellis.make_optimized_chipdb(chip, split_slice_mode=False)
     max_row = chip.get_max_row()
     max_col = chip.get_max_col()
     process_pio_db(rg, args.device)
+    process_devices_db(chip.info.family, chip.info.name)
     bba = write_database(args.device, chip, rg, "le")
 
 

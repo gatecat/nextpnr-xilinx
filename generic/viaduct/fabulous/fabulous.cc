@@ -48,10 +48,13 @@ struct FabulousImpl : ViaductAPI
         for (auto a : args) {
             if (a.first == "fasm")
                 fasm_file = a.second;
+            else if (a.first == "lut_k")
+                cfg.clb.lut_k = std::stoi(a.second);
             else
                 log_error("unrecognised fabulous option '%s'\n", a.first.c_str());
         }
     }
+
     ~FabulousImpl(){};
     void init(Context *ctx) override
     {
@@ -64,12 +67,68 @@ struct FabulousImpl : ViaductAPI
         else
             is_new_fab = false;
         log_info("Detected FABulous %s format project.\n", is_new_fab ? "2.0" : "1.0");
+        init_default_ctrlset_cfg();
         // To consider: a faster serialised form of the device data (like bba that other arches use) so we don't have to
         // go through the whole csv parsing malarkey each time
         blk_trk = std::make_unique<BlockTracker>(ctx, cfg);
         is_new_fab ? init_bels_v2() : init_bels_v1();
         init_pips();
-        ctx->setDelayScaling(0.25, 0.5);
+        init_pseudo_constant_wires();
+        setup_lut_permutation();
+        ctx->setDelayScaling(3.0, 3.0);
+        ctx->delay_epsilon = 0.25;
+        ctx->ripup_penalty = 0.5;
+    }
+
+    void init_default_ctrlset_cfg()
+    {
+        // TODO: loading from file or something
+        uint64_t default_routing = (1ULL << (cfg.clb.lc_per_clb * cfg.clb.ff_per_lc)) - 1;
+        auto setup_cfg = [&](ControlSetConfig &ctrl, int mask) {
+            ctrl.routing.clear();
+            ctrl.routing.push_back(default_routing);
+            ctrl.can_mask = mask;
+            ctrl.can_invert = false;
+        };
+
+        setup_cfg(cfg.clb.clk, -1);
+        setup_cfg(cfg.clb.en, 1);
+        setup_cfg(cfg.clb.sr, 0);
+    }
+
+    void update_cell_timing(Context *ctx)
+    {
+        // These timings are not realistic. They just make sure nextpnr does some timing-driven optimisation...
+        for (auto &cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
+            if (ci->type == id_FABULOUS_LC) {
+                auto &lct = cell_tags.get(ci);
+                if (lct.comb.carry_used) {
+                    ctx->addCellTimingDelay(ci->name, id_Ci, id_Co, 0.2);
+                    ctx->addCellTimingDelay(ci->name, ctx->id("I1"), id_Co, 1.0);
+                    ctx->addCellTimingDelay(ci->name, ctx->id("I2"), id_Co, 1.0);
+                }
+                if (lct.ff.ff_used) {
+                    ctx->addCellTimingClock(ci->name, id_CLK);
+                    for (unsigned i = 0; i < cfg.clb.lut_k; i++)
+                        ctx->addCellTimingSetupHold(ci->name, ctx->idf("I%d", i), id_CLK, 2.5, 0.1);
+                    ctx->addCellTimingClockToOut(ci->name, id_Q, id_CLK, 1.0);
+                    if (bool_or_default(ci->params, id_I0MUX))
+                        ctx->addCellTimingSetupHold(ci->name, id_Ci, id_CLK, 2.5, 0.1);
+                } else {
+                    for (unsigned i = 0; i < cfg.clb.lut_k; i++)
+                        ctx->addCellTimingDelay(ci->name, ctx->idf("I%d", i), id_O, 3.0);
+                    if (bool_or_default(ci->params, id_I0MUX))
+                        ctx->addCellTimingDelay(ci->name, id_Ci, id_O, 3.0);
+                }
+            } else if (ci->type == id_OutPass4_frame_config) {
+                for (unsigned i = 0; i < 4; i++)
+                    ctx->addCellTimingSetupHold(ci->name, ctx->idf("I%d", i), id_CLK, 2.5, 0.1);
+            } else if (ci->type == id_InPass4_frame_config) {
+                for (unsigned i = 0; i < 4; i++)
+                    ctx->addCellTimingClockToOut(ci->name, ctx->idf("O%d", i), id_CLK, 2.5);
+            }
+        }
     }
 
     void pack() override { fabulous_pack(ctx, cfg); }
@@ -77,10 +136,14 @@ struct FabulousImpl : ViaductAPI
     void postRoute() override
     {
         if (!fasm_file.empty())
-            fabulous_write_fasm(ctx, cfg, fasm_file);
+            fabulous_write_fasm(ctx, cfg, pp_tags, fasm_file);
     }
 
-    void prePlace() override { assign_cell_info(); }
+    void prePlace() override
+    {
+        assign_cell_info();
+        update_cell_timing(ctx);
+    }
     bool isBelLocationValid(BelId bel, bool explain_invalid) const override
     {
         return blk_trk->check_validity(bel, cfg, cell_tags);
@@ -118,11 +181,18 @@ struct FabulousImpl : ViaductAPI
 
     pool<IdString> warned_beltypes;
 
-    void add_pseudo_pip(WireId src, WireId dst, IdString pip_type)
+    std::vector<PseudoPipTags> pp_tags;
+
+    void add_pseudo_pip(WireId src, WireId dst, IdString pip_type, float delay = 1.0,
+                        PseudoPipTags tags = PseudoPipTags())
     {
         const auto &src_data = ctx->wire_info(src);
         IdStringList pip_name = IdStringList::concat(ctx->getWireName(src), ctx->getWireName(dst));
-        ctx->addPip(pip_name, pip_type, src, dst, ctx->getDelayFromNS(0.05), Loc(src_data.x, src_data.y, 0));
+        PipId idx =
+                ctx->addPip(pip_name, pip_type, src, dst, ctx->getDelayFromNS(delay), Loc(src_data.x, src_data.y, 0));
+        if (idx.index >= int(pp_tags.size()))
+            pp_tags.resize(idx.index + 1);
+        pp_tags.at(idx.index) = tags;
     }
 
     void handle_bel_ports(BelId bel, IdString tile, IdString bel_type, const std::vector<parser_view> &ports)
@@ -138,6 +208,11 @@ struct FabulousImpl : ViaductAPI
                 ctx->addBelPin(bel, pin, port_wire, pin.in(id_I, id_T) ? PORT_IN : PORT_OUT);
             }
         } else if (bel_type.in(id_InPass4_frame_config, id_OutPass4_frame_config)) {
+            WireId clk_wire = get_wire(tile, id_CLK, id_REG_CLK);
+            if (ctx->wires.at(clk_wire.index).uphill.empty()) {
+                add_pseudo_pip(global_clk_wire, clk_wire, id_global_clock);
+            }
+            ctx->addBelInput(bel, id_CLK, clk_wire);
             for (parser_view p : ports) {
                 IdString port_id = p.to_id(ctx);
                 WireId port_wire = get_wire(tile, port_id, port_id);
@@ -237,6 +312,16 @@ struct FabulousImpl : ViaductAPI
             NPNR_ASSERT(bel_idx.size() == 1);
             int bel_z = bel_idx[0] - 'A';
             NPNR_ASSERT(bel_z >= 0 && bel_z < 26);
+            std::vector<parser_view> ports;
+            parser_view port;
+            while (!(port = csv.next_field()).empty()) {
+                ports.push_back(port);
+            }
+            IdString bel_name = bel_idx.to_id(ctx);
+            if (bel_type.in(id_InPass4_frame_config, id_OutPass4_frame_config)) {
+                // Assign BRAM IO a nicer name than just a letter
+                bel_name = ports.front().rsplit('_').first.to_id(ctx);
+            }
             /*
             In the future we will need to handle optionally splitting SLICEs into separate LUT/COMB and FF bels
             This is the preferred approach in nextpnr for arches where the LUT and FF can be used separately of
@@ -245,12 +330,7 @@ struct FabulousImpl : ViaductAPI
             While this isn't yet the standard fabulous SLICE, it should be considered as a future option in fabulous.
             */
             Loc loc(bel_x, bel_y, bel_z);
-            BelId bel = ctx->addBel(IdStringList::concat(tile, bel_idx.to_id(ctx)), bel_type, loc, false, false);
-            std::vector<parser_view> ports;
-            parser_view port;
-            while (!(port = csv.next_field()).empty()) {
-                ports.push_back(port);
-            }
+            BelId bel = ctx->addBel(IdStringList::concat(tile, bel_name), bel_type, loc, false, false);
             handle_bel_ports(bel, tile, bel_type, ports);
         }
         postprocess_bels();
@@ -271,9 +351,19 @@ struct FabulousImpl : ViaductAPI
                 NPNR_ASSERT(bel_idx.size() == 1);
                 int bel_z = bel_idx[0] - 'A';
                 NPNR_ASSERT(bel_z >= 0 && bel_z < 26);
+                IdString bel_name = bel_idx.to_id(ctx);
+                if (bel_type.in(id_InPass4_frame_config, id_OutPass4_frame_config, id_InPass4_frame_config_mux,
+                                id_OutPass4_frame_config_mux)) {
+                    // Assign BRAM IO a nicer name than just a letter
+                    auto prefix = csv.next_field();
+                    if (prefix.empty()) {
+                        log_error("Bel definition missing field; please update FABulous!\n");
+                    }
+                    bel_name = prefix.rsplit('_').first.to_id(ctx);
+                }
                 Loc loc = tile_loc(tile);
-                curr_bel = ctx->addBel(IdStringList::concat(tile, bel_idx.to_id(ctx)), bel_type,
-                                       Loc(loc.x, loc.y, bel_z), false, false);
+                curr_bel = ctx->addBel(IdStringList::concat(tile, bel_name), bel_type, Loc(loc.x, loc.y, bel_z), false,
+                                       false);
             } else if (cmd.in(id_I, id_O)) {
                 IdString port = csv.next_field().to_id(ctx);
                 auto wire_name = csv.next_field().split('.');
@@ -363,6 +453,7 @@ struct FabulousImpl : ViaductAPI
         }
     }
 
+    int max_x = 0, max_y = 0;
     void init_pips()
     {
         std::ifstream in = open_data_rel(is_new_fab ? "/.FABulous/pips.txt" : "/npnroutput/pips.txt");
@@ -376,8 +467,51 @@ struct FabulousImpl : ViaductAPI
             IdString pip_name = csv.next_field().to_id(ctx);
             WireId src_wire = get_wire(src_tile, src_port, src_port);
             WireId dst_wire = get_wire(dst_tile, dst_port, dst_port);
+            Loc loc = tile_loc(src_tile);
+            max_x = std::max(loc.x, max_x);
+            max_y = std::max(loc.y, max_y);
             ctx->addPip(IdStringList::concat(src_tile, pip_name), pip_name, src_wire, dst_wire,
-                        ctx->getDelayFromNS(0.01 * delay), tile_loc(src_tile));
+                        ctx->getDelayFromNS(0.05 * delay), loc);
+        }
+    }
+
+    void remove_bel_pin(BelId bel, IdString pin)
+    {
+        auto &bel_data = ctx->bel_info(bel);
+        auto &wire_data = ctx->wire_info(ctx->getBelPinWire(bel, pin));
+        std::vector<BelPin> new_wire_pins;
+        for (const auto &wire_pin : wire_data.bel_pins) {
+            if (wire_pin.bel == bel && wire_pin.pin == pin)
+                continue;
+            new_wire_pins.push_back(wire_pin);
+        }
+        wire_data.bel_pins = new_wire_pins;
+        bel_data.pins.erase(pin);
+    }
+
+    void setup_lut_permutation()
+    {
+        for (auto bel : ctx->getBels()) {
+            auto &bel_data = ctx->bel_info(bel);
+            if (!bel_data.type.in(id_FABULOUS_LC, id_FABULOUS_COMB))
+                continue;
+            std::vector<WireId> orig_inputs, new_inputs;
+            for (unsigned i = 0; i < cfg.clb.lut_k; i++) {
+                // Rewire the LUT input to a permutation pseudo-wire
+                IdString pin = ctx->idf("I%d", i);
+                orig_inputs.push_back(ctx->getBelPinWire(bel, pin));
+                remove_bel_pin(bel, pin);
+                WireId in_wire = get_wire(bel_data.name[0], ctx->idf("%s_PERM_I%d", bel_data.name[1].c_str(ctx), i),
+                                          id__LUT_PERM_IN);
+                ctx->addBelInput(bel, pin, in_wire);
+                new_inputs.push_back(in_wire);
+            }
+            for (unsigned i = 0; i < cfg.clb.lut_k; i++) {
+                for (unsigned j = 0; j < cfg.clb.lut_k; j++) {
+                    add_pseudo_pip(orig_inputs.at(i), new_inputs.at(j), id__LUT_PERM, 0.1,
+                                   PseudoPipTags(PseudoPipTags::LUT_PERM, bel, ((i << 4) | j)));
+                }
+            }
         }
     }
 
@@ -413,6 +547,67 @@ struct FabulousImpl : ViaductAPI
         return ctx->addWire(wire_name, type, loc.x, loc.y);
     }
 
+    void init_pseudo_constant_wires()
+    {
+        for (int y = 0; y <= max_y; y++) {
+            for (int x = 0; x <= max_x; x++) {
+                for (int c = 0; c <= 1; c++) {
+                    IdString name = ctx->idf("$CONST%d", c);
+                    IdString tile = ctx->idf("X%dY%d", x, y);
+                    WireId const_wire = get_wire(tile, name, name);
+                    // Driver bel; always at 0;0
+                    if (x == 0 && y == 0) {
+                        int z = 0;
+                        while (ctx->bel_by_loc.count(Loc(x, y, z)))
+                            z++;
+                        BelId const_driver = ctx->addBel(IdStringList::concat(tile, ctx->idf("_CONST%d_DRV", c)),
+                                                         ctx->idf("_CONST%d_DRV", c), Loc(x, y, z), true, true);
+                        ctx->addBelInput(const_driver, id_O, const_wire);
+                    }
+                    if (x > 0) {
+                        // 'right' pip
+                        WireId prev_wire = get_wire(ctx->idf("X%dY%d", 0, y), name, name);
+                        add_pseudo_pip(prev_wire, const_wire, name, 0.1);
+                    }
+                    if (y > 0) {
+                        // 'down' pip
+                        WireId prev_wire = get_wire(ctx->idf("X%dY%d", x, 0), name, name);
+                        add_pseudo_pip(prev_wire, const_wire, name, 0.1);
+                    }
+                }
+            }
+        }
+        // LUTs can act as constant drivers if they aren't used.
+        // To avoid an exorbitant number of pips, only do this for the first LUT in a tile
+        // This pip will only be enabled if the LUT isn't used
+        for (BelId bel : ctx->getBels()) {
+            if (!ctx->getBelType(bel).in(id_FABULOUS_LC, id_FABULOUS_COMB))
+                continue;
+            Loc loc = ctx->getBelLocation(bel);
+            WireId o = ctx->getBelPinWire(bel, id_O);
+            for (int c = 0; c <= 1; c++) {
+                IdString const_name = ctx->idf("$CONST%d", c);
+                WireId const_wire = get_wire(ctx->idf("X%dY%d", loc.x, loc.y), const_name, const_name);
+                add_pseudo_pip(const_wire, o, const_name, 0.1, PseudoPipTags(PseudoPipTags::LUT_CONST, bel, c));
+            }
+        }
+        // We can also have dedicated constant wires in the fabric
+        for (WireId wire : ctx->getWires()) {
+            auto &wire_data = ctx->wire_info(wire);
+            IdString name_suffix = wire_data.name[1];
+            int const_val = -1;
+            if (name_suffix.in(id_GND, id_GND0))
+                const_val = 0;
+            else if (name_suffix.in(id_VCC, id_VCC0, id_VDD, id_VDD0))
+                const_val = 1;
+            else
+                continue;
+            IdString const_name = ctx->idf("$CONST%d", const_val);
+            WireId const_wire = get_wire(ctx->idf("X%dY%d", wire_data.x, wire_data.y), const_name, const_name);
+            add_pseudo_pip(const_wire, wire, const_name, 0.1);
+        }
+    }
+
     CellTagger cell_tags;
     void assign_cell_info()
     {
@@ -424,6 +619,48 @@ struct FabulousImpl : ViaductAPI
     {
         CellInfo *old = ctx->getBoundBelCell(bel);
         blk_trk->update_bel(bel, old, cell);
+    }
+
+    bool checkPipAvail(PipId pip) const override
+    {
+        if (pip.index >= int(pp_tags.size()))
+            return true;
+        const auto &tags = pp_tags.at(pip.index);
+        if (tags.type == PseudoPipTags::LUT_CONST) {
+            return ctx->checkBelAvail(tags.bel);
+        } else if (tags.type == PseudoPipTags::LUT_PERM) {
+            uint8_t from = (tags.data >> 4) & 0xF, to = (tags.data & 0xF);
+            if (from == to)
+                return true;
+            const CellInfo *lut = ctx->getBoundBelCell(tags.bel);
+            if (!lut)
+                return true;
+            bool is_carry = cell_tags.get(lut).comb.carry_used;
+            if (is_carry) {
+                // Because you have to make sure you route _something_ to each HA input in this mode (undefined I1/I2
+                // inputs aren't OK) and you also can't swap I0 because it's fixed internally LUT permutation in carry
+                // mode is just more trouble than it's worth.
+                return false;
+            } else {
+                return true; // TODO: other cases where perm illegal; e.g. LUTRAM
+            }
+        } else {
+            // TODO: LUT permuation pseudopips
+            return true;
+        }
+    }
+
+    delay_t predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdString dst_pin) const override
+    {
+        if (src_pin == id_Co && dst_pin == id_Ci)
+            return 0.5;
+
+        auto driver_loc = ctx->getBelLocation(src_bel);
+        auto sink_loc = ctx->getBelLocation(dst_bel);
+
+        int dx = abs(sink_loc.x - driver_loc.x);
+        int dy = abs(sink_loc.y - driver_loc.y);
+        return (dx + dy) * ctx->args.delayScale + ctx->args.delayOffset;
     }
 };
 

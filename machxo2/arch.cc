@@ -21,6 +21,8 @@
 #include <iostream>
 #include <math.h>
 #include "embed.h"
+#include "gfx.h"
+#include "machxo2_available.h"
 #include "nextpnr.h"
 #include "placer1.h"
 #include "placer_heap.h"
@@ -43,51 +45,55 @@ void IdString::initialize_arch(const BaseCtx *ctx)
 
 // ---------------------------------------------------------------
 
-static const ChipInfoPOD *get_chip_info(ArchArgs::ArchArgsTypes chip)
+static void get_chip_info(std::string device, const ChipInfoPOD **chip_info, const PackageInfoPOD **package_info,
+                          const char **device_name, const char **package_name)
 {
-    std::string chipdb;
-    if (chip == ArchArgs::LCMXO2_256HC) {
-        chipdb = "machxo2/chipdb-256.bin";
-    } else if (chip == ArchArgs::LCMXO2_640HC) {
-        chipdb = "machxo2/chipdb-640.bin";
-    } else if (chip == ArchArgs::LCMXO2_1200HC) {
-        chipdb = "machxo2/chipdb-1200.bin";
-    } else if (chip == ArchArgs::LCMXO2_2000HC) {
-        chipdb = "machxo2/chipdb-2000.bin";
-    } else if (chip == ArchArgs::LCMXO2_4000HC) {
-        chipdb = "machxo2/chipdb-4000.bin";
-    } else if (chip == ArchArgs::LCMXO2_7000HC) {
-        chipdb = "machxo2/chipdb-7000.bin";
-    } else {
-        log_error("Unknown chip\n");
+    std::stringstream ss(available_devices);
+    std::string name;
+    while (getline(ss, name, ';')) {
+        std::string chipdb = stringf("machxo2/chipdb-%s.bin", name.c_str());
+        auto db_ptr = reinterpret_cast<const RelPtr<ChipInfoPOD> *>(get_chipdb(chipdb));
+        if (!db_ptr)
+            continue; // chipdb not available
+        for (auto &chip : db_ptr->get()->variants) {
+            for (auto &pkg : chip.packages) {
+                for (auto &speedgrade : chip.speed_grades) {
+                    for (auto &rating : chip.suffixes) {
+                        std::string devname = stringf("%s-%d%s%s", chip.name.get(), speedgrade.speed,
+                                                      pkg.short_name.get(), rating.suffix.get());
+                        if (device == devname) {
+                            *chip_info = db_ptr->get();
+                            *package_info = nullptr;
+                            *package_name = pkg.name.get();
+                            *device_name = chip.name.get();
+                            for (auto &pi : db_ptr->get()->package_info) {
+                                if (pkg.name.get() == pi.name.get()) {
+                                    *package_info = &pi;
+                                    break;
+                                }
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
     }
-
-    auto ptr = reinterpret_cast<const RelPtr<ChipInfoPOD> *>(get_chipdb(chipdb));
-    if (ptr == nullptr)
-        return nullptr;
-    return ptr->get();
 }
 
 // ---------------------------------------------------------------
 
 Arch::Arch(ArchArgs args) : args(args)
 {
-    chip_info = get_chip_info(args.type);
+    get_chip_info(args.device, &chip_info, &package_info, &device_name, &package_name);
     if (chip_info == nullptr)
         log_error("Unsupported MachXO2 chip type.\n");
     if (chip_info->const_id_count != DB_CONST_ID_COUNT)
         log_error("Chip database 'bba' and nextpnr code are out of sync; please rebuild (or contact distribution "
                   "maintainer)!\n");
 
-    package_info = nullptr;
-    for (int i = 0; i < chip_info->num_packages; i++) {
-        if (args.package == chip_info->package_info[i].name.get()) {
-            package_info = &(chip_info->package_info[i]);
-            break;
-        }
-    }
     if (!package_info)
-        log_error("Unsupported package '%s' for '%s'.\n", args.package.c_str(), getChipName().c_str());
+        log_error("Unsupported package '%s' for '%s'.\n", package_name, getChipName().c_str());
 
     BaseArch::init_cell_types();
     BaseArch::init_bel_buckets();
@@ -109,83 +115,33 @@ Arch::Arch(ArchArgs args) : args(args)
     }
 }
 
-bool Arch::is_available(ArchArgs::ArchArgsTypes chip) { return get_chip_info(chip) != nullptr; }
-
-std::vector<std::string> Arch::get_supported_packages(ArchArgs::ArchArgsTypes chip)
+void Arch::list_devices()
 {
-    const ChipInfoPOD *chip_info = get_chip_info(chip);
-    std::vector<std::string> pkgs;
-    for (int i = 0; i < chip_info->num_packages; i++) {
-        pkgs.push_back(chip_info->package_info[i].name.get());
-    }
-    return pkgs;
-}
-
-std::string Arch::getChipName() const
-{
-    if (args.type == ArchArgs::LCMXO2_256HC) {
-        return "LCMXO2-256HC";
-    } else if (args.type == ArchArgs::LCMXO2_640HC) {
-        return "LCMXO2-640HC";
-    } else if (args.type == ArchArgs::LCMXO2_1200HC) {
-        return "LCMXO2-1200HC";
-    } else if (args.type == ArchArgs::LCMXO2_2000HC) {
-        return "LCMXO2-2000HC";
-    } else if (args.type == ArchArgs::LCMXO2_4000HC) {
-        return "LCMXO2-4000HC";
-    } else if (args.type == ArchArgs::LCMXO2_7000HC) {
-        return "LCMXO2-7000HC";
-    } else {
-        log_error("Unknown chip\n");
+    log("Supported devices: \n");
+    std::stringstream ss(available_devices);
+    std::string name;
+    while (getline(ss, name, ';')) {
+        std::string chipdb = stringf("machxo2/chipdb-%s.bin", name.c_str());
+        auto db_ptr = reinterpret_cast<const RelPtr<ChipInfoPOD> *>(get_chipdb(chipdb));
+        if (!db_ptr)
+            continue; // chipdb not available
+        for (auto &chip : db_ptr->get()->variants) {
+            for (auto &pkg : chip.packages) {
+                for (auto &speedgrade : chip.speed_grades) {
+                    for (auto &rating : chip.suffixes) {
+                        log("    %s-%d%s%s\n", chip.name.get(), speedgrade.speed, pkg.short_name.get(),
+                            rating.suffix.get());
+                    }
+                }
+            }
+        }
     }
 }
 
-std::string Arch::get_full_chip_name() const
-{
-    std::string name = getChipName();
-    name += "-";
-    switch (args.speed) {
-    case ArchArgs::SPEED_1:
-        name += "1";
-        break;
-    case ArchArgs::SPEED_2:
-        name += "2";
-        break;
-    case ArchArgs::SPEED_3:
-        name += "3";
-        break;
-    case ArchArgs::SPEED_4:
-        name += "4";
-        break;
-    case ArchArgs::SPEED_5:
-        name += "5";
-        break;
-    case ArchArgs::SPEED_6:
-        name += "6";
-        break;
-    }
-    name += args.package;
-    return name;
-}
+// -----------------------------------------------------------------------
 
-IdString Arch::archArgsToId(ArchArgs args) const
-{
-    if (args.type == ArchArgs::LCMXO2_256HC) {
-        return id_lcmxo2_256hc;
-    } else if (args.type == ArchArgs::LCMXO2_640HC) {
-        return id_lcmxo2_640hc;
-    } else if (args.type == ArchArgs::LCMXO2_1200HC) {
-        return id_lcmxo2_1200hc;
-    } else if (args.type == ArchArgs::LCMXO2_2000HC) {
-        return id_lcmxo2_2000hc;
-    } else if (args.type == ArchArgs::LCMXO2_4000HC) {
-        return id_lcmxo2_4000hc;
-    } else if (args.type == ArchArgs::LCMXO2_7000HC) {
-        return id_lcmxo2_7000hc;
-    }
-
-    return IdString();
-}
+std::string Arch::getChipName() const { return args.device; }
+IdString Arch::archArgsToId(ArchArgs args) const { return id(args.device); }
 
 // ---------------------------------------------------------------
 
@@ -199,7 +155,7 @@ BelId Arch::getBelByName(IdStringList name) const
     loc.y = id_to_y.at(name[1]);
     ret.location = loc;
     const TileTypePOD *loci = tile_info(ret);
-    for (int i = 0; i < loci->num_bels; i++) {
+    for (int i = 0; i < loci->bel_data.ssize(); i++) {
         if (std::strcmp(loci->bel_data[i].name.get(), name[2].c_str(this)) == 0) {
             ret.index = i;
             return ret;
@@ -218,9 +174,9 @@ BelId Arch::getBelByLocation(Loc loc) const
     ret.location.x = loc.x;
     ret.location.y = loc.y;
 
-    const TileTypePOD *tilei = tile_info(ret);
-    for (int i = 0; i < tilei->num_bels; i++) {
-        if (tilei->bel_data[i].z == loc.z) {
+    const TileTypePOD *loci = tile_info(ret);
+    for (int i = 0; i < loci->bel_data.ssize(); i++) {
+        if (loci->bel_data[i].z == loc.z) {
             ret.index = i;
             return ret;
         }
@@ -236,7 +192,7 @@ BelRange Arch::getBelsByTile(int x, int y) const
     br.b.cursor_tile = y * chip_info->width + x;
     br.e.cursor_tile = y * chip_info->width + x;
     br.b.cursor_index = 0;
-    br.e.cursor_index = chip_info->tiles[y * chip_info->width + x].num_bels - 1;
+    br.e.cursor_index = chip_info->tiles[y * chip_info->width + x].bel_data.ssize() - 1;
     br.b.chip = chip_info;
     br.e.chip = chip_info;
     if (br.e.cursor_index == -1)
@@ -252,16 +208,13 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
 {
     NPNR_ASSERT(bel != BelId());
 
-    int num_bel_wires = tile_info(bel)->bel_data[bel.index].num_bel_wires;
-    const BelWirePOD *bel_wires = &*tile_info(bel)->bel_data[bel.index].bel_wires;
-
-    for (int i = 0; i < num_bel_wires; i++)
-        if (bel_wires[i].port == pin.index) {
+    for (auto &bw : tile_info(bel)->bel_data[bel.index].bel_wires)
+        if (bw.port == pin.index) {
             WireId ret;
 
-            ret.location.x = bel_wires[i].rel_wire_loc.x;
-            ret.location.y = bel_wires[i].rel_wire_loc.y;
-            ret.index = bel_wires[i].wire_index;
+            ret.location.x = bw.rel_wire_loc.x;
+            ret.location.y = bw.rel_wire_loc.y;
+            ret.index = bw.wire_index;
 
             return ret;
         }
@@ -273,12 +226,9 @@ PortType Arch::getBelPinType(BelId bel, IdString pin) const
 {
     NPNR_ASSERT(bel != BelId());
 
-    int num_bel_wires = tile_info(bel)->bel_data[bel.index].num_bel_wires;
-    const BelWirePOD *bel_wires = &*tile_info(bel)->bel_data[bel.index].bel_wires;
-
-    for (int i = 0; i < num_bel_wires; i++)
-        if (bel_wires[i].port == pin.index)
-            return PortType(bel_wires[i].dir);
+    for (auto &bw : tile_info(bel)->bel_data[bel.index].bel_wires)
+        if (bw.port == pin.index)
+            return PortType(bw.type);
 
     return PORT_INOUT;
 }
@@ -288,11 +238,9 @@ std::vector<IdString> Arch::getBelPins(BelId bel) const
     std::vector<IdString> ret;
     NPNR_ASSERT(bel != BelId());
 
-    int num_bel_wires = tile_info(bel)->bel_data[bel.index].num_bel_wires;
-    const BelWirePOD *bel_wires = &*tile_info(bel)->bel_data[bel.index].bel_wires;
-
-    for (int i = 0; i < num_bel_wires; i++) {
-        IdString id(bel_wires[i].port);
+    for (auto &bw : tile_info(bel)->bel_data[bel.index].bel_wires) {
+        IdString id;
+        id.index = bw.port;
         ret.push_back(id);
     }
 
@@ -303,11 +251,11 @@ std::vector<IdString> Arch::getBelPins(BelId bel) const
 
 BelId Arch::getPackagePinBel(const std::string &pin) const
 {
-    for (int i = 0; i < package_info->num_pins; i++) {
-        if (package_info->pin_data[i].name.get() == pin) {
+    for (auto &ppin : package_info->pin_data) {
+        if (ppin.name.get() == pin) {
             BelId bel;
-            bel.location = package_info->pin_data[i].abs_loc;
-            bel.index = package_info->pin_data[i].bel_index;
+            bel.location = ppin.abs_loc;
+            bel.index = ppin.bel_index;
             return bel;
         }
     }
@@ -326,7 +274,7 @@ WireId Arch::getWireByName(IdStringList name) const
     loc.y = id_to_y.at(name[1]);
     ret.location = loc;
     const TileTypePOD *loci = tile_info(ret);
-    for (int i = 0; i < loci->num_wires; i++) {
+    for (int i = 0; i < loci->wire_data.ssize(); i++) {
         if (std::strcmp(loci->wire_data[i].name.get(), name[2].c_str(this)) == 0) {
             ret.index = i;
             return ret;
@@ -352,7 +300,7 @@ PipId Arch::getPipByName(IdStringList name) const
     loc.y = id_to_y.at(name[1]);
     ret.location = loc;
     const TileTypePOD *loci = tile_info(ret);
-    for (int i = 0; i < loci->num_pips; i++) {
+    for (int i = 0; i < loci->pip_data.ssize(); i++) {
         PipId curr;
         curr.location = loc;
         curr.index = i;
@@ -365,13 +313,11 @@ PipId Arch::getPipByName(IdStringList name) const
 
 IdStringList Arch::getPipName(PipId pip) const
 {
-    auto &pip_data = tile_info(pip)->pips_data[pip.index];
+    auto &pip_data = tile_info(pip)->pip_data[pip.index];
     WireId src = getPipSrcWire(pip), dst = getPipDstWire(pip);
-    const char *src_name = tile_info(src)->wire_data[src.index].name.get();
-    const char *dst_name = tile_info(dst)->wire_data[dst.index].name.get();
     std::string pip_name =
-            stringf("%d_%d_%s->%d_%d_%s", pip_data.src.x - pip.location.x, pip_data.src.y - pip.location.y, src_name,
-                    pip_data.dst.x - pip.location.x, pip_data.dst.y - pip.location.y, dst_name);
+            stringf("%d_%d_%s->%d_%d_%s", pip_data.src.x, pip_data.src.y, get_wire_basename(src).c_str(this),
+                    pip_data.dst.x, pip_data.dst.y, get_wire_basename(dst).c_str(this));
 
     std::array<IdString, 3> ids{x_ids.at(pip.location.x), y_ids.at(pip.location.y), id(pip_name)};
     return IdStringList(ids);
@@ -422,7 +368,7 @@ bool Arch::place()
         return retVal;
     } else if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
-        cfg.ioBufTypes.insert(id_FACADE_IO);
+        cfg.ioBufTypes.insert(id_TRELLIS_IO);
         bool retVal = placer_heap(getCtx(), cfg);
         getCtx()->settings[id_place] = 1;
         archInfoToAttributes();
@@ -449,6 +395,79 @@ bool Arch::route()
     return result;
 }
 
+// -----------------------------------------------------------------------
+
+std::vector<GraphicElement> Arch::getDecalGraphics(DecalId decal) const
+{
+    std::vector<GraphicElement> ret;
+    if (decal.type == DecalId::TYPE_WIRE) {
+        WireId wire;
+        wire.index = decal.z;
+        wire.location = decal.location;
+        auto wire_type = getWireType(wire);
+        int x = decal.location.x;
+        int y = decal.location.y;
+        GraphicElement::style_t style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_INACTIVE;
+        GfxTileWireId tilewire = GfxTileWireId(tile_info(wire)->wire_data[wire.index].tile_wire);
+        gfxTileWire(ret, x, chip_info->height - y - 1, chip_info->width, chip_info->height, wire_type, tilewire, style);
+    } else if (decal.type == DecalId::TYPE_PIP) {
+        PipId pip;
+        pip.index = decal.z;
+        pip.location = decal.location;
+        WireId src_wire = getPipSrcWire(pip);
+        WireId dst_wire = getPipDstWire(pip);
+        int x = decal.location.x;
+        int y = decal.location.y;
+        GfxTileWireId src_id = GfxTileWireId(tile_info(src_wire)->wire_data[src_wire.index].tile_wire);
+        GfxTileWireId dst_id = GfxTileWireId(tile_info(dst_wire)->wire_data[dst_wire.index].tile_wire);
+        GraphicElement::style_t style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_HIDDEN;
+        gfxTilePip(ret, x, chip_info->height - y - 1, chip_info->width, chip_info->height, src_wire,
+                   getWireType(src_wire), src_id, dst_wire, getWireType(dst_wire), dst_id, style);
+    } else if (decal.type == DecalId::TYPE_BEL) {
+        BelId bel;
+        bel.index = decal.z;
+        bel.location = decal.location;
+        auto bel_type = getBelType(bel);
+        int x = decal.location.x;
+        int y = decal.location.y;
+        int z = tile_info(bel)->bel_data[bel.index].z;
+        GraphicElement::style_t style = decal.active ? GraphicElement::STYLE_ACTIVE : GraphicElement::STYLE_INACTIVE;
+        gfxTileBel(ret, x, chip_info->height - y - 1, z, chip_info->width, chip_info->height, bel_type, style);
+    }
+
+    return ret;
+}
+
+DecalXY Arch::getBelDecal(BelId bel) const
+{
+    DecalXY decalxy;
+    decalxy.decal.type = DecalId::TYPE_BEL;
+    decalxy.decal.location = bel.location;
+    decalxy.decal.z = bel.index;
+    decalxy.decal.active = getBoundBelCell(bel) != nullptr;
+    return decalxy;
+}
+
+DecalXY Arch::getWireDecal(WireId wire) const
+{
+    DecalXY decalxy;
+    decalxy.decal.type = DecalId::TYPE_WIRE;
+    decalxy.decal.location = wire.location;
+    decalxy.decal.z = wire.index;
+    decalxy.decal.active = getBoundWireNet(wire) != nullptr;
+    return decalxy;
+}
+
+DecalXY Arch::getPipDecal(PipId pip) const
+{
+    DecalXY decalxy;
+    decalxy.decal.type = DecalId::TYPE_PIP;
+    decalxy.decal.location = pip.location;
+    decalxy.decal.z = pip.index;
+    decalxy.decal.active = getBoundPipNet(pip) != nullptr;
+    return decalxy;
+};
+
 // ---------------------------------------------------------------
 
 bool Arch::isBelLocationValid(BelId bel, bool explain_invalid) const
@@ -457,30 +476,21 @@ bool Arch::isBelLocationValid(BelId bel, bool explain_invalid) const
     return true;
 }
 
-#ifdef WITH_HEAP
 const std::string Arch::defaultPlacer = "heap";
-#else
-const std::string Arch::defaultPlacer = "sa";
-#endif
 
-const std::vector<std::string> Arch::availablePlacers = {"sa",
-#ifdef WITH_HEAP
-                                                         "heap"
-#endif
-};
+const std::vector<std::string> Arch::availablePlacers = {"sa", "heap"};
 
 const std::string Arch::defaultRouter = "router1";
 const std::vector<std::string> Arch::availableRouters = {"router1", "router2"};
 
 bool Arch::cells_compatible(const CellInfo **cells, int count) const { return false; }
 
-std::vector<std::pair<std::string, std::string>> Arch::get_tiles_at_location(int row, int col)
+std::vector<std::pair<std::string, std::string>> Arch::get_tiles_at_loc(int row, int col)
 {
     std::vector<std::pair<std::string, std::string>> ret;
     auto &tileloc = chip_info->tile_info[row * chip_info->width + col];
-    for (int i = 0; i < tileloc.num_tiles; i++) {
-        ret.push_back(std::make_pair(tileloc.tile_names[i].name.get(),
-                                     chip_info->tiletype_names[tileloc.tile_names[i].type_idx].get()));
+    for (auto &tn : tileloc.tile_names) {
+        ret.push_back(std::make_pair(tn.name.get(), chip_info->tiletype_names[tn.type_idx].get()));
     }
     return ret;
 }
