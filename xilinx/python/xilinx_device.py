@@ -452,7 +452,7 @@ def import_device(name, prjxray_root, metadata_root):
 		return ij["intents"][str(ij["tiles"][tiletype][wirename])]
 
 	d = Device(name)
-	match = re.search("^(xc7[akz]\d+t?)\w+-\d", name)
+	match = re.search("^(xc7[sakz]\d+t?)\w+-\d", name)
 	if not match:
 		raise RuntimeError("{} is not known device name".format(name))
 	fabricname = match.groups()[0]
