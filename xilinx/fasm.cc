@@ -482,12 +482,14 @@ struct FasmBackend
     // Process flipflops in a half-tile
     void write_ffs_config(int tile, int half)
     {
-        bool found_ff = false;
-        bool is_latch = false;
-        bool is_sync = false;
-        bool is_clkinv = false;
-        bool is_srused = false;
-        bool is_ceused = false;
+        bool found_ff   = false;
+        bool negedge_ff = false;
+        bool is_latch   = false;
+        bool is_sync    = false;
+        bool is_clkinv  = false;
+        bool is_srused  = false;
+        bool is_ceused  = false;
+
 #define SET_CHECK(dst, src)                                                                                            \
     do {                                                                                                               \
         if (found_ff)                                                                                                  \
@@ -495,6 +497,7 @@ struct FasmBackend
         else                                                                                                           \
             dst = (src);                                                                                               \
     } while (0)
+
         std::string tname = get_tile_name(tile);
 
         auto lts = ctx->tileStatus[tile].lts;
@@ -518,29 +521,54 @@ struct FasmBackend
                 std::string type = str_or_default(ff->attrs, ctx->id("X_ORIG_TYPE"), "");
                 if (type == "FDRE") {
                     zrst = true;
+                    SET_CHECK(negedge_ff, false);
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, true);
+                } else if (type == "FDRE_1") {
+                    zrst = true;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDSE") {
                     zrst = false;
+                    SET_CHECK(negedge_ff, false);
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, true);
+                } else if (type == "FDSE_1") {
+                    zrst = false;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, true);
                 } else if (type == "FDCE") {
                     zrst = true;
+                    SET_CHECK(negedge_ff, false);
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, false);
+                } else if (type == "FDCE_1") {
+                    zrst = true;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else if (type == "FDPE") {
                     zrst = false;
+                    SET_CHECK(negedge_ff, false);
+                    SET_CHECK(is_latch, false);
+                    SET_CHECK(is_sync, false);
+                } else if (type == "FDPE_1") {
+                    zrst = false;
+                    SET_CHECK(negedge_ff, true);
                     SET_CHECK(is_latch, false);
                     SET_CHECK(is_sync, false);
                 } else {
-                    NPNR_ASSERT_FALSE("unsupported FF type");
+                    log_error("unsupported FF type: '%s'\n", type.c_str());
                 }
 
                 write_bit("ZINI", zinit);
                 write_bit("ZRST", zrst);
 
                 pop();
-                SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
+                if (negedge_ff) SET_CHECK(is_clkinv, true);
+                else SET_CHECK(is_clkinv, int_or_default(ff->params, ctx->id("IS_C_INVERTED")) == 1);
 
                 NetInfo *sr = get_net_or_empty(ff, ctx->id("SR")), *ce = get_net_or_empty(ff, ctx->id("CE"));
 
@@ -555,7 +583,8 @@ struct FasmBackend
         }
         write_bit("LATCH", is_latch);
         write_bit("FFSYNC", is_sync);
-        write_bit("CLKINV", is_clkinv);
+        write_bit("CLKINV",    is_clkinv);
+        write_bit("NOCLKINV", !is_clkinv);
         write_bit("SRUSEDMUX", is_srused);
         write_bit("CEUSEDMUX", is_ceused);
         pop(2);
