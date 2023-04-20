@@ -2,6 +2,7 @@
  *  nextpnr -- Next Generation Place and Route
  *
  *  Copyright (C) 2019  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2023  Hans Baier <hansfbaier@gmail.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -1469,22 +1470,14 @@ struct FasmBackend
 
     void write_dsp_cell(CellInfo *ci)
     {
-        push(get_tile_name(ci->bel.tile));
+        auto tile_name = get_tile_name(ci->bel.tile);
+        auto tile_side = tile_name.at(4);
+        push(tile_name);
         push("DSP48");
         auto xy = ctx->getSiteLocInTile(ci->bel);
-        push("DSP_" + std::to_string(xy.y));
-        // FIXME: waiting for proper DSP48E1 docs in xray, this is
-        // enough for minimal combinational DSPs
-        write_bit("ZALUMODEREG[0]");
-        write_bit("ZCARRYINREG[0]");
-        write_bit("ZCARRYINSELREG[0]");
-        write_bit("ZINMODEREG[0]");
-        write_bit("ZMREG[0]");
-        write_bit("ZOPMODEREG[0]");
-        write_bit("ZPREG[0]");
-        write_bit("USE_DPORT[0]", str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE") == "TRUE");
-        write_bit("ZIS_CLK_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED")));
-        write_bit("ZIS_CARRYIN_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CARRYIN_INVERTED")));
+        auto dsp = "DSP_" + std::to_string(xy.y);
+        push(dsp);
+
         auto write_bus_zinv = [&](std::string name, int width) {
             for (int i = 0; i < width; i++) {
                 std::string b = stringf("[%d]", i);
@@ -1493,12 +1486,99 @@ struct FasmBackend
                 write_bit("ZIS_" + name + "_INVERTED" + b, !inv);
             }
         };
-        write_bit("AREG_" + std::to_string(int_or_default(ci->params, ctx->id("AREG"), 0)));
-        write_bit("BREG_" + std::to_string(int_or_default(ci->params, ctx->id("BREG"), 0)));
+
+        // value 1 is equivalent to 2 here, see UG479
+        // also, prjxray only has bits for values 0 and 2
+        auto areg = int_or_default(ci->params, ctx->id("AREG"), 0);
+        write_bit("AREG_" + std::to_string(areg == 1 ? 2 : areg));
+        auto ainput = str_or_default(ci->params, ctx->id("A_INPUT"), "DIRECT");
+        if (ainput == "CASCADE") write_bit("A_INPUT[0]");
+
+        auto breg = int_or_default(ci->params, ctx->id("BREG"), 0);
+        write_bit("BREG_" + std::to_string(breg == 1 ? 2 : breg));
+        auto binput = str_or_default(ci->params, ctx->id("B_INPUT"), "DIRECT");
+        if (binput == "CASCADE") write_bit("B_INPUT[0]");
+
+        auto use_dport = str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE");
+        if (use_dport == "TRUE") write_bit("USE_DPORT[0]");
+
+        auto use_simd = str_or_default(ci->params, ctx->id("USE_SIMD"), "ONE48");
+        if (use_simd == "TWO24")  write_bit("USE_SIMD_FOUR12_TWO24");
+        if (use_simd == "FOUR12") write_bit("USE_SIMD_FOUR12");
+
+        // PATTERN
+        auto pattern_str = str_or_default(ci->params, ctx->id("PATTERN"), "");
+        if (!boost::empty(pattern_str)) {
+            const size_t pattern_size = 48;
+            std::vector<bool> pattern_vector(pattern_size, true);
+            size_t i = 0;
+            for (auto it = pattern_str.crbegin(); it != pattern_str.crend() && i < pattern_size; ++i, ++it) {
+                pattern_vector[i] = *it == '1';
+            }
+            write_vector("PATTERN[47:0]", pattern_vector);
+        }
+
+        auto autoreset_patdet = str_or_default(ci->params, ctx->id("AUTORESET_PATDET"), "NO_RESET");
+        if (autoreset_patdet == "RESET_MATCH")     write_bit("AUTORESET_PATDET_RESET");
+        if (autoreset_patdet == "RESET_NOT_MATCH") write_bit("AUTORESET_PATDET_RESET_NOT_MATCH");
+
+        // MASK
+        auto mask_str = str_or_default(ci->params, ctx->id("MASK"), "001111111111111111111111111111111111111111111111");
+        // Yosys gives us 48 bit, but prjxray only recognizes 46 bits
+        // The most significant two bits seem to be zero, so let us just truncate them
+        const size_t mask_size = 46;
+        std::vector<bool> mask_vector(mask_size, true);
+        size_t i = 0;
+        for (auto it = mask_str.crbegin(); it != mask_str.crend() && i < mask_size; ++i, ++it) {
+            mask_vector[i] = *it == '1';
+        }
+        write_vector("MASK[45:0]", mask_vector);
+
+        auto sel_mask = str_or_default(ci->params, ctx->id("SEL_MASK"), "MASK");
+        if (sel_mask == "C")              write_bit("SEL_MASK_C");
+        if (sel_mask == "ROUNDING_MODE1") write_bit("SEL_MASK_ROUNDING_MODE1");
+        if (sel_mask == "ROUNDING_MODE2") write_bit("SEL_MASK_ROUNDING_MODE2");
+
+        write_bit("ZADREG[0]", !bool_or_default(ci->params, ctx->id("ADREG"), true));
+        write_bit("ZALUMODEREG[0]", !bool_or_default(ci->params, ctx->id("ALUMODEREG")));
+        write_bit("ZAREG_2_ACASCREG_1", !bool_or_default(ci->params, ctx->id("ACASCREG")));
+        write_bit("ZBREG_2_BCASCREG_1", !bool_or_default(ci->params, ctx->id("BCASCREG")));
+        write_bit("ZCARRYINREG[0]", !bool_or_default(ci->params, ctx->id("CARRYINREG")));
+        write_bit("ZCARRYINSELREG[0]", !bool_or_default(ci->params, ctx->id("CARRYINSELREG")));
+        write_bit("ZCREG[0]", !bool_or_default(ci->params, ctx->id("CREG"), true));
+        write_bit("ZDREG[0]", !bool_or_default(ci->params, ctx->id("DREG"), true));
+        write_bit("ZINMODEREG[0]", !bool_or_default(ci->params, ctx->id("INMODEREG")));
         write_bus_zinv("ALUMODE", 4);
         write_bus_zinv("INMODE", 5);
         write_bus_zinv("OPMODE", 7);
-        pop(3);
+        write_bit("ZMREG[0]", !bool_or_default(ci->params, ctx->id("MREG")));
+        write_bit("ZOPMODEREG[0]", !bool_or_default(ci->params, ctx->id("OPMODEREG")));
+        write_bit("ZPREG[0]", !bool_or_default(ci->params, ctx->id("PREG")));
+        write_bit("USE_DPORT[0]", str_or_default(ci->params, ctx->id("USE_DPORT"), "FALSE") == "TRUE");
+        write_bit("ZIS_CLK_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CLK_INVERTED")));
+        write_bit("ZIS_CARRYIN_INVERTED", !bool_or_default(ci->params, ctx->id("IS_CARRYIN_INVERTED")));
+        pop(2);
+
+        auto write_const_pins = [&](std::string const_net_name) {
+            std::vector<std::string> pins;
+            const auto attr_name = "DSP_" + const_net_name + "_PINS";
+            const auto attr_value = str_or_default(ci->attrs, ctx->id(attr_name), "");
+            // std::cerr << "==============  ATTR: " << attr_name << " value: " << attr_value << std::endl;
+            boost::split(pins, attr_value, boost::is_any_of(" "));
+            for (auto pin : pins) {
+                if (boost::empty(pin)) continue;
+                auto pin_basename = pin;
+                boost::erase_all(pin_basename, "0123456789");
+                auto inv = bool_or_default(ci->params, ctx->id("IS_" + pin_basename + "_INVERTED"), 0);
+                auto net_name = inv ? (const_net_name == "GND" ? "VCC" : "GND") : const_net_name;
+                write_bit(dsp + "_" + pin + ".DSP_" + net_name + "_" + tile_side);
+            }
+        };
+
+        write_const_pins("GND");
+        write_const_pins("VCC");
+
+        pop();
     }
 
     void write_ip()
