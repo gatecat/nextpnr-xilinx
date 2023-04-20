@@ -13,3 +13,5 @@ target_link_libraries(bbasm LINK_PRIVATE
     ${Boost_FILESYSTEM_LIBRARY}
     ${Boost_SYSTEM_LIBRARY})
 export(TARGETS bbasm FILE ${CMAKE_BINARY_DIR}/bba-export.cmake)
+
+install(TARGETS bbasm RUNTIME DESTINATION bin)
