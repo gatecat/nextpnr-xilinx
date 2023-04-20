@@ -23,17 +23,26 @@ Other structures used by these basic structures include:
  - `ports` is a map from port name `IdString` to `PortInfo` structures for each cell port
  - `bel` and `belStrength` contain the ID of the Bel the cell is placed onto; and placement strength of the cell; if placed. Placement/ripup should always be done by `Arch::bindBel` and `Arch::unbindBel` rather than by manipulating these fields.
  - `params` and `attrs` store parameters and attributes - from the input JSON or assigned in flows to add metadata - by mapping from parameter name `IdString` to `Property`.
- - The `constr_` fields are for relative constraints:
-    - `constr_parent` is a reference to the cell this cell is constrained with respect to; or `nullptr` if not relatively constrained. If not `nullptr`, this cell should be in the parent's `constr_children`.
-    - `constr_children` is a list of cells relatively constrained to this one. All children should have `constr_parent == this`. 
-    - `constr_x` and `constr_y` are absolute (`constr_parent == nullptr`) or relative (`constr_parent != nullptr`) tile coordinate constraints. If set to `UNCONSTR` then the cell is not constrained in this axis (defaults to `UNCONSTR`)
-    - `constr_z` is an absolute (`constr_abs_z`) or relative (`!constr_abs_z`) 'Z-axis' (index inside tile, e.g. logic cell) constraint
+ - `cluster` is used to specify that the cell is inside a placement cluster, with the details of the placement within the cluster provided by the architecture.
  - `region` is a reference to a `Region` if the cell is constrained to a placement region (e.g. for partial reconfiguration or out-of-context flows) or `nullptr` otherwise.
+ - `pseudo_cell` is an optional pointer to an implementation of the pseudo-cell API, used for cells implementing virtual functions such as partition pins without a mapped bel. `bel` will always be `BelId()` for pseudo-cells.
+
+## PseudoCellAPI
+
+Pseudo-cells can be used to implement cells with runtime-defined cell pin to wire mappings. This means they don't have to be a fixed part of the architecture, example use cases could be for implementing partition pins for partial reconfiguration regions; or forcing splits between SLRs. Pseudo-cells implement a series of virtual functions to provide data that for an ordinary cell would be obtained by calling 'bel' ArchAPI functions
+
+The pseudo-cell API is as follows:
+ - `Loc getLocation() const` : get an approximate location of the pseudocell
+ - `WireId getPortWire(IdString port) const`: gets the wire corresponding to a port (or WireId if it has no wire)
+
+It also implements functions for getting timing data, mirroring that of the Arch API:
+ - `bool getDelay(IdString fromPort, IdString toPort, DelayQuad &delay) const`
+ - `TimingPortClass getPortTimingClass(IdString port, int &clockInfoCount) const`
+ - `TimingClockingInfo getPortClockingInfo(IdString port, int index) const`
 
 ## NetInfo
 
 `NetInfo` instances have the following fields:
-
  - `name` is the IdString name of the net - for nets with multiple names, one name is chosen according to a set of rules by the JSON frontend
  - `hierpath` is name of the hierarchical cell containing the instance, for designs with hierarchy
  - `driver` refers to the source of the net using `PortRef`; `driver.cell == nullptr` means that the net is undriven. Nets must have zero or one driver only. The corresponding cell port must be an output and its `PortInfo::net` must refer back to this net.
@@ -51,7 +60,8 @@ Relevant fields from a netlist point of view are:
  - `cells` is a map from cell name to a `unique_ptr<CellInfo>` containing cell data
  - `nets` is a map from net name to a `unique_ptr<NetInfo>` containing net data
  - `net_aliases` maps every alias for a net to its canonical name (i.e. index into `nets`) - net aliases often occur when a net has a name both inside a submodule and higher level module
- - `ports` is a list of top level ports, primarily used during JSON export (e.g. to produce a useful post-PnR simulation model)
+ - `ports` is a list of top level ports, primarily used during JSON export (e.g. to produce a useful post-PnR simulation model). Unlike other ports, top level ports are _not_ added to the driver or users of any connected net. In this sense, nets connected to top-level ports are _dangling_. However, top level ports _can_ still see their connected net as part of their `PortInfo`.
+ - `port_cells` is a map of top level port cells.  This is a subset of the `cells` maps containing only ports.
 
 Context also has a method `check()` that ensures all of the contracts met above are satisfied. It is strongly suggested to run this after any pass that may modify the netlist.
 

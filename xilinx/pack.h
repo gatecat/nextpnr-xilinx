@@ -41,9 +41,9 @@ struct XilinxPacker
     struct XFormRule
     {
         IdString new_type;
-        std::unordered_map<IdString, IdString> port_xform;
-        std::unordered_map<IdString, std::vector<IdString>> port_multixform;
-        std::unordered_map<IdString, IdString> param_xform;
+        dict<IdString, IdString> port_xform;
+        dict<IdString, std::vector<IdString>> port_multixform;
+        dict<IdString, IdString> param_xform;
         std::vector<std::pair<IdString, std::string>> set_attrs;
         std::vector<std::pair<IdString, Property>> set_params;
     };
@@ -66,20 +66,16 @@ struct XilinxPacker
             return wa != other.wa || wclk != other.wclk || we != other.we || wclk_inv != other.wclk_inv ||
                    memtype != other.memtype;
         }
-    };
-
-    struct DRAMControlSetHash
-    {
-        size_t operator()(const DRAMControlSet &dcs) const
+        unsigned int hash() const
         {
-            std::size_t seed = 0;
-            boost::hash_combine(seed, std::hash<size_t>()(dcs.wa.size()));
-            for (auto abit : dcs.wa)
-                boost::hash_combine(seed, std::hash<IdString>()(abit == nullptr ? IdString() : abit->name));
-            boost::hash_combine(seed, std::hash<IdString>()(dcs.wclk == nullptr ? IdString() : dcs.wclk->name));
-            boost::hash_combine(seed, std::hash<IdString>()(dcs.we == nullptr ? IdString() : dcs.we->name));
-            boost::hash_combine(seed, std::hash<bool>()(dcs.wclk_inv));
-            boost::hash_combine(seed, std::hash<IdString>()(dcs.memtype));
+            unsigned seed = 0;
+            seed = mkhash(seed, wa.size());
+            for (auto abit : wa)
+                seed = mkhash(seed, (abit == nullptr ? IdString() : abit->name).hash());
+            seed = mkhash(seed, (wclk == nullptr ? IdString() : wclk->name).hash());
+            seed = mkhash(seed, (we == nullptr ? IdString() : we->name).hash());
+            seed = mkhash(seed, wclk_inv);
+            seed = mkhash(seed, memtype.hash());
             return seed;
         }
     };
@@ -97,14 +93,14 @@ struct XilinxPacker
         std::vector<CellInfo *> xorcys;
     };
 
-    std::unordered_set<IdString> packed_cells;
+    pool<IdString> packed_cells;
     std::vector<std::unique_ptr<CellInfo>> new_cells;
 
     // General helper functions
     void flush_cells();
 
-    void xform_cell(const std::unordered_map<IdString, XFormRule> &rules, CellInfo *ci);
-    void generic_xform(const std::unordered_map<IdString, XFormRule> &rules, bool print_summary = false);
+    void xform_cell(const dict<IdString, XFormRule> &rules, CellInfo *ci);
+    void generic_xform(const dict<IdString, XFormRule> &rules, bool print_summary = false);
 
     std::unique_ptr<CellInfo> feed_through_lut(NetInfo *net, const std::vector<PortRef> &feed_users);
     std::unique_ptr<CellInfo> feed_through_muxf(NetInfo *net, IdString type, const std::vector<PortRef> &feed_users);
@@ -134,7 +130,7 @@ struct XilinxPacker
     void split_carry4s();
 
     // DistRAM
-    std::unordered_map<IdString, XFormRule> dram_rules, dram32_6_rules, dram32_5_rules;
+    dict<IdString, XFormRule> dram_rules, dram32_6_rules, dram32_5_rules;
     CellInfo *create_dram_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
                               std::vector<NetInfo *> address, NetInfo *di, NetInfo *dout, int z);
     CellInfo *create_dram32_lut(const std::string &name, CellInfo *base, const DRAMControlSet &ctrlset,
@@ -142,12 +138,12 @@ struct XilinxPacker
     void pack_dram();
 
     // Constant pins
-    std::unordered_map<IdString, std::unordered_map<IdString, bool>> tied_pins;
-    std::unordered_map<IdString, std::unordered_set<IdString>> invertible_pins;
+    dict<IdString, dict<IdString, bool>> tied_pins;
+    dict<IdString, pool<IdString>> invertible_pins;
     void pack_constants();
 
     // IO
-    std::unordered_map<IdString, std::unordered_set<IdString>> toplevel_ports;
+    dict<IdString, pool<IdString>> toplevel_ports;
     NetInfo *invert_net(NetInfo *toinv);
     CellInfo *insert_obuf(IdString name, IdString type, NetInfo *i, NetInfo *o, NetInfo *tri = nullptr);
     CellInfo *insert_outinv(IdString name, NetInfo *i, NetInfo *o);
@@ -155,7 +151,7 @@ struct XilinxPacker
     CellInfo *create_iobuf(CellInfo *npnr_io, IdString &top_port);
 
     // Clocking
-    std::unordered_set<BelId> used_bels;
+    pool<BelId> used_bels;
     BelId find_bel_with_short_route(WireId source, IdString beltype, IdString belpin);
     void try_preplace(CellInfo *cell, IdString port);
     void preplace_unique(CellInfo *cell);
@@ -179,7 +175,7 @@ struct USPacker : public XilinxPacker
     void pack_io();
 
     // IOLOGIC
-    std::unordered_map<IdString, XFormRule> hp_iol_rules, hd_iol_rules, ioctrl_rules;
+    dict<IdString, XFormRule> hp_iol_rules, hd_iol_rules, ioctrl_rules;
     std::string get_iol_site(const std::string &io_bel);
     std::string get_ioctrl_site(const std::string &iol_bel);
     // Call before packing constants
@@ -216,7 +212,7 @@ struct XC7Packer : public XilinxPacker
     void pack_io();
 
     // IOLOGIC
-    std::unordered_map<IdString, XFormRule> hp_iol_rules, hd_iol_rules, ioctrl_rules;
+    dict<IdString, XFormRule> hp_iol_rules, hd_iol_rules, ioctrl_rules;
     void fold_inverter(CellInfo *cell, std::string port);
     std::string get_ologic_site(const std::string &io_bel);
     std::string get_ilogic_site(const std::string &io_bel);

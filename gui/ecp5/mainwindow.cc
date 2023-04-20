@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -76,50 +76,41 @@ void MainWindow::createMenu()
     menuDesign->addAction(actionSaveConfig);
 }
 
-static const ChipInfoPOD *get_chip_info(const RelPtr<ChipInfoPOD> *ptr) { return ptr->get(); }
-
-static QStringList getSupportedPackages(ArchArgs::ArchArgsTypes chip)
-{
-    QStringList packages;
-    const ChipInfoPOD *chip_info;
-    if (chip == ArchArgs::LFE5U_25F || chip == ArchArgs::LFE5UM_25F || chip == ArchArgs::LFE5UM5G_25F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_25k));
-    } else if (chip == ArchArgs::LFE5U_45F || chip == ArchArgs::LFE5UM_45F || chip == ArchArgs::LFE5UM5G_45F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_45k));
-    } else if (chip == ArchArgs::LFE5U_85F || chip == ArchArgs::LFE5UM_85F || chip == ArchArgs::LFE5UM5G_85F) {
-        chip_info = get_chip_info(reinterpret_cast<const RelPtr<ChipInfoPOD> *>(chipdb_blob_85k));
-    } else {
-        log_error("Unsupported ECP5 chip type.\n");
-    }
-
-    for (int i = 0; i < chip_info->num_packages; i++) {
-        packages << chip_info->package_info[i].name.get();
-    }
-    return packages;
-}
-
 void MainWindow::new_proj()
 {
     QMap<QString, int> arch;
-    arch.insert("Lattice ECP5 LFE5U-25F", ArchArgs::LFE5U_25F);
-    arch.insert("Lattice ECP5 LFE5U-45F", ArchArgs::LFE5U_45F);
-    arch.insert("Lattice ECP5 LFE5U-85F", ArchArgs::LFE5U_85F);
-    arch.insert("Lattice ECP5 LFE5UM-25F", ArchArgs::LFE5UM_25F);
-    arch.insert("Lattice ECP5 LFE5UM-45F", ArchArgs::LFE5UM_45F);
-    arch.insert("Lattice ECP5 LFE5UM-85F", ArchArgs::LFE5UM_85F);
-    arch.insert("Lattice ECP5 LFE5UM5G-25F", ArchArgs::LFE5UM5G_25F);
-    arch.insert("Lattice ECP5 LFE5UM5G-45F", ArchArgs::LFE5UM5G_45F);
-    arch.insert("Lattice ECP5 LFE5UM5G-85F", ArchArgs::LFE5UM5G_85F);
+    if (Arch::is_available(ArchArgs::LFE5U_25F))
+        arch.insert("Lattice ECP5 LFE5U-25F", ArchArgs::LFE5U_25F);
+    if (Arch::is_available(ArchArgs::LFE5U_45F))
+        arch.insert("Lattice ECP5 LFE5U-45F", ArchArgs::LFE5U_45F);
+    if (Arch::is_available(ArchArgs::LFE5U_85F))
+        arch.insert("Lattice ECP5 LFE5U-85F", ArchArgs::LFE5U_85F);
+    if (Arch::is_available(ArchArgs::LFE5UM_25F))
+        arch.insert("Lattice ECP5 LFE5UM-25F", ArchArgs::LFE5UM_25F);
+    if (Arch::is_available(ArchArgs::LFE5UM_45F))
+        arch.insert("Lattice ECP5 LFE5UM-45F", ArchArgs::LFE5UM_45F);
+    if (Arch::is_available(ArchArgs::LFE5UM_85F))
+        arch.insert("Lattice ECP5 LFE5UM-85F", ArchArgs::LFE5UM_85F);
+    if (Arch::is_available(ArchArgs::LFE5UM5G_25F))
+        arch.insert("Lattice ECP5 LFE5UM5G-25F", ArchArgs::LFE5UM5G_25F);
+    if (Arch::is_available(ArchArgs::LFE5UM5G_45F))
+        arch.insert("Lattice ECP5 LFE5UM5G-45F", ArchArgs::LFE5UM5G_45F);
+    if (Arch::is_available(ArchArgs::LFE5UM5G_85F))
+        arch.insert("Lattice ECP5 LFE5UM5G-85F", ArchArgs::LFE5UM5G_85F);
+
     bool ok;
     QString item = QInputDialog::getItem(this, "Select new context", "Chip:", arch.keys(), 0, false, &ok);
     if (ok && !item.isEmpty()) {
         ArchArgs chipArgs;
         chipArgs.type = (ArchArgs::ArchArgsTypes)arch.value(item);
 
-        QString package = QInputDialog::getItem(this, "Select package", "Package:", getSupportedPackages(chipArgs.type),
-                                                0, false, &ok);
+        QStringList packages;
+        for (auto package : Arch::get_supported_packages(chipArgs.type))
+            packages.append(QLatin1String(package.data(), package.size()));
+        QString package = QInputDialog::getItem(this, "Select package", "Package:", packages, 0, false, &ok);
 
         if (ok && !item.isEmpty()) {
+            handler->clear();
             currentProj = "";
             disableActions();
             chipArgs.package = package.toStdString().c_str();
@@ -136,7 +127,7 @@ void MainWindow::open_lpf()
     QString fileName = QFileDialog::getOpenFileName(this, QString("Open LPF"), QString(), QString("*.lpf"));
     if (!fileName.isEmpty()) {
         std::ifstream in(fileName.toStdString());
-        if (ctx->applyLPF(fileName.toStdString(), in)) {
+        if (ctx->apply_lpf(fileName.toStdString(), in)) {
             log("Loading LPF successful.\n");
             actionPack->setEnabled(true);
             actionLoadLPF->setEnabled(false);

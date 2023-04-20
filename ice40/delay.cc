@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  Serge Bazanski <q3k@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2018  Serge Bazanski <q3k@q3k.org>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -29,7 +29,7 @@ void ice40DelayFuzzerMain(Context *ctx)
 {
     std::vector<WireId> srcWires, dstWires;
 
-    for (int i = 0; i < ctx->chip_info->num_wires; i++) {
+    for (int i = 0; i < int(ctx->chip_info->wire_data.size()); i++) {
         WireId wire;
         wire.index = i;
 
@@ -62,7 +62,7 @@ void ice40DelayFuzzerMain(Context *ctx)
 
         WireId src = srcWires[index];
         WireId dst = dstWires[index++];
-        std::unordered_map<WireId, PipId> route;
+        dict<WireId, PipId> route;
 
 #if NUM_FUZZ_ROUTES <= 1000
         if (!ctx->getActualRouteDelay(src, dst, nullptr, &route, false))
@@ -80,7 +80,7 @@ void ice40DelayFuzzerMain(Context *ctx)
 
             printf("%s %d %d %s %s %d %d\n", cursor == dst ? "dst" : "src",
                    int(ctx->chip_info->wire_data[cursor.index].x), int(ctx->chip_info->wire_data[cursor.index].y),
-                   ctx->getWireType(cursor).c_str(ctx), ctx->getWireName(cursor).c_str(ctx), int(delay),
+                   ctx->getWireType(cursor).c_str(ctx), ctx->nameOfWire(cursor), int(delay),
                    int(ctx->estimateDelay(cursor, dst)));
 
             if (cursor == src)
@@ -132,13 +132,15 @@ struct model_params_t
         static const model_params_t model_up5k = {1761,    305798, 16705, 296830, 24430, -40369, 33038,
                                                   -162662, 94,     4705,  -1099,  -1761, -418,   -838};
 
-        if (args.type == ArchArgs::HX1K || args.type == ArchArgs::HX8K)
+        if (args.type == ArchArgs::HX1K || args.type == ArchArgs::HX4K || args.type == ArchArgs::HX8K)
             return model_hx8k;
 
-        if (args.type == ArchArgs::LP384 || args.type == ArchArgs::LP1K || args.type == ArchArgs::LP8K)
+        if (args.type == ArchArgs::LP384 || args.type == ArchArgs::LP1K || args.type == ArchArgs::LP4K ||
+            args.type == ArchArgs::LP8K)
             return model_lp8k;
 
-        if (args.type == ArchArgs::UP5K || args.type == ArchArgs::U4K)
+        if (args.type == ArchArgs::UP3K || args.type == ArchArgs::UP5K || args.type == ArchArgs::U1K ||
+            args.type == ArchArgs::U2K || args.type == ArchArgs::U4K)
             return model_up5k;
 
         NPNR_ASSERT(0);
@@ -186,13 +188,13 @@ delay_t Arch::estimateDelay(WireId src, WireId dst) const
     return v;
 }
 
-delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
+delay_t Arch::predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdString dst_pin) const
 {
-    const auto &driver = net_info->driver;
-    auto driver_loc = getBelLocation(driver.cell->bel);
-    auto sink_loc = getBelLocation(sink.cell->bel);
+    NPNR_UNUSED(dst_pin);
+    auto driver_loc = getBelLocation(src_bel);
+    auto sink_loc = getBelLocation(dst_bel);
 
-    if (driver.port == id_COUT) {
+    if (src_pin == id_COUT) {
         if (driver_loc.y == sink_loc.y)
             return 0;
         return 250;

@@ -23,361 +23,361 @@
 
 NEXTPNR_NAMESPACE_BEGIN
 
-void get_invertible_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &invertible_pins)
+void get_invertible_pins(Context *ctx, dict<IdString, pool<IdString>> &invertible_pins)
 {
     // List of pins that have an IS_x_INVERTED attributed, so we can optimise tie-zero to tie-one for these pins
     // See scripts/invertible_pins.py
 
     // Common and xcup
-    invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("CE0"));
-    invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("CE1"));
-    invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("S0"));
-    invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("S1"));
-    invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("IGNORE0"));
-    invertible_pins[ctx->id("BUFGCTRL")].insert(ctx->id("IGNORE1"));
-    invertible_pins[ctx->id("BUFHCE")].insert(ctx->id("CE"));
-    invertible_pins[ctx->id("FDRE")].insert(ctx->id("C"));
+    invertible_pins[id_BUFGCTRL].insert(id_CE0);
+    invertible_pins[id_BUFGCTRL].insert(id_CE1);
+    invertible_pins[id_BUFGCTRL].insert(id_S0);
+    invertible_pins[id_BUFGCTRL].insert(id_S1);
+    invertible_pins[id_BUFGCTRL].insert(id_IGNORE0);
+    invertible_pins[id_BUFGCTRL].insert(id_IGNORE1);
+    invertible_pins[id_BUFHCE].insert(id_CE);
+    invertible_pins[id_FDRE].insert(id_C);
     if (!ctx->xc7)
-        invertible_pins[ctx->id("FDRE")].insert(ctx->id("R"));
-    invertible_pins[ctx->id("FDSE")].insert(ctx->id("C"));
+        invertible_pins[id_FDRE].insert(id_R);
+    invertible_pins[id_FDSE].insert(id_C);
     if (!ctx->xc7)
-        invertible_pins[ctx->id("FDSE")].insert(ctx->id("S"));
-    invertible_pins[ctx->id("FDCE")].insert(ctx->id("C"));
+        invertible_pins[id_FDSE].insert(id_S);
+    invertible_pins[id_FDCE].insert(id_C);
     if (!ctx->xc7)
-        invertible_pins[ctx->id("FDCE")].insert(ctx->id("CLR"));
-    invertible_pins[ctx->id("FDPE")].insert(ctx->id("C"));
+        invertible_pins[id_FDCE].insert(id_CLR);
+    invertible_pins[id_FDPE].insert(id_C);
     if (!ctx->xc7)
-        invertible_pins[ctx->id("FDPE")].insert(ctx->id("PRE"));
-    invertible_pins[ctx->id("SRL16E")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("SRLC32E")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("BUFGCE")].insert(ctx->id("CE"));
-    invertible_pins[ctx->id("BUFGCE")].insert(ctx->id("I"));
-    invertible_pins[ctx->id("BUFGCE_DIV")].insert(ctx->id("CE"));
-    invertible_pins[ctx->id("BUFGCE_DIV")].insert(ctx->id("CLR"));
-    invertible_pins[ctx->id("BUFGCE_DIV")].insert(ctx->id("I"));
-    invertible_pins[ctx->id("CFGLUT5")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("ALUMODE[0]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("ALUMODE[1]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("ALUMODE[2]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("ALUMODE[3]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("CARRYIN"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("INMODE[0]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("INMODE[1]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("INMODE[2]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("INMODE[3]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("INMODE[4]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[0]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[1]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[2]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[3]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[4]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[5]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[6]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[7]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("OPMODE[8]"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTALLCARRYIN"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTALUMODE"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTA"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTB"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTCTRL"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTC"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTD"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTINMODE"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTM"));
-    invertible_pins[ctx->id("DSP48E2")].insert(ctx->id("RSTP"));
-    invertible_pins[ctx->id("FIFO18E2")].insert(ctx->id("RDCLK"));
-    invertible_pins[ctx->id("FIFO18E2")].insert(ctx->id("RDEN"));
-    invertible_pins[ctx->id("FIFO18E2")].insert(ctx->id("RSTREG"));
-    invertible_pins[ctx->id("FIFO18E2")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("FIFO18E2")].insert(ctx->id("WRCLK"));
-    invertible_pins[ctx->id("FIFO18E2")].insert(ctx->id("WREN"));
-    invertible_pins[ctx->id("FIFO36E2")].insert(ctx->id("RDCLK"));
-    invertible_pins[ctx->id("FIFO36E2")].insert(ctx->id("RDEN"));
-    invertible_pins[ctx->id("FIFO36E2")].insert(ctx->id("RSTREG"));
-    invertible_pins[ctx->id("FIFO36E2")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("FIFO36E2")].insert(ctx->id("WRCLK"));
-    invertible_pins[ctx->id("FIFO36E2")].insert(ctx->id("WREN"));
-    invertible_pins[ctx->id("HARD_SYNC")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("IDDRE1")].insert(ctx->id("CB"));
-    invertible_pins[ctx->id("IDDRE1")].insert(ctx->id("C"));
-    invertible_pins[ctx->id("IDELAYE3")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("IDELAYE3")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("ISERDESE3")].insert(ctx->id("CLK_B"));
-    invertible_pins[ctx->id("ISERDESE3")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("ISERDESE3")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("LDCE")].insert(ctx->id("CLR"));
-    invertible_pins[ctx->id("LDCE")].insert(ctx->id("G"));
-    invertible_pins[ctx->id("LDPE")].insert(ctx->id("G"));
-    invertible_pins[ctx->id("LDPE")].insert(ctx->id("PRE"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("CLKFBIN"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("CLKIN1"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("CLKIN2"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("CLKINSEL"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("PSEN"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("PSINCDEC"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("MMCME3_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("MMCME3_BASE")].insert(ctx->id("CLKFBIN"));
-    invertible_pins[ctx->id("MMCME3_BASE")].insert(ctx->id("CLKIN1"));
-    invertible_pins[ctx->id("MMCME3_BASE")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("MMCME3_BASE")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("CLKFBIN"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("CLKIN1"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("CLKIN2"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("CLKINSEL"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("PSEN"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("PSINCDEC"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("MMCME4_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("C"));
-    // invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("D1"));
-    // invertible_pins[ctx->id("ODDRE1")].insert(ctx->id("D2"));
-    invertible_pins[ctx->id("ODELAYE3")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("ODELAYE3")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("OR2L")].insert(ctx->id("SRI"));
-    invertible_pins[ctx->id("OSERDESE3")].insert(ctx->id("CLKDIV"));
-    invertible_pins[ctx->id("OSERDESE3")].insert(ctx->id("CLK"));
-    // invertible_pins[ctx->id("OSERDESE3")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PLLE3_ADV")].insert(ctx->id("CLKFBIN"));
-    invertible_pins[ctx->id("PLLE3_ADV")].insert(ctx->id("CLKIN"));
-    invertible_pins[ctx->id("PLLE3_ADV")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("PLLE3_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PLLE3_BASE")].insert(ctx->id("CLKFBIN"));
-    invertible_pins[ctx->id("PLLE3_BASE")].insert(ctx->id("CLKIN"));
-    invertible_pins[ctx->id("PLLE3_BASE")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("PLLE3_BASE")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PLLE4_ADV")].insert(ctx->id("CLKFBIN"));
-    invertible_pins[ctx->id("PLLE4_ADV")].insert(ctx->id("CLKIN"));
-    invertible_pins[ctx->id("PLLE4_ADV")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("PLLE4_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("RAM128X1D")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM128X1S")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM256X1D")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM256X1S")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM32M")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM32M16")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM32X1D")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM32X1S")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM32X2S")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM512X1S")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM64M")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM64M8")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM64X1D")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM64X1S")].insert(ctx->id("WCLK"));
-    invertible_pins[ctx->id("RAM64X8SW")].insert(ctx->id("WCLK"));
-    // invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("CLKARDCLK"));
-    // invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("CLKBWRCLK"));
-    invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("ENARDEN"));
-    invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("ENBWREN"));
-    invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("RSTRAMARSTRAM"));
-    invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("RSTRAMB"));
-    invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("RSTREGARSTREG"));
-    invertible_pins[ctx->id("RAMB18E2")].insert(ctx->id("RSTREGB"));
-    // invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("CLKARDCLK"));
-    // invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("CLKBWRCLK"));
-    invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("ENARDEN"));
-    invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("ENBWREN"));
-    invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("RSTRAMARSTRAM"));
-    invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("RSTRAMB"));
-    invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("RSTREGARSTREG"));
-    invertible_pins[ctx->id("RAMB36E2")].insert(ctx->id("RSTREGB"));
-    invertible_pins[ctx->id("RX_BITSLICE")].insert(ctx->id("CLK_EXT"));
-    invertible_pins[ctx->id("RX_BITSLICE")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("RX_BITSLICE")].insert(ctx->id("RST_DLY_EXT"));
-    invertible_pins[ctx->id("RX_BITSLICE")].insert(ctx->id("RST_DLY"));
-    invertible_pins[ctx->id("RX_BITSLICE")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("RXTX_BITSLICE")].insert(ctx->id("RX_CLK"));
-    invertible_pins[ctx->id("RXTX_BITSLICE")].insert(ctx->id("RX_RST_DLY"));
-    invertible_pins[ctx->id("RXTX_BITSLICE")].insert(ctx->id("RX_RST"));
-    invertible_pins[ctx->id("RXTX_BITSLICE")].insert(ctx->id("TX_CLK"));
-    invertible_pins[ctx->id("RXTX_BITSLICE")].insert(ctx->id("TX_RST_DLY"));
-    invertible_pins[ctx->id("RXTX_BITSLICE")].insert(ctx->id("TX_RST"));
-    invertible_pins[ctx->id("SYSMONE1")].insert(ctx->id("CONVSTCLK"));
-    invertible_pins[ctx->id("SYSMONE1")].insert(ctx->id("DCLK"));
-    invertible_pins[ctx->id("SYSMONE4")].insert(ctx->id("CONVSTCLK"));
-    invertible_pins[ctx->id("SYSMONE4")].insert(ctx->id("DCLK"));
-    invertible_pins[ctx->id("TX_BITSLICE")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("TX_BITSLICE")].insert(ctx->id("RST_DLY"));
-    invertible_pins[ctx->id("TX_BITSLICE")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("TX_BITSLICE_TRI")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("TX_BITSLICE_TRI")].insert(ctx->id("RST_DLY"));
-    invertible_pins[ctx->id("TX_BITSLICE_TRI")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("EN_A"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("EN_B"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("RDB_WR_A"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("RDB_WR_B"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("RST_A"));
-    invertible_pins[ctx->id("URAM288")].insert(ctx->id("RST_B"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("EN_A"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("EN_B"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("RDB_WR_A"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("RDB_WR_B"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("RST_A"));
-    invertible_pins[ctx->id("URAM288_BASE")].insert(ctx->id("RST_B"));
+        invertible_pins[id_FDPE].insert(id_PRE);
+    invertible_pins[id_SRL16E].insert(id_CLK);
+    invertible_pins[id_SRLC32E].insert(id_CLK);
+    invertible_pins[id_BUFGCE].insert(id_CE);
+    invertible_pins[id_BUFGCE].insert(id_I);
+    invertible_pins[id_BUFGCE_DIV].insert(id_CE);
+    invertible_pins[id_BUFGCE_DIV].insert(id_CLR);
+    invertible_pins[id_BUFGCE_DIV].insert(id_I);
+    invertible_pins[id_CFGLUT5].insert(id_CLK);
+    invertible_pins[id_DSP48E2].insert(ctx->id("ALUMODE[0]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("ALUMODE[1]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("ALUMODE[2]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("ALUMODE[3]"));
+    invertible_pins[id_DSP48E2].insert(id_CARRYIN);
+    invertible_pins[id_DSP48E2].insert(id_CLK);
+    invertible_pins[id_DSP48E2].insert(ctx->id("INMODE[0]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("INMODE[1]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("INMODE[2]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("INMODE[3]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("INMODE[4]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[0]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[1]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[2]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[3]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[4]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[5]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[6]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[7]"));
+    invertible_pins[id_DSP48E2].insert(ctx->id("OPMODE[8]"));
+    invertible_pins[id_DSP48E2].insert(id_RSTALLCARRYIN);
+    invertible_pins[id_DSP48E2].insert(id_RSTALUMODE);
+    invertible_pins[id_DSP48E2].insert(id_RSTA);
+    invertible_pins[id_DSP48E2].insert(id_RSTB);
+    invertible_pins[id_DSP48E2].insert(id_RSTCTRL);
+    invertible_pins[id_DSP48E2].insert(id_RSTC);
+    invertible_pins[id_DSP48E2].insert(id_RSTD);
+    invertible_pins[id_DSP48E2].insert(id_RSTINMODE);
+    invertible_pins[id_DSP48E2].insert(id_RSTM);
+    invertible_pins[id_DSP48E2].insert(id_RSTP);
+    invertible_pins[id_FIFO18E2].insert(id_RDCLK);
+    invertible_pins[id_FIFO18E2].insert(id_RDEN);
+    invertible_pins[id_FIFO18E2].insert(id_RSTREG);
+    invertible_pins[id_FIFO18E2].insert(id_RST);
+    invertible_pins[id_FIFO18E2].insert(id_WRCLK);
+    invertible_pins[id_FIFO18E2].insert(id_WREN);
+    invertible_pins[id_FIFO36E2].insert(id_RDCLK);
+    invertible_pins[id_FIFO36E2].insert(id_RDEN);
+    invertible_pins[id_FIFO36E2].insert(id_RSTREG);
+    invertible_pins[id_FIFO36E2].insert(id_RST);
+    invertible_pins[id_FIFO36E2].insert(id_WRCLK);
+    invertible_pins[id_FIFO36E2].insert(id_WREN);
+    invertible_pins[id_HARD_SYNC].insert(id_CLK);
+    invertible_pins[id_IDDRE1].insert(id_CB);
+    invertible_pins[id_IDDRE1].insert(id_C);
+    invertible_pins[id_IDELAYE3].insert(id_CLK);
+    invertible_pins[id_IDELAYE3].insert(id_RST);
+    invertible_pins[id_ISERDESE3].insert(id_CLK_B);
+    invertible_pins[id_ISERDESE3].insert(id_CLK);
+    invertible_pins[id_ISERDESE3].insert(id_RST);
+    invertible_pins[id_LDCE].insert(id_CLR);
+    invertible_pins[id_LDCE].insert(id_G);
+    invertible_pins[id_LDPE].insert(id_G);
+    invertible_pins[id_LDPE].insert(id_PRE);
+    invertible_pins[id_MMCME3_ADV].insert(id_CLKFBIN);
+    invertible_pins[id_MMCME3_ADV].insert(id_CLKIN1);
+    invertible_pins[id_MMCME3_ADV].insert(id_CLKIN2);
+    invertible_pins[id_MMCME3_ADV].insert(id_CLKINSEL);
+    invertible_pins[id_MMCME3_ADV].insert(id_PSEN);
+    invertible_pins[id_MMCME3_ADV].insert(id_PSINCDEC);
+    invertible_pins[id_MMCME3_ADV].insert(id_PWRDWN);
+    invertible_pins[id_MMCME3_ADV].insert(id_RST);
+    invertible_pins[id_MMCME3_BASE].insert(id_CLKFBIN);
+    invertible_pins[id_MMCME3_BASE].insert(id_CLKIN1);
+    invertible_pins[id_MMCME3_BASE].insert(id_PWRDWN);
+    invertible_pins[id_MMCME3_BASE].insert(id_RST);
+    invertible_pins[id_MMCME4_ADV].insert(id_CLKFBIN);
+    invertible_pins[id_MMCME4_ADV].insert(id_CLKIN1);
+    invertible_pins[id_MMCME4_ADV].insert(id_CLKIN2);
+    invertible_pins[id_MMCME4_ADV].insert(id_CLKINSEL);
+    invertible_pins[id_MMCME4_ADV].insert(id_PSEN);
+    invertible_pins[id_MMCME4_ADV].insert(id_PSINCDEC);
+    invertible_pins[id_MMCME4_ADV].insert(id_PWRDWN);
+    invertible_pins[id_MMCME4_ADV].insert(id_RST);
+    invertible_pins[id_ODDRE1].insert(id_C);
+    // invertible_pins[id_ODDRE1].insert(id_D1);
+    // invertible_pins[id_ODDRE1].insert(id_D2);
+    invertible_pins[id_ODELAYE3].insert(id_CLK);
+    invertible_pins[id_ODELAYE3].insert(id_RST);
+    invertible_pins[id_OR2L].insert(id_SRI);
+    invertible_pins[id_OSERDESE3].insert(id_CLKDIV);
+    invertible_pins[id_OSERDESE3].insert(id_CLK);
+    // invertible_pins[id_OSERDESE3].insert(id_RST);
+    invertible_pins[id_PLLE3_ADV].insert(id_CLKFBIN);
+    invertible_pins[id_PLLE3_ADV].insert(id_CLKIN);
+    invertible_pins[id_PLLE3_ADV].insert(id_PWRDWN);
+    invertible_pins[id_PLLE3_ADV].insert(id_RST);
+    invertible_pins[id_PLLE3_BASE].insert(id_CLKFBIN);
+    invertible_pins[id_PLLE3_BASE].insert(id_CLKIN);
+    invertible_pins[id_PLLE3_BASE].insert(id_PWRDWN);
+    invertible_pins[id_PLLE3_BASE].insert(id_RST);
+    invertible_pins[id_PLLE4_ADV].insert(id_CLKFBIN);
+    invertible_pins[id_PLLE4_ADV].insert(id_CLKIN);
+    invertible_pins[id_PLLE4_ADV].insert(id_PWRDWN);
+    invertible_pins[id_PLLE4_ADV].insert(id_RST);
+    invertible_pins[id_RAM128X1D].insert(id_WCLK);
+    invertible_pins[id_RAM128X1S].insert(id_WCLK);
+    invertible_pins[id_RAM256X1D].insert(id_WCLK);
+    invertible_pins[id_RAM256X1S].insert(id_WCLK);
+    invertible_pins[id_RAM32M].insert(id_WCLK);
+    invertible_pins[id_RAM32M16].insert(id_WCLK);
+    invertible_pins[id_RAM32X1D].insert(id_WCLK);
+    invertible_pins[id_RAM32X1S].insert(id_WCLK);
+    invertible_pins[id_RAM32X2S].insert(id_WCLK);
+    invertible_pins[id_RAM512X1S].insert(id_WCLK);
+    invertible_pins[id_RAM64M].insert(id_WCLK);
+    invertible_pins[id_RAM64M8].insert(id_WCLK);
+    invertible_pins[id_RAM64X1D].insert(id_WCLK);
+    invertible_pins[id_RAM64X1S].insert(id_WCLK);
+    invertible_pins[id_RAM64X8SW].insert(id_WCLK);
+    // invertible_pins[id_RAMB18E2].insert(id_CLKARDCLK);
+    // invertible_pins[id_RAMB18E2].insert(id_CLKBWRCLK);
+    invertible_pins[id_RAMB18E2].insert(id_ENARDEN);
+    invertible_pins[id_RAMB18E2].insert(id_ENBWREN);
+    invertible_pins[id_RAMB18E2].insert(id_RSTRAMARSTRAM);
+    invertible_pins[id_RAMB18E2].insert(id_RSTRAMB);
+    invertible_pins[id_RAMB18E2].insert(id_RSTREGARSTREG);
+    invertible_pins[id_RAMB18E2].insert(id_RSTREGB);
+    // invertible_pins[id_RAMB36E2].insert(id_CLKARDCLK);
+    // invertible_pins[id_RAMB36E2].insert(id_CLKBWRCLK);
+    invertible_pins[id_RAMB36E2].insert(id_ENARDEN);
+    invertible_pins[id_RAMB36E2].insert(id_ENBWREN);
+    invertible_pins[id_RAMB36E2].insert(id_RSTRAMARSTRAM);
+    invertible_pins[id_RAMB36E2].insert(id_RSTRAMB);
+    invertible_pins[id_RAMB36E2].insert(id_RSTREGARSTREG);
+    invertible_pins[id_RAMB36E2].insert(id_RSTREGB);
+    invertible_pins[id_RX_BITSLICE].insert(id_CLK_EXT);
+    invertible_pins[id_RX_BITSLICE].insert(id_CLK);
+    invertible_pins[id_RX_BITSLICE].insert(id_RST_DLY_EXT);
+    invertible_pins[id_RX_BITSLICE].insert(id_RST_DLY);
+    invertible_pins[id_RX_BITSLICE].insert(id_RST);
+    invertible_pins[id_RXTX_BITSLICE].insert(id_RX_CLK);
+    invertible_pins[id_RXTX_BITSLICE].insert(id_RX_RST_DLY);
+    invertible_pins[id_RXTX_BITSLICE].insert(id_RX_RST);
+    invertible_pins[id_RXTX_BITSLICE].insert(id_TX_CLK);
+    invertible_pins[id_RXTX_BITSLICE].insert(id_TX_RST_DLY);
+    invertible_pins[id_RXTX_BITSLICE].insert(id_TX_RST);
+    invertible_pins[id_SYSMONE1].insert(id_CONVSTCLK);
+    invertible_pins[id_SYSMONE1].insert(id_DCLK);
+    invertible_pins[id_SYSMONE4].insert(id_CONVSTCLK);
+    invertible_pins[id_SYSMONE4].insert(id_DCLK);
+    invertible_pins[id_TX_BITSLICE].insert(id_CLK);
+    invertible_pins[id_TX_BITSLICE].insert(id_RST_DLY);
+    invertible_pins[id_TX_BITSLICE].insert(id_RST);
+    invertible_pins[id_TX_BITSLICE_TRI].insert(id_CLK);
+    invertible_pins[id_TX_BITSLICE_TRI].insert(id_RST_DLY);
+    invertible_pins[id_TX_BITSLICE_TRI].insert(id_RST);
+    invertible_pins[id_URAM288].insert(id_CLK);
+    invertible_pins[id_URAM288].insert(id_EN_A);
+    invertible_pins[id_URAM288].insert(id_EN_B);
+    invertible_pins[id_URAM288].insert(id_RDB_WR_A);
+    invertible_pins[id_URAM288].insert(id_RDB_WR_B);
+    invertible_pins[id_URAM288].insert(id_RST_A);
+    invertible_pins[id_URAM288].insert(id_RST_B);
+    invertible_pins[id_URAM288_BASE].insert(id_CLK);
+    invertible_pins[id_URAM288_BASE].insert(id_EN_A);
+    invertible_pins[id_URAM288_BASE].insert(id_EN_B);
+    invertible_pins[id_URAM288_BASE].insert(id_RDB_WR_A);
+    invertible_pins[id_URAM288_BASE].insert(id_RDB_WR_B);
+    invertible_pins[id_URAM288_BASE].insert(id_RST_A);
+    invertible_pins[id_URAM288_BASE].insert(id_RST_B);
 
     // xc7
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("CLKARDCLK"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("CLKBWRCLK"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("ENARDEN"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("ENBWREN"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("RSTRAMARSTRAM"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("RSTRAMB"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("RSTREGARSTREG"));
-    invertible_pins[ctx->id("RAMB18E1")].insert(ctx->id("RSTREGB"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("CLKARDCLK"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("CLKBWRCLK"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("ENARDEN"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("ENBWREN"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("RSTRAMARSTRAM"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("RSTRAMB"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("RSTREGARSTREG"));
-    invertible_pins[ctx->id("RAMB36E1")].insert(ctx->id("RSTREGB"));
-    invertible_pins[ctx->id("BUFMRCE")].insert(ctx->id("CE"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("ALUMODE[0]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("ALUMODE[1]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("ALUMODE[2]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("ALUMODE[3]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("CARRYIN"));
-    // invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("CLK"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("INMODE[0]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("INMODE[1]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("INMODE[2]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("INMODE[3]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("INMODE[4]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[0]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[1]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[2]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[3]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[4]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[5]"));
-    invertible_pins[ctx->id("DSP48E1")].insert(ctx->id("OPMODE[6]"));
-    invertible_pins[ctx->id("FIFO18E1")].insert(ctx->id("RDCLK"));
-    invertible_pins[ctx->id("FIFO18E1")].insert(ctx->id("RDEN"));
-    invertible_pins[ctx->id("FIFO18E1")].insert(ctx->id("RSTREG"));
-    invertible_pins[ctx->id("FIFO18E1")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("FIFO18E1")].insert(ctx->id("WRCLK"));
-    invertible_pins[ctx->id("FIFO18E1")].insert(ctx->id("WREN"));
-    invertible_pins[ctx->id("FIFO36E1")].insert(ctx->id("RDCLK"));
-    invertible_pins[ctx->id("FIFO36E1")].insert(ctx->id("RDEN"));
-    invertible_pins[ctx->id("FIFO36E1")].insert(ctx->id("RSTREG"));
-    invertible_pins[ctx->id("FIFO36E1")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("FIFO36E1")].insert(ctx->id("WRCLK"));
-    invertible_pins[ctx->id("FIFO36E1")].insert(ctx->id("WREN"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("CLKRSVD0"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("CLKRSVD1"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("CPLLLOCKDETCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("DMONITORCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("DRPCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("GTGREFCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("RXUSRCLK2"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("RXUSRCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("SIGVALIDCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("TXPHDLYTSTCLK"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("TXUSRCLK2"));
-    invertible_pins[ctx->id("GTHE2_CHANNEL")].insert(ctx->id("TXUSRCLK"));
-    invertible_pins[ctx->id("GTHE2_COMMON")].insert(ctx->id("DRPCLK"));
-    invertible_pins[ctx->id("GTHE2_COMMON")].insert(ctx->id("GTGREFCLK"));
-    invertible_pins[ctx->id("GTHE2_COMMON")].insert(ctx->id("QPLLLOCKDETCLK"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("CLKRSVD0"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("CLKRSVD1"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("DMONITORCLK"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("DRPCLK"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("RXUSRCLK2"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("RXUSRCLK"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("SIGVALIDCLK"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("TXPHDLYTSTCLK"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("TXUSRCLK2"));
-    invertible_pins[ctx->id("GTPE2_CHANNEL")].insert(ctx->id("TXUSRCLK"));
-    invertible_pins[ctx->id("GTPE2_COMMON")].insert(ctx->id("DRPCLK"));
-    invertible_pins[ctx->id("GTPE2_COMMON")].insert(ctx->id("GTGREFCLK0"));
-    invertible_pins[ctx->id("GTPE2_COMMON")].insert(ctx->id("GTGREFCLK1"));
-    invertible_pins[ctx->id("GTPE2_COMMON")].insert(ctx->id("PLL0LOCKDETCLK"));
-    invertible_pins[ctx->id("GTPE2_COMMON")].insert(ctx->id("PLL1LOCKDETCLK"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("CPLLLOCKDETCLK"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("DRPCLK"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("GTGREFCLK"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("RXUSRCLK2"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("RXUSRCLK"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("TXPHDLYTSTCLK"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("TXUSRCLK2"));
-    invertible_pins[ctx->id("GTXE2_CHANNEL")].insert(ctx->id("TXUSRCLK"));
-    invertible_pins[ctx->id("GTXE2_COMMON")].insert(ctx->id("DRPCLK"));
-    invertible_pins[ctx->id("GTXE2_COMMON")].insert(ctx->id("GTGREFCLK"));
-    invertible_pins[ctx->id("GTXE2_COMMON")].insert(ctx->id("QPLLLOCKDETCLK"));
-    invertible_pins[ctx->id("IDDR")].insert(ctx->id("C"));
-    // invertible_pins[ctx->id("IDDR")].insert(ctx->id("D"));
-    invertible_pins[ctx->id("IDDR_2CLK")].insert(ctx->id("CB"));
-    invertible_pins[ctx->id("IDDR_2CLK")].insert(ctx->id("C"));
-    // invertible_pins[ctx->id("IDDR_2CLK")].insert(ctx->id("D"));
-    invertible_pins[ctx->id("IDELAYE2")].insert(ctx->id("C"));
-    invertible_pins[ctx->id("IDELAYE2")].insert(ctx->id("IDATAIN"));
-    invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("C"));
-    invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("ODATAIN"));
-    invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLKB"));
-    invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLKDIVP"));
-    invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLKDIV"));
-    invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("CLK"));
-    // invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("D"));
-    invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("OCLKB"));
-    invertible_pins[ctx->id("ISERDESE2")].insert(ctx->id("OCLK"));
-    // invertible_pins[ctx->id("LDCE")].insert(ctx->id("CLR"));
-    invertible_pins[ctx->id("LDCE")].insert(ctx->id("G"));
-    invertible_pins[ctx->id("LDPE")].insert(ctx->id("G"));
-    // invertible_pins[ctx->id("LDPE")].insert(ctx->id("PRE"));
-    invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("CLKINSEL"));
-    invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("PSEN"));
-    invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("PSINCDEC"));
-    invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("MMCME2_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("IDDR")].insert(ctx->id("CK"));
-    invertible_pins[ctx->id("ODDR")].insert(ctx->id("CK"));
-    invertible_pins[ctx->id("ODDR")].insert(ctx->id("D1"));
-    invertible_pins[ctx->id("ODDR")].insert(ctx->id("D2"));
-    invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("C"));
-    // invertible_pins[ctx->id("ODELAYE2")].insert(ctx->id("ODATAIN"));
-    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("CLKDIV"));
-    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("CLK"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D1"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D2"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D3"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D4"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D5"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D6"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D7"));
-    // invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("D8"));
-    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T1"));
-    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T2"));
-    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T3"));
-    invertible_pins[ctx->id("OSERDESE2")].insert(ctx->id("T4"));
-    invertible_pins[ctx->id("PHASER_IN")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PHASER_IN_PHY")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PHASER_OUT")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PHASER_OUT_PHY")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PHASER_REF")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("PHASER_REF")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("PLLE2_ADV")].insert(ctx->id("CLKINSEL"));
-    invertible_pins[ctx->id("PLLE2_ADV")].insert(ctx->id("PWRDWN"));
-    invertible_pins[ctx->id("PLLE2_ADV")].insert(ctx->id("RST"));
-    invertible_pins[ctx->id("XADC")].insert(ctx->id("CONVSTCLK"));
-    invertible_pins[ctx->id("XADC")].insert(ctx->id("DCLK"));
+    invertible_pins[id_RAMB18E1].insert(id_CLKARDCLK);
+    invertible_pins[id_RAMB18E1].insert(id_CLKBWRCLK);
+    invertible_pins[id_RAMB18E1].insert(id_ENARDEN);
+    invertible_pins[id_RAMB18E1].insert(id_ENBWREN);
+    invertible_pins[id_RAMB18E1].insert(id_RSTRAMARSTRAM);
+    invertible_pins[id_RAMB18E1].insert(id_RSTRAMB);
+    invertible_pins[id_RAMB18E1].insert(id_RSTREGARSTREG);
+    invertible_pins[id_RAMB18E1].insert(id_RSTREGB);
+    invertible_pins[id_RAMB36E1].insert(id_CLKARDCLK);
+    invertible_pins[id_RAMB36E1].insert(id_CLKBWRCLK);
+    invertible_pins[id_RAMB36E1].insert(id_ENARDEN);
+    invertible_pins[id_RAMB36E1].insert(id_ENBWREN);
+    invertible_pins[id_RAMB36E1].insert(id_RSTRAMARSTRAM);
+    invertible_pins[id_RAMB36E1].insert(id_RSTRAMB);
+    invertible_pins[id_RAMB36E1].insert(id_RSTREGARSTREG);
+    invertible_pins[id_RAMB36E1].insert(id_RSTREGB);
+    invertible_pins[id_BUFMRCE].insert(id_CE);
+    invertible_pins[id_DSP48E1].insert(ctx->id("ALUMODE[0]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("ALUMODE[1]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("ALUMODE[2]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("ALUMODE[3]"));
+    invertible_pins[id_DSP48E1].insert(id_CARRYIN);
+    // invertible_pins[id_DSP48E1].insert(id_CLK);
+    invertible_pins[id_DSP48E1].insert(ctx->id("INMODE[0]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("INMODE[1]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("INMODE[2]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("INMODE[3]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("INMODE[4]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[0]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[1]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[2]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[3]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[4]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[5]"));
+    invertible_pins[id_DSP48E1].insert(ctx->id("OPMODE[6]"));
+    invertible_pins[id_FIFO18E1].insert(id_RDCLK);
+    invertible_pins[id_FIFO18E1].insert(id_RDEN);
+    invertible_pins[id_FIFO18E1].insert(id_RSTREG);
+    invertible_pins[id_FIFO18E1].insert(id_RST);
+    invertible_pins[id_FIFO18E1].insert(id_WRCLK);
+    invertible_pins[id_FIFO18E1].insert(id_WREN);
+    invertible_pins[id_FIFO36E1].insert(id_RDCLK);
+    invertible_pins[id_FIFO36E1].insert(id_RDEN);
+    invertible_pins[id_FIFO36E1].insert(id_RSTREG);
+    invertible_pins[id_FIFO36E1].insert(id_RST);
+    invertible_pins[id_FIFO36E1].insert(id_WRCLK);
+    invertible_pins[id_FIFO36E1].insert(id_WREN);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_CLKRSVD0);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_CLKRSVD1);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_CPLLLOCKDETCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_DMONITORCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_DRPCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_GTGREFCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_RXUSRCLK2);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_RXUSRCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_SIGVALIDCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_TXPHDLYTSTCLK);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_TXUSRCLK2);
+    invertible_pins[id_GTHE2_CHANNEL].insert(id_TXUSRCLK);
+    invertible_pins[id_GTHE2_COMMON].insert(id_DRPCLK);
+    invertible_pins[id_GTHE2_COMMON].insert(id_GTGREFCLK);
+    invertible_pins[id_GTHE2_COMMON].insert(id_QPLLLOCKDETCLK);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_CLKRSVD0);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_CLKRSVD1);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_DMONITORCLK);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_DRPCLK);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_RXUSRCLK2);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_RXUSRCLK);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_SIGVALIDCLK);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_TXPHDLYTSTCLK);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_TXUSRCLK2);
+    invertible_pins[id_GTPE2_CHANNEL].insert(id_TXUSRCLK);
+    invertible_pins[id_GTPE2_COMMON].insert(id_DRPCLK);
+    invertible_pins[id_GTPE2_COMMON].insert(id_GTGREFCLK0);
+    invertible_pins[id_GTPE2_COMMON].insert(id_GTGREFCLK1);
+    invertible_pins[id_GTPE2_COMMON].insert(id_PLL0LOCKDETCLK);
+    invertible_pins[id_GTPE2_COMMON].insert(id_PLL1LOCKDETCLK);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_CPLLLOCKDETCLK);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_DRPCLK);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_GTGREFCLK);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_RXUSRCLK2);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_RXUSRCLK);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_TXPHDLYTSTCLK);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_TXUSRCLK2);
+    invertible_pins[id_GTXE2_CHANNEL].insert(id_TXUSRCLK);
+    invertible_pins[id_GTXE2_COMMON].insert(id_DRPCLK);
+    invertible_pins[id_GTXE2_COMMON].insert(id_GTGREFCLK);
+    invertible_pins[id_GTXE2_COMMON].insert(id_QPLLLOCKDETCLK);
+    invertible_pins[id_IDDR].insert(id_C);
+    // invertible_pins[id_IDDR].insert(id_D);
+    invertible_pins[id_IDDR_2CLK].insert(id_CB);
+    invertible_pins[id_IDDR_2CLK].insert(id_C);
+    // invertible_pins[id_IDDR_2CLK].insert(id_D);
+    invertible_pins[id_IDELAYE2].insert(id_C);
+    invertible_pins[id_IDELAYE2].insert(id_IDATAIN);
+    invertible_pins[id_ODELAYE2].insert(id_C);
+    invertible_pins[id_ODELAYE2].insert(id_ODATAIN);
+    invertible_pins[id_ISERDESE2].insert(id_CLKB);
+    invertible_pins[id_ISERDESE2].insert(id_CLKDIVP);
+    invertible_pins[id_ISERDESE2].insert(id_CLKDIV);
+    invertible_pins[id_ISERDESE2].insert(id_CLK);
+    // invertible_pins[id_ISERDESE2].insert(id_D);
+    invertible_pins[id_ISERDESE2].insert(id_OCLKB);
+    invertible_pins[id_ISERDESE2].insert(id_OCLK);
+    // invertible_pins[id_LDCE].insert(id_CLR);
+    invertible_pins[id_LDCE].insert(id_G);
+    invertible_pins[id_LDPE].insert(id_G);
+    // invertible_pins[id_LDPE].insert(id_PRE);
+    invertible_pins[id_MMCME2_ADV].insert(id_CLKINSEL);
+    invertible_pins[id_MMCME2_ADV].insert(id_PSEN);
+    invertible_pins[id_MMCME2_ADV].insert(id_PSINCDEC);
+    invertible_pins[id_MMCME2_ADV].insert(id_PWRDWN);
+    invertible_pins[id_MMCME2_ADV].insert(id_RST);
+    invertible_pins[id_IDDR].insert(id_CK);
+    invertible_pins[id_ODDR].insert(id_CK);
+    invertible_pins[id_ODDR].insert(id_D1);
+    invertible_pins[id_ODDR].insert(id_D2);
+    invertible_pins[id_ODELAYE2].insert(id_C);
+    // invertible_pins[id_ODELAYE2].insert(id_ODATAIN);
+    invertible_pins[id_OSERDESE2].insert(id_CLKDIV);
+    invertible_pins[id_OSERDESE2].insert(id_CLK);
+    // invertible_pins[id_OSERDESE2].insert(id_D1);
+    // invertible_pins[id_OSERDESE2].insert(id_D2);
+    // invertible_pins[id_OSERDESE2].insert(id_D3);
+    // invertible_pins[id_OSERDESE2].insert(id_D4);
+    // invertible_pins[id_OSERDESE2].insert(id_D5);
+    // invertible_pins[id_OSERDESE2].insert(id_D6);
+    // invertible_pins[id_OSERDESE2].insert(id_D7);
+    // invertible_pins[id_OSERDESE2].insert(id_D8);
+    invertible_pins[id_OSERDESE2].insert(id_T1);
+    invertible_pins[id_OSERDESE2].insert(id_T2);
+    invertible_pins[id_OSERDESE2].insert(id_T3);
+    invertible_pins[id_OSERDESE2].insert(id_T4);
+    invertible_pins[id_PHASER_IN].insert(id_RST);
+    invertible_pins[id_PHASER_IN_PHY].insert(id_RST);
+    invertible_pins[id_PHASER_OUT].insert(id_RST);
+    invertible_pins[id_PHASER_OUT_PHY].insert(id_RST);
+    invertible_pins[id_PHASER_REF].insert(id_RST);
+    invertible_pins[id_PHASER_REF].insert(id_PWRDWN);
+    invertible_pins[id_PLLE2_ADV].insert(id_CLKINSEL);
+    invertible_pins[id_PLLE2_ADV].insert(id_PWRDWN);
+    invertible_pins[id_PLLE2_ADV].insert(id_RST);
+    invertible_pins[id_XADC].insert(id_CONVSTCLK);
+    invertible_pins[id_XADC].insert(id_DCLK);
 }
 
-void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map<IdString, bool>> &tied_pins)
+void get_tied_pins(Context *ctx, dict<IdString, dict<IdString, bool>> &tied_pins)
 {
     // List of pins that are tied to a fixed value when unused.
     // This doesn't include the PS8, due to the large number of tied-zero pins that are implied by the
     // list of Bel pins and dealt with as a special case in arch_place.cc
 
-    for (IdString ram : {ctx->id("RAMB18E2"), ctx->id("RAMB36E2")}) {
+    for (IdString ram : {id_RAMB18E2, id_RAMB36E2}) {
         // based on UG573 p37
         for (char port : {'A', 'B'}) {
             tied_pins[ram][ctx->id(std::string("ADDREN") + port)] = true;
             tied_pins[ram][ctx->id(std::string("CASDIMUX") + port)] = false;
             tied_pins[ram][ctx->id(std::string("CASDOMUX") + port)] = false;
-            if (ram == ctx->id("RAMB18E2")) {
+            if (ram == id_RAMB18E2) {
                 tied_pins[ram][ctx->id(std::string("CASDOMUXEN_") + port)] = true;
                 tied_pins[ram][ctx->id(std::string("CASOREGIMUXEN_") + port)] = true;
             }
@@ -385,7 +385,7 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
             tied_pins[ram][ctx->id(std::string("CASOREGIMUX") + port)] = false;
         }
 
-        int wea_width = (ram == ctx->id("RAMB18E2") ? 2 : 4);
+        int wea_width = (ram == id_RAMB18E2 ? 2 : 4);
         int web_width = 4;
 
         for (int i = 0; i < wea_width; i++)
@@ -393,30 +393,30 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         for (int i = 0; i < web_width; i++)
             tied_pins[ram][ctx->id(std::string("WEBWE[") + std::to_string(i) + "]")] = true;
 
-        tied_pins[ram][ctx->id("CLKARDCLK")] = false;
-        tied_pins[ram][ctx->id("CLKBWRCLK")] = false;
-        tied_pins[ram][ctx->id("ENARDEN")] = false;
-        tied_pins[ram][ctx->id("ENBWREN")] = false;
-        tied_pins[ram][ctx->id("REGCEAREGCE")] = true;
-        tied_pins[ram][ctx->id("REGCEB")] = true;
+        tied_pins[ram][id_CLKARDCLK] = false;
+        tied_pins[ram][id_CLKBWRCLK] = false;
+        tied_pins[ram][id_ENARDEN] = false;
+        tied_pins[ram][id_ENBWREN] = false;
+        tied_pins[ram][id_REGCEAREGCE] = true;
+        tied_pins[ram][id_REGCEB] = true;
 
-        tied_pins[ram][ctx->id("RSTRAMARSTRAM")] = false;
-        tied_pins[ram][ctx->id("RSTRAMB")] = false;
-        tied_pins[ram][ctx->id("RSTREGARSTREG")] = false;
-        tied_pins[ram][ctx->id("RSTREGB")] = false;
-        tied_pins[ram][ctx->id("SLEEP")] = false;
+        tied_pins[ram][id_RSTRAMARSTRAM] = false;
+        tied_pins[ram][id_RSTRAMB] = false;
+        tied_pins[ram][id_RSTREGARSTREG] = false;
+        tied_pins[ram][id_RSTREGB] = false;
+        tied_pins[ram][id_SLEEP] = false;
 
-        if (ram == ctx->id("RAMB36E2")) {
-            tied_pins[ram][ctx->id("INJECTSBITERR")] = false;
-            tied_pins[ram][ctx->id("INJECTDBITERR")] = false;
-            tied_pins[ram][ctx->id("ECCPIPECE")] = true;
+        if (ram == id_RAMB36E2) {
+            tied_pins[ram][id_INJECTSBITERR] = false;
+            tied_pins[ram][id_INJECTDBITERR] = false;
+            tied_pins[ram][id_ECCPIPECE] = true;
         }
     }
 
-    for (IdString ram : {ctx->id("RAMB18E1"), ctx->id("RAMB36E1")}) {
+    for (IdString ram : {id_RAMB18E1, id_RAMB36E1}) {
         // based on UG573 p37
 
-        int wea_width = (ram == ctx->id("RAMB18E1") ? 2 : 4);
+        int wea_width = (ram == id_RAMB18E1 ? 2 : 4);
         int web_width = 4;
 
         for (int i = 0; i < wea_width; i++)
@@ -424,28 +424,28 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
         for (int i = 0; i < web_width; i++)
             tied_pins[ram][ctx->id(std::string("WEBWE[") + std::to_string(i) + "]")] = true;
 
-        tied_pins[ram][ctx->id("CLKARDCLK")] = false;
-        tied_pins[ram][ctx->id("CLKBWRCLK")] = false;
-        tied_pins[ram][ctx->id("ENARDEN")] = false;
-        tied_pins[ram][ctx->id("ENBWREN")] = false;
-        tied_pins[ram][ctx->id("REGCEAREGCE")] = true;
-        tied_pins[ram][ctx->id("REGCEB")] = true;
+        tied_pins[ram][id_CLKARDCLK] = false;
+        tied_pins[ram][id_CLKBWRCLK] = false;
+        tied_pins[ram][id_ENARDEN] = false;
+        tied_pins[ram][id_ENBWREN] = false;
+        tied_pins[ram][id_REGCEAREGCE] = true;
+        tied_pins[ram][id_REGCEB] = true;
 
-        tied_pins[ram][ctx->id("RSTRAMARSTRAM")] = false;
-        tied_pins[ram][ctx->id("RSTRAMB")] = false;
-        tied_pins[ram][ctx->id("RSTREGARSTREG")] = false;
-        tied_pins[ram][ctx->id("RSTREGB")] = false;
+        tied_pins[ram][id_RSTRAMARSTRAM] = false;
+        tied_pins[ram][id_RSTRAMB] = false;
+        tied_pins[ram][id_RSTREGARSTREG] = false;
+        tied_pins[ram][id_RSTREGB] = false;
     }
 
     // BUFGCTRL (by experiment)
     for (int i = 0; i < 2; i++) {
-        tied_pins[ctx->id("BUFGCTRL")][ctx->id("S" + std::to_string(i))] = false;
-        tied_pins[ctx->id("BUFGCTRL")][ctx->id("IGNORE" + std::to_string(i))] = false;
-        tied_pins[ctx->id("BUFGCTRL")][ctx->id("CE" + std::to_string(i))] = false;
+        tied_pins[id_BUFGCTRL][ctx->id("S" + std::to_string(i))] = false;
+        tied_pins[id_BUFGCTRL][ctx->id("IGNORE" + std::to_string(i))] = false;
+        tied_pins[id_BUFGCTRL][ctx->id("CE" + std::to_string(i))] = false;
     }
 
     // URAM288 (by experiment)
-    for (IdString uram : {ctx->id("URAM288"), ctx->id("URAM288_BASE")}) {
+    for (IdString uram : {id_URAM288, id_URAM288_BASE}) {
         for (char port : {'A', 'B'}) {
             tied_pins[uram][ctx->id(std::string("RST_") + port)] = false;
             tied_pins[uram][ctx->id(std::string("RDB_WR_") + port)] = false;
@@ -459,174 +459,174 @@ void get_tied_pins(Context *ctx, std::unordered_map<IdString, std::unordered_map
             for (int i = 0; i < 9; i++)
                 tied_pins[uram][ctx->id(std::string("BWE_") + port + "[" + std::to_string(i) + "]")] = true;
         }
-        tied_pins[uram][ctx->id("SLEEP")] = false;
+        tied_pins[uram][id_SLEEP] = false;
     }
 
     // IO logic primitives
-    tied_pins[ctx->id("IDDRE1")][ctx->id("R")] = false;
-    tied_pins[ctx->id("ODDRE1")][ctx->id("SR")] = false;
+    tied_pins[id_IDDRE1][id_R] = false;
+    tied_pins[id_ODDRE1][id_SR] = false;
 
-    tied_pins[ctx->id("OSERDESE3")][ctx->id("RST")] = false;
-    tied_pins[ctx->id("OSERDESE3")][ctx->id("T")] = false;
+    tied_pins[id_OSERDESE3][id_RST] = false;
+    tied_pins[id_OSERDESE3][id_T] = false;
 
-    tied_pins[ctx->id("ODELAYE3")][ctx->id("RST")] = false;
-    tied_pins[ctx->id("ODELAYE3")][ctx->id("CE")] = true;
+    tied_pins[id_ODELAYE3][id_RST] = false;
+    tied_pins[id_ODELAYE3][id_CE] = true;
     for (int i = 0; i < 9; i++)
-        tied_pins[ctx->id("ODELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
-    tied_pins[ctx->id("ODELAYE3")][ctx->id("LOAD")] = false;
+        tied_pins[id_ODELAYE3][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
+    tied_pins[id_ODELAYE3][id_LOAD] = false;
 
-    tied_pins[ctx->id("IDELAYE3")][ctx->id("RST")] = false;
-    tied_pins[ctx->id("IDELAYE3")][ctx->id("CE")] = true;
+    tied_pins[id_IDELAYE3][id_RST] = false;
+    tied_pins[id_IDELAYE3][id_CE] = true;
     for (int i = 0; i < 9; i++)
-        tied_pins[ctx->id("IDELAYE3")][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
-    tied_pins[ctx->id("IDELAYE3")][ctx->id("LOAD")] = false;
+        tied_pins[id_IDELAYE3][ctx->id("CNTVALUEIN[" + std::to_string(i) + "]")] = true;
+    tied_pins[id_IDELAYE3][id_LOAD] = false;
 
-    tied_pins[ctx->id("OSERDESE2")][ctx->id("RST")] = false;
+    tied_pins[id_OSERDESE2][id_RST] = false;
     for (int i = 1; i <= 8; i++)
-        tied_pins[ctx->id("OSERDESE2")][ctx->id("D" + std::to_string(i))] = false;
+        tied_pins[id_OSERDESE2][ctx->id("D" + std::to_string(i))] = false;
     for (int i = 1; i <= 4; i++)
-        tied_pins[ctx->id("OSERDESE2")][ctx->id("T" + std::to_string(i))] = false;
-    tied_pins[ctx->id("OSERDESE2")][ctx->id("OCE")] = true;
-    tied_pins[ctx->id("OSERDESE2")][ctx->id("TCE")] = true;
+        tied_pins[id_OSERDESE2][ctx->id("T" + std::to_string(i))] = false;
+    tied_pins[id_OSERDESE2][id_OCE] = true;
+    tied_pins[id_OSERDESE2][id_TCE] = true;
 
-    tied_pins[ctx->id("IDELAYE2")][ctx->id("REGRST")] = false;
-    tied_pins[ctx->id("IDELAYE2")][ctx->id("LDPIPEEN")] = false;
-    tied_pins[ctx->id("IDELAYE2")][ctx->id("CINVCTRL")] = false;
+    tied_pins[id_IDELAYE2][id_REGRST] = false;
+    tied_pins[id_IDELAYE2][id_LDPIPEEN] = false;
+    tied_pins[id_IDELAYE2][id_CINVCTRL] = false;
 
     // IO primitives
-    tied_pins[ctx->id("IOBUFDSE3")][ctx->id("DCITERMDISABLE")] = false;
-    tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC_EN[0]")] = false;
-    tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC_EN[1]")] = false;
+    tied_pins[id_IOBUFDSE3][id_DCITERMDISABLE] = false;
+    tied_pins[id_IOBUFDSE3][ctx->id("OSC_EN[0]")] = false;
+    tied_pins[id_IOBUFDSE3][ctx->id("OSC_EN[1]")] = false;
     for (int i = 0; i < 4; i++)
-        tied_pins[ctx->id("IOBUFDSE3")][ctx->id("OSC[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_IOBUFDSE3][ctx->id("OSC[" + std::to_string(i) + "]")] = false;
 
     // MMCM
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CDDCREQ")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKFBIN")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKIN1")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKIN2")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKINSEL")] = true;
+    tied_pins[id_MMCME4_ADV][id_CDDCREQ] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKFBIN] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKIN1] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKIN2] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKINSEL] = true;
     for (int i = 0; i < 7; i++)
-        tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DCLK")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DEN")] = false;
+        tied_pins[id_MMCME4_ADV][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
+    tied_pins[id_MMCME4_ADV][id_DCLK] = false;
+    tied_pins[id_MMCME4_ADV][id_DEN] = false;
     for (int i = 0; i < 16; i++)
-        tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DI[" + std::to_string(i) + "]")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("DWE")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PSCLK")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PSEN")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PSINCDEC")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("PWRDWN")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("RST")] = false;
+        tied_pins[id_MMCME4_ADV][ctx->id("DI[" + std::to_string(i) + "]")] = false;
+    tied_pins[id_MMCME4_ADV][id_DWE] = false;
+    tied_pins[id_MMCME4_ADV][id_PSCLK] = false;
+    tied_pins[id_MMCME4_ADV][id_PSEN] = false;
+    tied_pins[id_MMCME4_ADV][id_PSINCDEC] = false;
+    tied_pins[id_MMCME4_ADV][id_PWRDWN] = false;
+    tied_pins[id_MMCME4_ADV][id_RST] = false;
 
     // PLL
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("CLKFBIN")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("CLKIN1")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("CLKIN2")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("CLKINSEL")] = true;
+    tied_pins[id_PLLE2_ADV][id_CLKFBIN] = false;
+    tied_pins[id_PLLE2_ADV][id_CLKIN1] = false;
+    tied_pins[id_PLLE2_ADV][id_CLKIN2] = false;
+    tied_pins[id_PLLE2_ADV][id_CLKINSEL] = true;
     for (int i = 0; i < 7; i++)
-        tied_pins[ctx->id("PLLE2_ADV")][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("DCLK")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("DEN")] = false;
+        tied_pins[id_PLLE2_ADV][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
+    tied_pins[id_PLLE2_ADV][id_DCLK] = false;
+    tied_pins[id_PLLE2_ADV][id_DEN] = false;
     for (int i = 0; i < 16; i++)
-        tied_pins[ctx->id("PLLE2_ADV")][ctx->id("DI[" + std::to_string(i) + "]")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("DWE")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("PWRDWN")] = false;
-    tied_pins[ctx->id("PLLE2_ADV")][ctx->id("RST")] = false;
+        tied_pins[id_PLLE2_ADV][ctx->id("DI[" + std::to_string(i) + "]")] = false;
+    tied_pins[id_PLLE2_ADV][id_DWE] = false;
+    tied_pins[id_PLLE2_ADV][id_PWRDWN] = false;
+    tied_pins[id_PLLE2_ADV][id_RST] = false;
 
     // Misc clock buffers
-    tied_pins[ctx->id("BUFGCE_DIV")][ctx->id("CE")] = true;
-    tied_pins[ctx->id("BUFGCE_DIV")][ctx->id("CLR")] = false;
-    tied_pins[ctx->id("BUFGCE")][ctx->id("CE")] = true;
+    tied_pins[id_BUFGCE_DIV][id_CE] = true;
+    tied_pins[id_BUFGCE_DIV][id_CLR] = false;
+    tied_pins[id_BUFGCE][id_CE] = true;
 
     // UltraScale DSP
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CLK")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTA")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTALLCARRYIN")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTALUMODE")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTB")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTC")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTCTRL")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTD")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTINMODE")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTM")] = false;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("RSTP")] = false;
+    tied_pins[id_DSP48E2][id_CLK] = false;
+    tied_pins[id_DSP48E2][id_RSTA] = false;
+    tied_pins[id_DSP48E2][id_RSTALLCARRYIN] = false;
+    tied_pins[id_DSP48E2][id_RSTALUMODE] = false;
+    tied_pins[id_DSP48E2][id_RSTB] = false;
+    tied_pins[id_DSP48E2][id_RSTC] = false;
+    tied_pins[id_DSP48E2][id_RSTCTRL] = false;
+    tied_pins[id_DSP48E2][id_RSTD] = false;
+    tied_pins[id_DSP48E2][id_RSTINMODE] = false;
+    tied_pins[id_DSP48E2][id_RSTM] = false;
+    tied_pins[id_DSP48E2][id_RSTP] = false;
 
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CARRYIN")] = false;
+    tied_pins[id_DSP48E2][id_CARRYIN] = false;
 
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEA1")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEA2")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEAD")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEALUMODE")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEB1")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEB2")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEC")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CECARRYIN")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CECTRL")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CED")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEINMODE")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEM")] = true;
-    tied_pins[ctx->id("DSP48E2")][ctx->id("CEP")] = true;
+    tied_pins[id_DSP48E2][id_CEA1] = true;
+    tied_pins[id_DSP48E2][id_CEA2] = true;
+    tied_pins[id_DSP48E2][id_CEAD] = true;
+    tied_pins[id_DSP48E2][id_CEALUMODE] = true;
+    tied_pins[id_DSP48E2][id_CEB1] = true;
+    tied_pins[id_DSP48E2][id_CEB2] = true;
+    tied_pins[id_DSP48E2][id_CEC] = true;
+    tied_pins[id_DSP48E2][id_CECARRYIN] = true;
+    tied_pins[id_DSP48E2][id_CECTRL] = true;
+    tied_pins[id_DSP48E2][id_CED] = true;
+    tied_pins[id_DSP48E2][id_CEINMODE] = true;
+    tied_pins[id_DSP48E2][id_CEM] = true;
+    tied_pins[id_DSP48E2][id_CEP] = true;
     for (int i = 0; i < 30; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("A[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("A[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 18; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("B[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("B[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 48; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("C[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("C[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 27; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("D[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("D[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 4; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("ALUMODE[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("ALUMODE[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 3; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("CARRYINSEL[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("CARRYINSEL[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 5; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("INMODE[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("INMODE[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 9; i++)
-        tied_pins[ctx->id("DSP48E2")][ctx->id("OPMODE[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E2][ctx->id("OPMODE[" + std::to_string(i) + "]")] = false;
 
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CLK")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTA")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTALLCARRYIN")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTALUMODE")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTB")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTC")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTCTRL")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTD")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTINMODE")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTM")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("RSTP")] = false;
+    tied_pins[id_DSP48E1][id_CLK] = false;
+    tied_pins[id_DSP48E1][id_RSTA] = false;
+    tied_pins[id_DSP48E1][id_RSTALLCARRYIN] = false;
+    tied_pins[id_DSP48E1][id_RSTALUMODE] = false;
+    tied_pins[id_DSP48E1][id_RSTB] = false;
+    tied_pins[id_DSP48E1][id_RSTC] = false;
+    tied_pins[id_DSP48E1][id_RSTCTRL] = false;
+    tied_pins[id_DSP48E1][id_RSTD] = false;
+    tied_pins[id_DSP48E1][id_RSTINMODE] = false;
+    tied_pins[id_DSP48E1][id_RSTM] = false;
+    tied_pins[id_DSP48E1][id_RSTP] = false;
 
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CARRYIN")] = false;
+    tied_pins[id_DSP48E1][id_CARRYIN] = false;
 
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEA1")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEA2")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEAD")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEALUMODE")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEB1")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEB2")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEC")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CECARRYIN")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CECTRL")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CED")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEINMODE")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEM")] = false;
-    tied_pins[ctx->id("DSP48E1")][ctx->id("CEP")] = false;
+    tied_pins[id_DSP48E1][id_CEA1] = false;
+    tied_pins[id_DSP48E1][id_CEA2] = false;
+    tied_pins[id_DSP48E1][id_CEAD] = false;
+    tied_pins[id_DSP48E1][id_CEALUMODE] = false;
+    tied_pins[id_DSP48E1][id_CEB1] = false;
+    tied_pins[id_DSP48E1][id_CEB2] = false;
+    tied_pins[id_DSP48E1][id_CEC] = false;
+    tied_pins[id_DSP48E1][id_CECARRYIN] = false;
+    tied_pins[id_DSP48E1][id_CECTRL] = false;
+    tied_pins[id_DSP48E1][id_CED] = false;
+    tied_pins[id_DSP48E1][id_CEINMODE] = false;
+    tied_pins[id_DSP48E1][id_CEM] = false;
+    tied_pins[id_DSP48E1][id_CEP] = false;
     for (int i = 0; i < 30; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("A[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("A[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 18; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("B[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("B[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 48; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("C[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("C[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 25; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("D[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("D[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 4; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("ALUMODE[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("ALUMODE[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 3; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("CARRYINSEL[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("CARRYINSEL[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 5; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("INMODE[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("INMODE[" + std::to_string(i) + "]")] = false;
     for (int i = 0; i < 7; i++)
-        tied_pins[ctx->id("DSP48E1")][ctx->id("OPMODE[" + std::to_string(i) + "]")] = false;
+        tied_pins[id_DSP48E1][ctx->id("OPMODE[" + std::to_string(i) + "]")] = false;
 }
 
 // Get a list of logical pins that have both L and U bel pins that need
@@ -641,7 +641,7 @@ void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vecto
         }
     }
     NPNR_ASSERT(spec_bel != BelId());
-    std::set<std::string> belpins;
+    pool<std::string> belpins;
     for (auto &bp : ctx->getBelPins(spec_bel))
         if (ctx->getBelPinType(spec_bel, bp) == PORT_IN)
             belpins.insert(bp.str(ctx));
@@ -665,44 +665,44 @@ void get_bram36_ul_pins(Context *ctx, std::vector<std::pair<IdString, std::vecto
 }
 
 // Gets a list of pins that are to be directly connected to a top level IO pin (only)
-void get_top_level_pins(Context *ctx, std::unordered_map<IdString, std::unordered_set<IdString>> &toplevel_pins)
+void get_top_level_pins(Context *ctx, dict<IdString, pool<IdString>> &toplevel_pins)
 {
-    toplevel_pins[ctx->id("IBUF")] = {ctx->id("I")};
-    toplevel_pins[ctx->id("IBUF_ANALOG")] = {ctx->id("I")};
-    toplevel_pins[ctx->id("IBUF_IBUFDISABLE")] = {ctx->id("I")};
-    toplevel_pins[ctx->id("IBUF_INTERMDISABLE")] = {ctx->id("I")};
-    toplevel_pins[ctx->id("IBUFE3")] = {ctx->id("I")};
+    toplevel_pins[id_IBUF] = {id_I};
+    toplevel_pins[id_IBUF_ANALOG] = {id_I};
+    toplevel_pins[id_IBUF_IBUFDISABLE] = {id_I};
+    toplevel_pins[id_IBUF_INTERMDISABLE] = {id_I};
+    toplevel_pins[id_IBUFE3] = {id_I};
 
-    toplevel_pins[ctx->id("IBUFDS")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDS_DIFF_OUT")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDS_DIFF_OUT_IBUFDISABLE")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDS_DIFF_OUT_INTERMDISABLE")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDS_GTE3")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDS_GTE4")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDS_INTERMDISABLE")] = {ctx->id("I"), ctx->id("IB")};
-    toplevel_pins[ctx->id("IBUFDSE3")] = {ctx->id("I"), ctx->id("IB")};
+    toplevel_pins[id_IBUFDS] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDS_DIFF_OUT] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDS_DIFF_OUT_IBUFDISABLE] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDS_DIFF_OUT_INTERMDISABLE] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDS_GTE3] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDS_GTE4] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDS_INTERMDISABLE] = {id_I, id_IB};
+    toplevel_pins[id_IBUFDSE3] = {id_I, id_IB};
 
-    toplevel_pins[ctx->id("IOBUF")] = {ctx->id("IO")};
-    toplevel_pins[ctx->id("IOBUF_DCIEN")] = {ctx->id("IO")};
-    toplevel_pins[ctx->id("IOBUF_INTERMDISABLE")] = {ctx->id("IO")};
-    toplevel_pins[ctx->id("IOBUFE3")] = {ctx->id("IO")};
+    toplevel_pins[id_IOBUF] = {id_IO};
+    toplevel_pins[id_IOBUF_DCIEN] = {id_IO};
+    toplevel_pins[id_IOBUF_INTERMDISABLE] = {id_IO};
+    toplevel_pins[id_IOBUFE3] = {id_IO};
 
-    toplevel_pins[ctx->id("IOBUFDS")] = {ctx->id("IO"), ctx->id("IOB")};
-    toplevel_pins[ctx->id("IOBUFDS_DCIEN")] = {ctx->id("IO"), ctx->id("IOB")};
-    toplevel_pins[ctx->id("IOBUFDS_DIFF_OUT")] = {ctx->id("IO"), ctx->id("IOB")};
-    toplevel_pins[ctx->id("IOBUFDS_DIFF_OUT_DCIEN")] = {ctx->id("IO"), ctx->id("IOB")};
-    toplevel_pins[ctx->id("IOBUFDS_DIFF_OUT_INTERMDISABLE")] = {ctx->id("IO"), ctx->id("IOB")};
-    toplevel_pins[ctx->id("IOBUFDSE3")] = {ctx->id("IO"), ctx->id("IOB")};
+    toplevel_pins[id_IOBUFDS] = {id_IO, id_IOB};
+    toplevel_pins[id_IOBUFDS_DCIEN] = {id_IO, id_IOB};
+    toplevel_pins[id_IOBUFDS_DIFF_OUT] = {id_IO, id_IOB};
+    toplevel_pins[id_IOBUFDS_DIFF_OUT_DCIEN] = {id_IO, id_IOB};
+    toplevel_pins[id_IOBUFDS_DIFF_OUT_INTERMDISABLE] = {id_IO, id_IOB};
+    toplevel_pins[id_IOBUFDSE3] = {id_IO, id_IOB};
 
-    toplevel_pins[ctx->id("OBUF")] = {ctx->id("O")};
-    toplevel_pins[ctx->id("OBUFT")] = {ctx->id("O")};
+    toplevel_pins[id_OBUF] = {id_O};
+    toplevel_pins[id_OBUFT] = {id_O};
 
-    toplevel_pins[ctx->id("OBUFDS")] = {ctx->id("O"), ctx->id("OB")};
-    toplevel_pins[ctx->id("OBUFDS_GTE3")] = {ctx->id("O"), ctx->id("OB")};
-    toplevel_pins[ctx->id("OBUFDS_GTE3_ADV")] = {ctx->id("O"), ctx->id("OB")};
-    toplevel_pins[ctx->id("OBUFDS_GTE4")] = {ctx->id("O"), ctx->id("OB")};
-    toplevel_pins[ctx->id("OBUFDS_GTE4_ADV")] = {ctx->id("O"), ctx->id("OB")};
-    toplevel_pins[ctx->id("OBUFTDS")] = {ctx->id("O"), ctx->id("OB")};
+    toplevel_pins[id_OBUFDS] = {id_O, id_OB};
+    toplevel_pins[id_OBUFDS_GTE3] = {id_O, id_OB};
+    toplevel_pins[id_OBUFDS_GTE3_ADV] = {id_O, id_OB};
+    toplevel_pins[id_OBUFDS_GTE4] = {id_O, id_OB};
+    toplevel_pins[id_OBUFDS_GTE4_ADV] = {id_O, id_OB};
+    toplevel_pins[id_OBUFTDS] = {id_O, id_OB};
 }
 
 NEXTPNR_NAMESPACE_END

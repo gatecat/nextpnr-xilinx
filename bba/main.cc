@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -266,7 +266,7 @@ int main(int argc, char **argv)
     if (verbose) {
         printf("Constructed %d streams:\n", int(streams.size()));
         for (auto &s : streams)
-            printf("    stream '%s' with %d tokens\n", s.name.c_str(), int64_t(s.tokenTypes.size()));
+            printf("    stream '%s' with %ld tokens\n", s.name.c_str(), int64_t(s.tokenTypes.size()));
     }
 
     assert(!streams.empty());
@@ -394,7 +394,7 @@ int main(int argc, char **argv)
             }
 
             if (debug) {
-                printf("%08x ", cursor - numBytes);
+                printf("%08lx ", cursor - numBytes);
                 for (int k = cursor - numBytes; k < cursor; k++)
                     printf("%02x ", data[k]);
                 for (int k = numBytes; k < 4; k++)
@@ -446,7 +446,7 @@ int main(int argc, char **argv)
         for (auto &s : preText)
             fprintf(fileOut, "%s\n", s.c_str());
 
-        fprintf(fileOut, "const char %s[%d] =\n\"", streams[0].name.c_str(), int64_t(data.size()) + 1);
+        fprintf(fileOut, "const char %s[%ld] =\n\"", streams[0].name.c_str(), int64_t(data.size()) + 1);
 
         cursor = 1;
         for (int64_t i = 0; i < int64_t(data.size()); i++) {
@@ -484,7 +484,7 @@ int main(int argc, char **argv)
             fprintf(fileOut, "%s\n", s.c_str());
 
         fprintf(fileOut, "const char %s[%d] =\n", streams[0].name.c_str(), int(data.size()) + 1);
-        fprintf(fileOut, "#embed_str \"%s\"\n", boost::filesystem::basename(files.at(2)).c_str());
+        fprintf(fileOut, "#embed_str \"%s\"\n", boost::filesystem::path(files.at(2)).stem().c_str());
         fprintf(fileOut, ";\n");
 
         for (auto &s : postText)

@@ -172,9 +172,9 @@ void Arch::parseXdc(std::istream &in)
             std::vector<NetInfo *> dest = get_nets(arguments.at(cursor));
             for (auto n : dest) {
                 n->clkconstr = std::unique_ptr<ClockConstraint>(new ClockConstraint);
-                n->clkconstr->period = getDelayFromNS(period);
-                n->clkconstr->high.delay = n->clkconstr->period.delay / 2;
-                n->clkconstr->low.delay = n->clkconstr->period.delay / 2;
+                n->clkconstr->period = DelayPair(getDelayFromNS(period));
+                n->clkconstr->high = DelayPair(getDelayFromNS(period / 2));
+                n->clkconstr->low = DelayPair(getDelayFromNS(period / 2));
             }
         } else {
             log_info("ignoring unsupported XDC command '%s' (on line %d)\n", cmd.c_str(), lineno);

@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -96,10 +96,9 @@ void PythonTab::newContext(Context *ctx)
     console->clear();
 
     pyinterpreter_preinit();
-    init_python("nextpnr", true);
+    init_python("nextpnr");
     pyinterpreter_initialize();
     pyinterpreter_aquire();
-    init_python("nextpnr", false);
     python_export_global("ctx", ctx);
     pyinterpreter_release();
 

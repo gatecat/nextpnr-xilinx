@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2018  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -114,6 +114,7 @@ class ChipConfig
     std::vector<std::string> metadata;
     std::map<std::string, TileConfig> tiles;
     std::vector<TileGroup> tilegroups;
+    std::map<std::string, std::string> sysconfig;
     std::map<uint16_t, std::vector<uint16_t>> bram_data;
 };
 

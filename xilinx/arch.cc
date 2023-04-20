@@ -126,13 +126,13 @@ void Arch::setup_byname() const
     }
 }
 
-BelId Arch::getBelByName(IdString name) const
+BelId Arch::getBelByName(IdStringList name) const
 {
     BelId ret;
 
     setup_byname();
 
-    auto split = split_identifier_name(name.str(this));
+    auto split = split_identifier_name(name[0].str(this));
     if (site_by_name.count(split.first)) {
         int tile, site;
         std::tie(tile, site) = site_by_name.at(split.first);
@@ -189,19 +189,21 @@ WireId Arch::getBelPinWire(BelId bel, IdString pin) const
     int num_bel_wires = locInfo(bel).bel_data[bel.index].num_bel_wires;
     const BelWirePOD *bel_wires = locInfo(bel).bel_data[bel.index].bel_wires.get();
 
-    if (debug_this) log_info("looking for pin %s in bel %s\n", pin.c_str(this), getBelName(bel).c_str(this));
+    if (debug_this)
+        log_info("looking for pin %s in bel %s\n", pin.c_str(this), getBelName(bel)[0].c_str(this));
     for (int i = 0; i < num_bel_wires; i++) {
         const char *wire_name;
         if (debug_this) {
             WireId tmp;
             tmp.tile = bel.tile;
             tmp.index = bel_wires[i].wire_index;
-            wire_name = getWireName(tmp).c_str(this);
+            wire_name = getWireName(tmp)[0].c_str(this);
             log_info("check wire %s\n", wire_name);
         }
 
         if (bel_wires[i].port == pin.index) {
-            if (debug_this) log_info("got wire %s\n", wire_name);
+            if (debug_this)
+                log_info("got wire %s\n", wire_name);
             return canonicalWireId(chip_info, bel.tile, bel_wires[i].wire_index);
         }
     }
@@ -225,14 +227,14 @@ PortType Arch::getBelPinType(BelId bel, IdString pin) const
 
 // -----------------------------------------------------------------------
 
-WireId Arch::getWireByName(IdString name) const
+WireId Arch::getWireByName(IdStringList name) const
 {
-    if (wire_by_name_cache.count(name))
-        return wire_by_name_cache.at(name);
+    if (wire_by_name_cache.count(name[0]))
+        return wire_by_name_cache.at(name[0]);
     WireId ret;
     setup_byname();
 
-    const std::string &s = name.str(this);
+    const std::string &s = name[0].str(this);
     if (s.substr(0, 9) == "SITEWIRE/") {
         auto sp2 = split_identifier_name(s.substr(9));
         int tile, site;
@@ -260,7 +262,7 @@ WireId Arch::getWireByName(IdString name) const
         }
     }
 
-    wire_by_name_cache[name] = ret;
+    wire_by_name_cache[name[0]] = ret;
 
     return ret;
 }
@@ -268,19 +270,19 @@ WireId Arch::getWireByName(IdString name) const
 IdString Arch::getWireType(WireId wire) const { return IdString(wireIntent(wire)); }
 std::vector<std::pair<IdString, std::string>> Arch::getWireAttrs(WireId wire) const
 {
-    return {{id("INTENT"), IdString(wireIntent(wire)).str(this)}};
+    return {{id_INTENT, IdString(wireIntent(wire)).str(this)}};
 }
 
 // -----------------------------------------------------------------------
 
-PipId Arch::getPipByName(IdString name) const
+PipId Arch::getPipByName(IdStringList name) const
 {
-    if (pip_by_name_cache.count(name))
-        return pip_by_name_cache.at(name);
+    if (pip_by_name_cache.count(name[0]))
+        return pip_by_name_cache.at(name[0]);
     PipId ret;
     setup_byname();
 
-    const std::string &s = name.str(this);
+    const std::string &s = name[0].str(this);
     if (s.substr(0, 8) == "SITEPIP/") {
         auto sp2 = split_identifier_name(s.substr(8));
         int tile, site;
@@ -314,24 +316,25 @@ PipId Arch::getPipByName(IdString name) const
         }
     }
 
-    pip_by_name_cache[name] = ret;
+    pip_by_name_cache[name[0]] = ret;
 
     return ret;
 }
 
-IdString Arch::getPipName(PipId pip) const
+IdStringList Arch::getPipName(PipId pip) const
 {
     NPNR_ASSERT(pip != PipId());
     if (locInfo(pip).pip_data[pip.index].site != -1 && locInfo(pip).pip_data[pip.index].flags == PIP_SITE_INTERNAL &&
         locInfo(pip).pip_data[pip.index].bel != -1) {
-        return id(std::string("SITEPIP/") +
-                  chip_info->tile_insts[pip.tile].site_insts[locInfo(pip).pip_data[pip.index].site].name.get() +
-                  std::string("/") + IdString(locInfo(pip).pip_data[pip.index].bel).str(this) + "/" +
-                  IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this));
+        return IdStringList(
+                {id(std::string("SITEPIP/") +
+                    chip_info->tile_insts[pip.tile].site_insts[locInfo(pip).pip_data[pip.index].site].name.get() +
+                    std::string("/") + IdString(locInfo(pip).pip_data[pip.index].bel).str(this) + "/" +
+                    IdString(locInfo(pip).wire_data[locInfo(pip).pip_data[pip.index].src_index].name).str(this))});
     } else {
-        return id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
-                  std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
-                  std::to_string(locInfo(pip).pip_data[pip.index].dst_index));
+        return IdStringList({id(std::string(chip_info->tile_insts[pip.tile].name.get()) + "/" +
+                                std::to_string(locInfo(pip).pip_data[pip.index].src_index) + "." +
+                                std::to_string(locInfo(pip).pip_data[pip.index].dst_index))});
     }
 }
 
@@ -399,7 +402,7 @@ void Arch::setup_pip_blacklist()
     }
 }
 
-IdString Arch::getPipType(PipId pip) const { return id("PIP"); }
+IdString Arch::getPipType(PipId pip) const { return id_PIP; }
 
 std::vector<std::pair<IdString, std::string>> Arch::getPipAttrs(PipId pip) const { return {}; }
 
@@ -442,12 +445,12 @@ std::vector<std::pair<IdString, std::string>> Arch::getBelAttrs(BelId bel) const
 
 // -----------------------------------------------------------------------
 
-delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
+delay_t Arch::estimateDelay(WireId src, WireId dst) const
 {
     if (src == dst)
         return 0;
     int src_x, src_y, dst_x, dst_y;
-    int src_intent = wireIntent(src), dst_intent = wireIntent(dst);
+    int src_intent = wireIntent(src); //, dst_intent = wireIntent(dst);
     // if (src_intent == ID_PSEUDO_GND || dst_intent == ID_PSEUDO_VCC)
     //    return 500;
     int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
@@ -476,12 +479,12 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     if (src.tile == -1) {
         if (src_intent == ID_PSEUDO_GND || src_intent == ID_PSEUDO_VCC) {
             if (gnd_glbl == IdString()) {
-                gnd_glbl = id("PSEUDO_GND_WIRE_GLBL");
-                gnd_row = id("PSEUDO_GND_WIRE_ROW");
-                vcc_glbl = id("PSEUDO_VCC_WIRE_GLBL");
-                vcc_row = id("PSEUDO_VCC_WIRE_ROW");
+                gnd_glbl = id_PSEUDO_GND_WIRE_GLBL;
+                gnd_row = id_PSEUDO_GND_WIRE_ROW;
+                vcc_glbl = id_PSEUDO_VCC_WIRE_GLBL;
+                vcc_row = id_PSEUDO_VCC_WIRE_ROW;
             }
-            if (debug)
+            if (getCtx()->debug)
                 log_info("%s %d %d\n", IdString(wireInfo(src).name).c_str(this), wireInfo(src).name, gnd_glbl.index);
             if (wireInfo(src).name == gnd_glbl.index || wireInfo(src).name == vcc_glbl.index)
                 return 15000;
@@ -525,7 +528,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
         src_x = src_tile % chip_info->width;
         src_y = src_tile / chip_info->width;
     }
-    if (debug)
+    if (getCtx()->debug)
         log_info("    src (%d, %d) dst (%d, %d)\n", src_x, src_y, dst_x, dst_y);
     /*
         delay_t base = 150 * std::min(std::abs(dst_x - src_x), 30) + 40 * std::max(std::abs(dst_x - src_x) - 30, 0)
@@ -556,7 +559,7 @@ delay_t Arch::estimateDelay(WireId src, WireId dst, bool debug) const
     return base;
 }
 
-ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
+BoundingBox Arch::getRouteBoundingBox(WireId src, WireId dst) const
 {
     int dst_tile = dst.tile == -1 ? chip_info->nodes[dst.index].tile_wires[0].tile : dst.tile;
     int src_tile = src.tile == -1 ? chip_info->nodes[src.index].tile_wires[0].tile : src.tile;
@@ -614,17 +617,16 @@ delay_t Arch::getWireRipupDelayPenalty(WireId wire) const
         return getRipupDelayPenalty();
 }
 
-delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
+delay_t Arch::predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdString dst_pin) const
 {
-    if (net_info->driver.cell == nullptr || net_info->driver.cell->bel == BelId() || sink.cell->bel == BelId())
+    if (src_bel == BelId() || dst_bel == BelId())
         return 0;
-    int src_x = net_info->driver.cell->bel.tile % chip_info->width,
-        src_y = net_info->driver.cell->bel.tile / chip_info->width;
+    int src_x = src_bel.tile % chip_info->width, src_y = src_bel.tile / chip_info->width;
 
-    int dst_x = sink.cell->bel.tile % chip_info->width, dst_y = sink.cell->bel.tile / chip_info->width;
+    int dst_x = dst_bel.tile % chip_info->width, dst_y = dst_bel.tile / chip_info->width;
 
-    if (net_info->driver.cell->bel.tile == sink.cell->bel.tile) {
-        Loc dl = getBelLocation(net_info->driver.cell->bel), sl = getBelLocation(sink.cell->bel);
+    if (src_bel.tile == dst_bel.tile) {
+        Loc dl = getBelLocation(src_bel), sl = getBelLocation(dst_bel);
         if ((dl.z >> 4) == (sl.z >> 4))
             return 0;
         else if ((dl.z & 0xF) == BEL_FF2)
@@ -647,13 +649,13 @@ bool Arch::getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay
 
 bool Arch::place()
 {
-    std::string placer = str_or_default(settings, id("placer"), defaultPlacer);
+    std::string placer = str_or_default(settings, id_placer, defaultPlacer);
 
     if (placer == "heap") {
         PlacerHeapCfg cfg(getCtx());
         cfg.criticalityExponent = 7;
-        cfg.ioBufTypes.insert(id("IOB_IBUFCTRL"));
-        cfg.ioBufTypes.insert(id("IOB_OUTBUF"));
+        cfg.ioBufTypes.insert(id_IOB_IBUFCTRL);
+        cfg.ioBufTypes.insert(id_IOB_OUTBUF);
         cfg.ioBufTypes.insert(id_PSEUDO_GND);
         cfg.ioBufTypes.insert(id_PSEUDO_VCC);
         cfg.alpha = 0.08;
@@ -663,7 +665,7 @@ bool Arch::place()
         cfg.hpwl_scale_y = 2;
         cfg.spread_scale_x = 2;
         cfg.spread_scale_y = 1;
-        cfg.netShareWeight = 0.2;
+        cfg.netShareWeight = 0;
         cfg.solverTolerance = 0.6e-6;
         cfg.cellGroups.emplace_back();
         cfg.cellGroups.back().insert(id_SLICE_LUTX);
@@ -678,7 +680,7 @@ bool Arch::place()
         log_error("US+ architecture does not support placer '%s'\n", placer.c_str());
     }
     fixupPlacement();
-    getCtx()->attrs[getCtx()->id("step")] = std::string("place");
+    getCtx()->attrs[id_step] = std::string("place");
     archInfoToAttributes();
     return true;
 }
@@ -693,7 +695,7 @@ void Arch::routeVcc()
     WireId wire0 = getCtx()->getNetinfoSourceWire(vcc);
     Loc drvloc = getBelLocation(vcc->driver.cell->bel);
     BelId bel = vcc->driver.cell->bel;
-    log_info("%d %d %d %d\n", vcc->driver.cell->bel.tile, drvloc.x, drvloc.y, (getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC));
+    log_info("%d %d %d %d\n", vcc->driver.cell->bel.tile, drvloc.x, drvloc.y, (getBelType(bel).in(id_PSEUDO_GND, id_PSEUDO_VCC)));
     log_info("%s\n", nameOfWire(wire0));
     for (auto pip1 : getPipsDownhill(wire0)) {
         WireId wire1 = getPipDstWire(pip1);
@@ -705,9 +707,9 @@ void Arch::routeVcc()
 #endif
     for (auto &usr : vcc->users) {
         std::queue<WireId> visit;
-        std::unordered_map<WireId, PipId> backtrace;
+        dict<WireId, PipId> backtrace;
         WireId dest = WireId();
-        WireId sink = getCtx()->getNetinfoSinkWire(vcc, usr);
+        WireId sink = getCtx()->getNetinfoSinkWire(vcc, usr, 0);
         if (sink == WireId())
             log_error("Pin '%s' of bel '%s' has no associated wire\n", usr.port.c_str(this), nameOfBel(usr.cell->bel));
         visit.push(sink);
@@ -744,23 +746,23 @@ void Arch::routeClock()
 {
     log_info("Routing global clocks...\n");
     // Special pass for faster routing of global clock psuedo-net
-    for (auto net : sorted(nets)) {
-        NetInfo *clk_net = net.second;
+    for (auto &net : nets) {
+        NetInfo *clk_net = net.second.get();
         if (clk_net->driver.cell == nullptr)
             continue;
 
         // check if we have a global clock net, skip otherwise
         bool is_global = false;
-        if ((clk_net->driver.cell->type == id_BUFGCTRL || clk_net->driver.cell->type == id_BUFCE_BUFG_PS ||
-             clk_net->driver.cell->type == id_BUFCE_BUFCE || clk_net->driver.cell->type == id_BUFGCE_DIV_BUFGCE_DIV) &&
-            clk_net->driver.port == id("O"))
+        if ((clk_net->driver.cell->type.in(id_BUFGCTRL, id_BUFCE_BUFG_PS, id_BUFCE_BUFCE, id_BUFGCE_DIV_BUFGCE_DIV)) &&
+            clk_net->driver.port == id_O)
             is_global = true;
-        else if (clk_net->driver.cell->type == id("PLLE2_ADV_PLLE2_ADV") && clk_net->users.size() == 1 &&
-                 (clk_net->users.front().cell->type == id_BUFGCTRL || clk_net->users.front().cell->type == id_BUFCE_BUFCE ||
-                  clk_net->users.front().cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
+        else if (clk_net->driver.cell->type == id_PLLE2_ADV_PLLE2_ADV && clk_net->users.entries() == 1 &&
+                 ((*clk_net->users.begin()).cell->type == id_BUFGCTRL ||
+                  (*clk_net->users.begin()).cell->type == id_BUFCE_BUFCE ||
+                  (*clk_net->users.begin()).cell->type == id_BUFGCE_DIV_BUFGCE_DIV))
             is_global = true;
-        else if (clk_net->users.size() == 1 && clk_net->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
-                 clk_net->users.front().port == id("CLKIN1"))
+        else if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id_PLLE2_ADV_PLLE2_ADV &&
+                 (*clk_net->users.begin()).port == id_CLKIN1)
             is_global = true;
         if (!is_global)
             continue;
@@ -770,15 +772,16 @@ void Arch::routeClock()
 
         for (auto &usr : clk_net->users) {
             std::queue<WireId> visit;
-            std::unordered_map<WireId, PipId> backtrace;
+            dict<WireId, PipId> backtrace;
             WireId dest = WireId();
 
-            auto sink_wire = getCtx()->getNetinfoSinkWire(clk_net, usr);
+            auto sink_wire = getCtx()->getNetinfoSinkWire(clk_net, usr, 0);
             if (getCtx()->debug) {
                 auto sink_wire_name = "(uninitialized)";
                 if (sink_wire != WireId())
                     sink_wire_name = nameOfWire(sink_wire);
-                log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this), sink_wire_name);
+                log_info("        routing arc to %s.%s (wire %s):\n", usr.cell->name.c_str(this), usr.port.c_str(this),
+                         sink_wire_name);
             }
 
             visit.push(sink_wire);
@@ -811,8 +814,8 @@ void Arch::routeClock()
             }
             if (dest == WireId()) {
                 log_info("            failed to find a route using dedicated resources.\n");
-                if (clk_net->users.size() == 1 && clk_net->users.front().cell->type == id("PLLE2_ADV_PLLE2_ADV") &&
-                    clk_net->users.front().port == id("CLKIN1")) {
+                if (clk_net->users.entries() == 1 && (*clk_net->users.begin()).cell->type == id_PLLE2_ADV_PLLE2_ADV &&
+                    (*clk_net->users.begin()).port == id_CLKIN1) {
                     // Due to some missing pips, currently special case more lenient solution
                     std::queue<WireId> empty;
                     std::swap(visit, empty);
@@ -854,12 +857,12 @@ void Arch::routeClock()
         }
     }
 #if 0
-    for (auto net : sorted(nets)) {
-        NetInfo *ni = net.second;
+    for (auto& net : nets) {
+        NetInfo *ni = net.second.get();
         for (auto &usr : ni->users) {
-            if (usr.cell->type != id_BUFGCTRL || usr.port != id("I0"))
+            if (usr.cell->type != id_BUFGCTRL || usr.port != id_I0)
                 continue;
-            WireId dst = getCtx()->getNetinfoSinkWire(ni, usr);
+            WireId dst = getCtx()->getNetinfoSinkWire(ni, usr, 0);
             std::queue<WireId> visit;
             visit.push(dst);
             int i = 0;
@@ -893,17 +896,17 @@ void Arch::findSourceSinkLocations()
 {
     // Use a backwards BFS to find the real location of sinks, on a best-effort basis
 #if 1
-    for (auto net : sorted(nets)) {
-        NetInfo *ni = net.second;
+    for (auto &net : nets) {
+        NetInfo *ni = net.second.get();
         for (auto &usr : ni->users) {
             BelId bel = usr.cell->bel;
             if (bel == BelId() || isLogicTile(bel) || (xc7 && isBRAMTile(bel)))
                 continue; // don't need to do this for logic bels, which are always next to their INT
-            WireId sink = getCtx()->getNetinfoSinkWire(ni, usr);
+            WireId sink = getCtx()->getNetinfoSinkWire(ni, usr, 0);
             if (sink == WireId() || sink_locs.count(sink))
                 continue;
             std::queue<WireId> visit;
-            std::unordered_map<WireId, WireId> backtrace;
+            dict<WireId, WireId> backtrace;
             int iter = 0;
             // as this is a best-effort optimisation to slightly improve routing,
             // don't spend too long with a nice low iteration limit
@@ -953,7 +956,7 @@ void Arch::findSourceSinkLocations()
             if (source == WireId() || source_locs.count(source))
                 continue;
             std::queue<WireId> visit;
-            std::unordered_map<WireId, WireId> backtrace;
+            dict<WireId, WireId> backtrace;
             int iter = 0;
             // as this is a best-effort optimisation to slightly improve routing,
             // don't spend too long with a nice low iteration limit
@@ -1000,7 +1003,7 @@ void Arch::findSourceSinkLocations()
 bool Arch::route()
 {
     assign_budget(getCtx(), true);
-    std::string router = str_or_default(settings, id("router"), defaultRouter);
+    std::string router = str_or_default(settings, id_router, defaultRouter);
     if (router != "router2")
         routeVcc();
     routeClock();
@@ -1021,7 +1024,7 @@ bool Arch::route()
         log_error("Xilinx architecture does not support router '%s'\n", router.c_str());
     }
     fixupRouting();
-    getCtx()->settings[getCtx()->id("route")] = 1;
+    getCtx()->settings[id_route] = 1;
     archInfoToAttributes();
     return result;
 }
@@ -1172,7 +1175,7 @@ DecalXY Arch::getGroupDecal(GroupId pip) const { return {}; };
 
 // -----------------------------------------------------------------------
 
-bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const
+bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayQuad &delay) const
 {
     int tt_id = -1, inst_id = -1;
     if (cell->bel != BelId()) {
@@ -1185,9 +1188,9 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
             int z = locInfo(cell->bel).bel_data[cell->bel.index].z;
             IdString tiletype = getBelTileType(cell->bel);
             bool is_lut5 = (z & 0xF) == BEL_5LUT;
-            bool is_slicem = (tiletype == id_CLBLM_L || tiletype == ID_CLBLM_R) && (z < 64);
-            IdString variant = is_slicem ? (is_lut5 ? id("LUT_OR_MEM5LRAM") : id("LUT_OR_MEM6LRAM"))
-                                         : (is_lut5 ? id("LUT5") : id("LUT6"));
+            bool is_slicem = (tiletype.in(id_CLBLM_L, id_CLBLM_R)) && (z < 64);
+            IdString variant =
+                    is_slicem ? (is_lut5 ? id_LUT_OR_MEM5LRAM : id_LUT_OR_MEM6LRAM) : (is_lut5 ? id_LUT5 : id_LUT6);
 
             if (fromPort == id_CLK)
                 return false;
@@ -1195,28 +1198,26 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
                                           (is_lut5 && toPort == id_O6) ? id_O5 : toPort, delay);
         }
 
-        if (fromPort == id_A1 || fromPort == id_A2 || fromPort == id_A3 || fromPort == id_A4 || fromPort == id_A5 ||
-            fromPort == id_A6) {
-            if (toPort == id_O5 || toPort == id_O6) {
-                delay.delay = 200; // FIXME
+        if (fromPort.in(id_A1, id_A2, id_A3, id_A4, id_A5, id_A6)) {
+            if (toPort.in(id_O5, id_O6)) {
+                delay = DelayQuad(200); // FIXME
                 return true;
             }
         }
     } else if (cell->type == id_CARRY4) {
         if (xc7 && inst_id != -1) {
-            return xc7_cell_timing_lookup(tt_id, inst_id, id("CARRY4"), fromPort, toPort, delay);
+            return xc7_cell_timing_lookup(tt_id, inst_id, id_CARRY4, fromPort, toPort, delay);
         }
-    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id("SELMUX2_1")) {
+    } else if (cell->type.in(id_F7MUX, id_F8MUX, id_F9MUX, id_SELMUX2_1)) {
         if (xc7 && inst_id != -1) {
             return xc7_cell_timing_lookup(tt_id, inst_id, cell->type, fromPort, toPort, delay);
         }
-        delay.delay = 100;
+        delay = DelayQuad(100);
         return true;
     } else if (cell->type == id_BUFGCTRL) {
-        if (fromPort == id("I0") || fromPort == id("I1"))
-            if (toPort == id("O")) {
-                delay.delay = 200; // FIXME
+        if (fromPort.in(id_I0, id_I1))
+            if (toPort == id_O) {
+                delay = DelayQuad(200); // FIXME
                 return true;
             }
     }
@@ -1226,11 +1227,11 @@ bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort
 TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, int &clockInfoCount) const
 {
     if (cell->type == id_SLICE_LUTX) {
-        if (get_net_or_empty(cell, id_O5) == nullptr && get_net_or_empty(cell, id_O6) == nullptr)
+        if (cell->getPort(id_O5) == nullptr && cell->getPort(id_O6) == nullptr)
             return TMG_IGNORE;
-        if (port == id_A1 || port == id_A2 || port == id_A3 || port == id_A4 || port == id_A5 || port == id_A6)
+        if (port.in(id_A1, id_A2, id_A3, id_A4, id_A5, id_A6))
             return TMG_COMB_INPUT;
-        else if (port == id_O5 || port == id_O6)
+        else if (port.in(id_O5, id_O6))
             return TMG_COMB_OUTPUT;
     } else if (cell->type == id_CARRY4 && cell->bel != BelId()) {
         return cell->ports.at(port).type == PORT_OUT ? TMG_COMB_OUTPUT : TMG_COMB_INPUT;
@@ -1244,22 +1245,21 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
             clockInfoCount = 1;
             return TMG_REGISTER_INPUT;
         }
-    } else if (cell->type == id_F7MUX || cell->type == id_F8MUX || cell->type == id_F9MUX ||
-               cell->type == id("SELMUX2_1")) {
+    } else if (cell->type.in(id_F7MUX, id_F8MUX, id_F9MUX, id_SELMUX2_1)) {
         if (port == id_OUT)
             return TMG_COMB_OUTPUT;
         else
             return TMG_COMB_INPUT;
     } else if (cell->type == id_IOB_IBUFCTRL) {
-        if (port == id("O"))
+        if (port == id_O)
             return TMG_STARTPOINT;
     } else if (cell->type == id_IOB_OUTBUF) {
-        if (port == id("I"))
+        if (port == id_I)
             return TMG_ENDPOINT;
     } else if (cell->type == id_BUFGCTRL) {
-        if (port == id("I0") || port == id("I1"))
+        if (port.in(id_I0, id_I1))
             return TMG_COMB_INPUT;
-        if (port == id("O"))
+        if (port == id_O)
             return TMG_COMB_OUTPUT;
     }
     return TMG_IGNORE;
@@ -1268,9 +1268,9 @@ TimingPortClass Arch::getPortTimingClass(const CellInfo *cell, IdString port, in
 TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port, int index) const
 {
     TimingClockingInfo info;
-    info.setup = getDelayFromNS(0.1);
-    info.hold = getDelayFromNS(0.1);
-    info.clockToQ = getDelayFromNS(0.1);
+    info.setup = DelayPair(getDelayFromNS(0.1));
+    info.hold = DelayPair(getDelayFromNS(0.1));
+    info.clockToQ = DelayQuad(getDelayFromNS(0.1));
     info.clock_port = xc7 ? id_CK : id_CLK;
     info.edge = RISING_EDGE;
     return info;
@@ -1335,7 +1335,7 @@ boost::optional<const Tres &> db_binary_search(const Tres *list, int count, Tget
 } // namespace
 
 bool Arch::xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdString from_port, IdString to_port,
-                                  DelayInfo &delay) const
+                                  DelayQuad &delay) const
 {
     if (tt_id == -1 || inst_id == -1)
         return false;
@@ -1353,21 +1353,13 @@ bool Arch::xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdSt
             std::make_pair(to_port.index, from_port.index));
     if (!found_delay)
         return false;
-    delay.delay = found_delay->max_delay;
+    delay = DelayQuad(found_delay->max_delay);
     return true;
 }
 
-#ifdef WITH_HEAP
 const std::string Arch::defaultPlacer = "heap";
-#else
-const std::string Arch::defaultPlacer = "sa";
-#endif
 
-const std::vector<std::string> Arch::availablePlacers = {"sa",
-#ifdef WITH_HEAP
-                                                         "heap"
-#endif
-};
+const std::vector<std::string> Arch::availablePlacers = {"sa", "heap" };
 
 const std::string Arch::defaultRouter = "router2";
 const std::vector<std::string> Arch::availableRouters = {"router1", "router2"};

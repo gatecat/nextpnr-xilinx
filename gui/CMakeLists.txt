@@ -34,9 +34,15 @@ add_library(gui_${family} STATIC ${GUI_SOURCE_FILES} ${PYTHON_CONSOLE_SRC} ${GUI
 include(${family}/family.cmake)
 
 target_include_directories(gui_${family} PRIVATE ../${family} ${family} ../3rdparty/QtPropertyBrowser/src ../3rdparty/imgui ../3rdparty/qtimgui/)
+target_include_directories(gui_${family} PRIVATE ${CMAKE_BINARY_DIR}/generated)
 if (BUILD_PYTHON)
   target_include_directories(gui_${family} PRIVATE ../3rdparty/python-console ../3rdparty/python-console/modified)
 endif()
 
 target_compile_definitions(gui_${family} PRIVATE NEXTPNR_NAMESPACE=nextpnr_${family} ARCH_${ufamily} ARCHNAME=${family} QT_NO_KEYWORDS)
+
 target_link_libraries(gui_${family} Qt5::Widgets)
+
+foreach(lib_dep ${EXTRA_LIB_DEPS})
+    target_link_libraries(gui_${family} ${lib_dep})
+endforeach()

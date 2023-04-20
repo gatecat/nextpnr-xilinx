@@ -1,17 +1,68 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.13)
 project(nextpnr CXX C)
 
-option(BUILD_GUI "Build GUI" ON)
+include(CheckCXXCompilerFlag)
+
+# Allow family.cmake add additional dependencies to gui_${family}.
+cmake_policy(SET CMP0079 NEW)
+
+# Enable IPO support.
+cmake_policy(SET CMP0069 NEW)
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported)
+
+option(BUILD_GUI "Build GUI" OFF)
 option(BUILD_PYTHON "Build Python Integration" ON)
 option(BUILD_TESTS "Build tests" OFF)
-option(BUILD_HEAP "Build HeAP analytic placer" ON)
-option(USE_OPENMP "Use OpenMP to accelerate analytic placer" ON)
+option(USE_OPENMP "Use OpenMP to accelerate analytic placer" OFF)
 option(COVERAGE "Add code coverage info" OFF)
 option(STATIC_BUILD "Create static build" OFF)
 option(EXTERNAL_CHIPDB "Create build with pre-built chipdb binaries" OFF)
-option(SERIALIZE_CHIPDB "Never build chipdb in parallel to reduce peak memory use" ON)
+option(WERROR "pass -Werror to compiler (used for CI)" OFF)
+option(PROFILER "Link against libprofiler" OFF)
+option(USE_IPO "Compile nextpnr with IPO" ON)
+
+if (USE_IPO)
+    if (ipo_supported)
+        message(STATUS "Building with IPO")
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(STATUS "IPO is not supported with this compiler")
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
+    endif()
+else()
+    message(STATUS "Building without IPO")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
+endif()
+
+if(WIN32 OR EXTERNAL_CHIPDB)
+    set(BBASM_MODE "binary")
+else()
+    set(BBASM_MODE "string")
+endif()
 
 set(Boost_NO_BOOST_CMAKE ON)
+
+find_package(Threads)
+if (Threads_FOUND)
+    find_package(TBB QUIET)
+    if (TBB_FOUND)
+        add_definitions(-DNEXTPNR_USE_TBB)
+    endif()
+else()
+    add_definitions(-DNPNR_DISABLE_THREADS)
+endif()
+
+if(WASI)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lwasi-emulated-mman")
+    add_definitions(
+        -DBOOST_EXCEPTION_DISABLE
+        -DBOOST_NO_EXCEPTIONS
+    )
+    if (NOT Threads_FOUND)
+        add_definitions(-DBOOST_NO_CXX11_HDR_MUTEX)
+    endif()
+endif()
 
 set(link_param "")
 if (STATIC_BUILD)
@@ -21,9 +72,6 @@ if (STATIC_BUILD)
         if (MSVC)
             set(CMAKE_CXX_FLAGS_RELEASE "/MT")
             set(CMAKE_CXX_FLAGS_DEBUG "/MTd")
-            if (BUILD_PYTHON)
-                add_definitions(-DBOOST_PYTHON_STATIC_LIB)
-            endif()
         endif()
     else()
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
@@ -46,23 +94,31 @@ endif()
 set(PROGRAM_PREFIX "" CACHE STRING "Name prefix for executables")
 
 # List of families to build
-set(FAMILIES generic ice40 ecp5 xilinx)
+set(FAMILIES generic ice40 ecp5 nexus gowin fpga_interchange machxo2 mistral xilinx)
+set(STABLE_FAMILIES generic ice40 ecp5)
+set(EXPERIMENTAL_FAMILIES nexus gowin fpga_interchange machxo2 mistral xilinx)
 
-set(ARCH "xilinx" CACHE STRING "Architecture family for nextpnr build")
+set(ARCH "" CACHE STRING "Architecture family for nextpnr build")
 set_property(CACHE ARCH PROPERTY STRINGS ${FAMILIES})
 
 if (NOT ARCH)
     message(STATUS "Architecture needs to be set, set desired one with -DARCH=xxx")
     message(STATUS "Supported architectures are :")
     message(STATUS "  all")
+    message(STATUS "  all+alpha")
     foreach(item ${FAMILIES})
         message(STATUS "  ${item}")
     endforeach()
     message(FATAL_ERROR "Architecture setting is mandatory")
 endif ()
 
+if (ARCH STREQUAL "all+alpha")
+    SET(ARCH ${STABLE_FAMILIES} ${EXPERIMENTAL_FAMILIES})
+endif()
+
+
 if (ARCH STREQUAL "all")
-    SET(ARCH ${FAMILIES})
+    SET(ARCH ${STABLE_FAMILIES})
 endif()
 
 foreach(item ${ARCH})
@@ -71,20 +127,30 @@ foreach(item ${ARCH})
     endif()
 endforeach()
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 if (MSVC)
     set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /D_DEBUG /W4 /wd4100 /wd4244 /wd4125 /wd4800 /wd4456 /wd4458 /wd4305 /wd4459 /wd4121 /wd4996")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W4 /wd4100 /wd4244 /wd4125 /wd4800 /wd4456 /wd4458 /wd4305 /wd4459 /wd4121 /wd4996 /wd4127")
 else()
-    set(CMAKE_CXX_FLAGS_DEBUG "-Wall -fPIC -ggdb -pipe")
+    # N.B. the -Wno-array-bounds is to work around a false positive in GCC 9
+    set(WARN_FLAGS "-Wall -Wextra")
+    foreach(TRY_WARN_FLAG no-unused-parameter no-missing-field-initializers no-array-bounds no-format-truncation)
+        check_cxx_compiler_flag("-W${TRY_WARN_FLAG}" HAS_W${TRY_WARN_FLAG})
+        if (HAS_W${TRY_WARN_FLAG})
+            set(WARN_FLAGS "${WARN_FLAGS} -W${TRY_WARN_FLAG}")
+        endif()
+    endforeach()
+    if (WERROR)
+        set(WARN_FLAGS "${WARN_FLAGS} -Werror")
+    endif()
+    set(CMAKE_CXX_FLAGS_DEBUG "${WARN_FLAGS} -fPIC -ggdb -pipe")
     if (USE_OPENMP)
-        set(CMAKE_CXX_FLAGS_RELEASE "-Wall -fPIC -O3 -g -pipe -fopenmp")
+        set(CMAKE_CXX_FLAGS_RELEASE "${WARN_FLAGS} -fPIC -O3 -g -pipe -fopenmp")
     else()
-        set(CMAKE_CXX_FLAGS_RELEASE "-Wall -fPIC -O3 -g -pipe")
+        set(CMAKE_CXX_FLAGS_RELEASE "${WARN_FLAGS} -fPIC -O3 -g -pipe")
     endif()
 endif()
-set(CMAKE_DEFIN)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/3rdparty/sanitizers-cmake/cmake;." ${CMAKE_MODULE_PATH})
 
@@ -99,7 +165,10 @@ endif()
 find_package(Sanitizers)
 
 # List of Boost libraries to include
-set(boost_libs filesystem thread program_options iostreams system)
+set(boost_libs filesystem program_options iostreams system)
+if (Threads_FOUND)
+    list(APPEND boost_libs thread)
+endif()
 
 if (BUILD_GUI AND NOT BUILD_PYTHON)
     message(FATAL_ERROR "GUI requires Python to build")
@@ -112,6 +181,7 @@ endif()
 
 find_package(Python3 3.5 REQUIRED COMPONENTS Interpreter)
 if (BUILD_PYTHON)
+    # TODO: sensible minimum Python version
     find_package(Python3 3.5 REQUIRED COMPONENTS Development)
 else()
     add_definitions("-DNO_PYTHON")
@@ -152,77 +222,53 @@ configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/common/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/version.h
 )
 
-if (BUILD_PYTHON)
-    # Find Boost::Python of a suitable version in a cross-platform way
-    # Some distributions (Arch) call it libboost_python3, others such as Ubuntu
-    # call it libboost_python35. In the latter case we must consider all minor versions
-    # Original source: https://github.com/BVLC/caffe/blob/master/cmake/Dependencies.cmake#L148
-    set(version ${Python3_VERSION})
-
-    STRING(REGEX REPLACE "[^0-9]" "" boost_py_version "${version}")
-    find_package(Boost QUIET COMPONENTS "python-py${boost_py_version}" ${boost_libs})
-    set(Boost_PYTHON_FOUND ${Boost_PYTHON-PY${boost_py_version}_FOUND})
-
-    while (NOT "${version}" STREQUAL "" AND NOT Boost_PYTHON_FOUND)
-        STRING(REGEX REPLACE "([0-9.]+).[0-9]+" "\\1" version "${version}")
-
-        STRING(REGEX REPLACE "[^0-9]" "" boost_py_version "${version}")
-        find_package(Boost QUIET COMPONENTS "python-py${boost_py_version}" ${boost_libs})
-        set(Boost_PYTHON_FOUND ${Boost_PYTHON-PY${boost_py_version}_FOUND})
-
-        STRING(REGEX MATCHALL "([0-9.]+).[0-9]+" has_more_version "${version}")
-        if ("${has_more_version}" STREQUAL "")
-            break()
-        endif ()
-    endwhile ()
-
-    if (NOT Boost_PYTHON_FOUND)
-        foreach (PyVer 3 36 37 38 39 310)
-            find_package(Boost QUIET COMPONENTS python${PyVer} ${boost_libs})
-            if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
-                set(Boost_PYTHON_FOUND TRUE)
-                break()
-            endif ()
-        endforeach ()
-    endif ()
-
-    if (NOT Boost_PYTHON_FOUND)
-        STRING(REGEX REPLACE "([0-9]+\\.[0-9]+).*" "\\1" gentoo_version "${PYTHONLIBS_VERSION_STRING}")
-        find_package(Boost QUIET COMPONENTS python-${gentoo_version} ${boost_libs})
-        if ("${Boost_LIBRARIES}" MATCHES ".*(python|PYTHON).*" )
-            set(Boost_PYTHON_FOUND TRUE)
-        endif ()
-    endif ()
-
-    if (NOT Boost_PYTHON_FOUND )
-        message( FATAL_ERROR "No version of Boost::Python 3.x could be found.")
-    endif ()
+if (NOT DEFINED PYBIND11_INCLUDE_DIR)
+    # Use bundled pybind11
+    set(PYBIND11_INCLUDE_DIR "3rdparty/pybind11/include")
 endif()
 
-include_directories(common/ json/ frontend/ 3rdparty/json11/ ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
+include_directories(common/kernel/ common/place/ common/route/ json/ frontend/ 3rdparty/json11/ ${PYBIND11_INCLUDE_DIR} ${Boost_INCLUDE_DIRS} ${Python3_INCLUDE_DIRS})
 
-if(BUILD_HEAP)
-    find_package (Eigen3 REQUIRED NO_MODULE)
-    include_directories(${EIGEN3_INCLUDE_DIRS})
-    add_definitions(${EIGEN3_DEFINITIONS})
-    add_definitions(-DWITH_HEAP)
-endif()
+find_package (Eigen3 REQUIRED NO_MODULE)
+link_libraries(Eigen3::Eigen)
 
-aux_source_directory(common/ COMMON_SRC_FILES)
+aux_source_directory(common/kernel/ KERNEL_SRC_FILES)
+aux_source_directory(common/place/ PLACE_SRC_FILES)
+aux_source_directory(common/route/ ROUTE_SRC_FILES)
+
 aux_source_directory(json/ JSON_PARSER_FILES)
 aux_source_directory(3rdparty/json11 EXT_JSON11_FILES)
 aux_source_directory(frontend/ FRONTEND_FILES)
 
-set(COMMON_FILES ${COMMON_SRC_FILES} ${EXT_JSON11_FILES} ${JSON_PARSER_FILES} ${FRONTEND_FILES})
+set(COMMON_FILES ${KERNEL_SRC_FILES} ${PLACE_SRC_FILES} ${ROUTE_SRC_FILES} ${EXT_JSON11_FILES} ${JSON_PARSER_FILES} ${FRONTEND_FILES})
 if( NOT CMAKE_BUILD_TYPE )
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-if(MINGW)
-    add_definitions("-Wa,-mbig-obj")
-endif(MINGW)
+if(CMAKE_CROSSCOMPILING)
+    set(BBA_IMPORT "IMPORTFILE-NOTFOUND" CACHE FILEPATH
+        "Path to the `bba-export.cmake` export file from a native build")
+    include(${BBA_IMPORT})
+else()
+    add_subdirectory(bba)
+endif()
 
-include(bba/bba.cmake)
+include(TestBigEndian)
+test_big_endian(IS_BIG_ENDIAN)
+if(IS_BIG_ENDIAN)
+    set(BBASM_ENDIAN_FLAG "--be")
+else()
+    set(BBASM_ENDIAN_FLAG "--le")
+endif()
+
+set(EXTRA_LIB_DEPS)
+
+if(PROFILER)
+    list(APPEND EXTRA_LIB_DEPS profiler)
+endif()
+if(TBB_FOUND)
+    list(APPEND EXTRA_LIB_DEPS TBB::tbb)
+endif()
 
 foreach (family ${ARCH})
     message(STATUS "Configuring architecture: ${family}")
@@ -299,7 +345,7 @@ foreach (family ${ARCH})
             if (STATIC_BUILD)
                 target_link_libraries(${target} LINK_PUBLIC ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} ${ZLIB_LIBRARIES} ${EXPAT_LIBRARIES})
                 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-                elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows" AND MSVC)
+                elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
                 else()
                     target_link_libraries(${target} LINK_PUBLIC -lutil)
                 endif()
@@ -309,10 +355,13 @@ foreach (family ${ARCH})
 endforeach (family)
 
 file(GLOB_RECURSE CLANGFORMAT_FILES *.cc *.h)
-string(REGEX REPLACE "[^;]*/ice40/chipdbs/chipdb-[^;]*.cc" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
-string(REGEX REPLACE "[^;]*/ecp5/chipdbs/chipdb-[^;]*.cc" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
+string(REGEX REPLACE "[^;]*/ice40/chipdb/chipdb-[^;]*.cc" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
+string(REGEX REPLACE "[^;]*/ecp5/chipdb/chipdb-[^;]*.cc" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
+string(REGEX REPLACE "[^;]*nexus/chipdb/chipdb-[^;]*.cc" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
+string(REGEX REPLACE "[^;]*/machxo2/chipdb/chipdb-[^;]*.cc" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
 string(REGEX REPLACE "[^;]*/3rdparty[^;]*" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
 string(REGEX REPLACE "[^;]*/generated[^;]*" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
+string(REGEX REPLACE "[^;]*/libmistral/[^;]*" "" CLANGFORMAT_FILES "${CLANGFORMAT_FILES}")
 
 add_custom_target(
     clangformat

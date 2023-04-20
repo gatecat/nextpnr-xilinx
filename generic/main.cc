@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -32,7 +32,7 @@ class GenericCommandHandler : public CommandHandler
   public:
     GenericCommandHandler(int argc, char **argv);
     virtual ~GenericCommandHandler(){};
-    std::unique_ptr<Context> createContext(std::unordered_map<std::string, Property> &values) override;
+    std::unique_ptr<Context> createContext(dict<std::string, Property> &values) override;
     void setupArchContext(Context *ctx) override{};
     void customBitstream(Context *ctx) override;
 
@@ -44,25 +44,56 @@ GenericCommandHandler::GenericCommandHandler(int argc, char **argv) : CommandHan
 
 po::options_description GenericCommandHandler::getArchOptions()
 {
+    std::string all_uarches = ViaductArch::list();
+    std::string uarch_help = stringf("viaduct micro-arch to use (available: %s)", all_uarches.c_str());
     po::options_description specific("Architecture specific options");
-    specific.add_options()("generic", "set device type to generic");
+    specific.add_options()("uarch", po::value<std::string>(), uarch_help.c_str());
     specific.add_options()("no-iobs", "disable automatic IO buffer insertion");
+    specific.add_options()("vopt,o", po::value<std::vector<std::string>>(), "options to pass to the viaduct uarch");
+
     return specific;
 }
 
 void GenericCommandHandler::customBitstream(Context *ctx) {}
 
-std::unique_ptr<Context> GenericCommandHandler::createContext(std::unordered_map<std::string, Property> &values)
+std::unique_ptr<Context> GenericCommandHandler::createContext(dict<std::string, Property> &values)
 {
     ArchArgs chipArgs;
     if (values.find("arch.name") != values.end()) {
         std::string arch_name = values["arch.name"].as_string();
         if (arch_name != "generic")
-            log_error("Unsuported architecture '%s'.\n", arch_name.c_str());
+            log_error("Unsupported architecture '%s'.\n", arch_name.c_str());
     }
     auto ctx = std::unique_ptr<Context>(new Context(chipArgs));
     if (vm.count("no-iobs"))
         ctx->settings[ctx->id("disable_iobs")] = Property::State::S1;
+    if (vm.count("uarch")) {
+        std::string uarch_name = vm["uarch"].as<std::string>();
+        dict<std::string, std::string> args; // TODO
+        if (vm.count("vopt")) {
+            std::vector<std::string> options = vm["vopt"].as<std::vector<std::string>>();
+            for (const auto &opt : options) {
+                size_t epos = opt.find('=');
+                if (epos == std::string::npos)
+                    args[opt] = "";
+                else
+                    args[opt.substr(0, epos)] = opt.substr(epos + 1);
+            }
+        }
+        auto uarch = ViaductArch::create(uarch_name, args);
+        if (!uarch) {
+            std::string all_uarches = ViaductArch::list();
+            log_error("Unknown viaduct uarch '%s'; available options: '%s'\n", uarch_name.c_str(), all_uarches.c_str());
+        }
+        ctx->uarch = std::move(uarch);
+        if (vm.count("gui"))
+            ctx->uarch->with_gui = true;
+        ctx->uarch->init(ctx.get());
+    } else if (vm.count("vopt")) {
+        log_error("Viaduct options passed in non-viaduct mode!\n");
+    } else if (vm.count("gui")) {
+        log_error("nextpnr-generic GUI only supported in viaduct mode!\n");
+    }
     return ctx;
 }
 

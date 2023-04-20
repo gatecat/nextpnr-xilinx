@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -34,7 +34,7 @@ class ECP5CommandHandler : public CommandHandler
   public:
     ECP5CommandHandler(int argc, char **argv);
     virtual ~ECP5CommandHandler(){};
-    std::unique_ptr<Context> createContext(std::unordered_map<std::string, Property> &values) override;
+    std::unique_ptr<Context> createContext(dict<std::string, Property> &values) override;
     void setupArchContext(Context *ctx) override{};
     void customAfterLoad(Context *ctx) override;
     void validate() override;
@@ -49,15 +49,26 @@ ECP5CommandHandler::ECP5CommandHandler(int argc, char **argv) : CommandHandler(a
 po::options_description ECP5CommandHandler::getArchOptions()
 {
     po::options_description specific("Architecture specific options");
-    specific.add_options()("25k", "set device type to LFE5U-25F");
-    specific.add_options()("45k", "set device type to LFE5U-45F");
-    specific.add_options()("85k", "set device type to LFE5U-85F");
-    specific.add_options()("um-25k", "set device type to LFE5UM-25F");
-    specific.add_options()("um-45k", "set device type to LFE5UM-45F");
-    specific.add_options()("um-85k", "set device type to LFE5UM-85F");
-    specific.add_options()("um5g-25k", "set device type to LFE5UM5G-25F");
-    specific.add_options()("um5g-45k", "set device type to LFE5UM5G-45F");
-    specific.add_options()("um5g-85k", "set device type to LFE5UM5G-85F");
+    if (Arch::is_available(ArchArgs::LFE5U_12F))
+        specific.add_options()("12k", "set device type to LFE5U-12F");
+    if (Arch::is_available(ArchArgs::LFE5U_25F))
+        specific.add_options()("25k", "set device type to LFE5U-25F");
+    if (Arch::is_available(ArchArgs::LFE5U_45F))
+        specific.add_options()("45k", "set device type to LFE5U-45F");
+    if (Arch::is_available(ArchArgs::LFE5U_85F))
+        specific.add_options()("85k", "set device type to LFE5U-85F");
+    if (Arch::is_available(ArchArgs::LFE5UM_25F))
+        specific.add_options()("um-25k", "set device type to LFE5UM-25F");
+    if (Arch::is_available(ArchArgs::LFE5UM_45F))
+        specific.add_options()("um-45k", "set device type to LFE5UM-45F");
+    if (Arch::is_available(ArchArgs::LFE5UM_85F))
+        specific.add_options()("um-85k", "set device type to LFE5UM-85F");
+    if (Arch::is_available(ArchArgs::LFE5UM5G_25F))
+        specific.add_options()("um5g-25k", "set device type to LFE5UM5G-25F");
+    if (Arch::is_available(ArchArgs::LFE5UM5G_45F))
+        specific.add_options()("um5g-45k", "set device type to LFE5UM5G-45F");
+    if (Arch::is_available(ArchArgs::LFE5UM5G_85F))
+        specific.add_options()("um5g-85k", "set device type to LFE5UM5G-85F");
 
     specific.add_options()("package", po::value<std::string>(), "select device package (defaults to CABGA381)");
     specific.add_options()("speed", po::value<int>(), "select device speedgrade (6, 7 or 8)");
@@ -74,6 +85,7 @@ po::options_description ECP5CommandHandler::getArchOptions()
     specific.add_options()(
             "out-of-context",
             "disable IO buffer insertion and global promotion/routing, for building pre-routed blocks (experimental)");
+    specific.add_options()("disable-router-lutperm", "don't allow the router to permute LUT inputs");
 
     return specific;
 }
@@ -99,11 +111,10 @@ void ECP5CommandHandler::customBitstream(Context *ctx)
         log_error("bitstream generation is not available in out-of-context mode (use --write to create a post-PnR JSON "
                   "design)\n");
 
-    std::string textcfg;
-    if (vm.count("textcfg"))
-        textcfg = vm["textcfg"].as<std::string>();
-
-    write_bitstream(ctx, basecfg, textcfg);
+    if (vm.count("textcfg")) {
+        std::string textcfg = vm["textcfg"].as<std::string>();
+        write_bitstream(ctx, basecfg, textcfg);
+    }
 }
 
 static std::string speedString(ArchArgs::SpeedGrade speed)
@@ -121,11 +132,12 @@ static std::string speedString(ArchArgs::SpeedGrade speed)
     return "";
 }
 
-std::unique_ptr<Context> ECP5CommandHandler::createContext(std::unordered_map<std::string, Property> &values)
+std::unique_ptr<Context> ECP5CommandHandler::createContext(dict<std::string, Property> &values)
 {
     ArchArgs chipArgs;
     chipArgs.type = ArchArgs::NONE;
-
+    if (vm.count("12k"))
+        chipArgs.type = ArchArgs::LFE5U_12F;
     if (vm.count("25k"))
         chipArgs.type = ArchArgs::LFE5U_25F;
     if (vm.count("45k"))
@@ -172,13 +184,15 @@ std::unique_ptr<Context> ECP5CommandHandler::createContext(std::unordered_map<st
     if (values.find("arch.name") != values.end()) {
         std::string arch_name = values["arch.name"].as_string();
         if (arch_name != "ecp5")
-            log_error("Unsuported architecture '%s'.\n", arch_name.c_str());
+            log_error("Unsupported architecture '%s'.\n", arch_name.c_str());
     }
     if (values.find("arch.type") != values.end()) {
         std::string arch_type = values["arch.type"].as_string();
         if (chipArgs.type != ArchArgs::NONE)
-            log_error("Overriding architecture is unsuported.\n");
+            log_error("Overriding architecture is unsupported.\n");
 
+        if (arch_type == "lfe5u_12f")
+            chipArgs.type = ArchArgs::LFE5U_12F;
         if (arch_type == "lfe5u_25f")
             chipArgs.type = ArchArgs::LFE5U_25F;
         if (arch_type == "lfe5u_45f")
@@ -199,11 +213,11 @@ std::unique_ptr<Context> ECP5CommandHandler::createContext(std::unordered_map<st
             chipArgs.type = ArchArgs::LFE5UM5G_85F;
 
         if (chipArgs.type == ArchArgs::NONE)
-            log_error("Unsuported FPGA type '%s'.\n", arch_type.c_str());
+            log_error("Unsupported FPGA type '%s'.\n", arch_type.c_str());
     }
     if (values.find("arch.package") != values.end()) {
         if (vm.count("package"))
-            log_error("Overriding architecture is unsuported.\n");
+            log_error("Overriding architecture is unsupported.\n");
         chipArgs.package = values["arch.package"].as_string();
     }
     if (values.find("arch.speed") != values.end()) {
@@ -215,7 +229,7 @@ std::unique_ptr<Context> ECP5CommandHandler::createContext(std::unordered_map<st
         else if (arch_speed == "8")
             chipArgs.speed = ArchArgs::SPEED_8;
         else
-            log_error("Unsuported speed '%s'.\n", arch_speed.c_str());
+            log_error("Unsupported speed '%s'.\n", arch_speed.c_str());
     }
     if (chipArgs.type == ArchArgs::NONE)
         chipArgs.type = ArchArgs::LFE5U_45F;
@@ -241,6 +255,8 @@ std::unique_ptr<Context> ECP5CommandHandler::createContext(std::unordered_map<st
     ctx->settings[ctx->id("arch.speed")] = speedString(ctx->archArgs().speed);
     if (vm.count("out-of-context"))
         ctx->settings[ctx->id("arch.ooc")] = 1;
+    if (vm.count("disable-router-lutperm"))
+        ctx->settings[ctx->id("arch.disable_router_lutperm")] = 1;
     return ctx;
 }
 
@@ -252,15 +268,15 @@ void ECP5CommandHandler::customAfterLoad(Context *ctx)
             std::ifstream in(filename);
             if (!in)
                 log_error("failed to open LPF file '%s'\n", filename.c_str());
-            if (!ctx->applyLPF(filename, in))
+            if (!ctx->apply_lpf(filename, in))
                 log_error("failed to parse LPF file '%s'\n", filename.c_str());
         }
 
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
+        for (auto &cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
             if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_obuf") ||
                 ci->type == ctx->id("$nextpnr_iobuf")) {
-                if (!ci->attrs.count(ctx->id("LOC"))) {
+                if (!ci->attrs.count(id_LOC)) {
                     if (vm.count("lpf-allow-unconstrained"))
                         log_warning("IO '%s' is unconstrained in LPF and will be automatically placed\n",
                                     cell.first.c_str(ctx));

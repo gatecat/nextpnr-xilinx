@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -30,8 +30,6 @@ MainWindow::MainWindow(std::unique_ptr<Context> context, CommandHandler *handler
         : BaseMainWindow(std::move(context), handler, parent)
 {
     initMainResource();
-    QMessageBox::critical(0, "Error - FIXME", "No GUI support for nextpnr-generic");
-    std::exit(1);
 }
 
 MainWindow::~MainWindow() {}
@@ -44,6 +42,9 @@ void MainWindow::newContext(Context *ctx)
 
 void MainWindow::createMenu() {}
 
-void MainWindow::new_proj() {}
+void MainWindow::new_proj() {
+    QMessageBox::critical(0, "Error", "Creating a new project not supported in Viaduct mode, please re-start from command line.");
+    std::exit(1);   
+}
 
 NEXTPNR_NAMESPACE_END

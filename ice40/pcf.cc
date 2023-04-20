@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2018  David Shah <david@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2018  gatecat <gatecat@ds0.me>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -37,7 +37,7 @@ bool apply_pcf(Context *ctx, std::string filename, std::istream &in)
         int lineno = 0;
         while (std::getline(in, line)) {
             lineno++;
-            size_t cstart = line.find("#");
+            size_t cstart = line.find('#');
             if (cstart != std::string::npos)
                 line = line.substr(0, cstart);
             std::stringstream ss(line);
@@ -57,18 +57,18 @@ bool apply_pcf(Context *ctx, std::string filename, std::istream &in)
                     if (setting == "-pullup") {
                         const auto &value = words.at(++args_end);
                         if (value == "yes" || value == "1")
-                            extra_attrs.emplace_back(std::make_pair(ctx->id("PULLUP"), Property::State::S1));
+                            extra_attrs.emplace_back(std::make_pair(id_PULLUP, Property::State::S1));
                         else if (value == "no" || value == "0")
-                            extra_attrs.emplace_back(std::make_pair(ctx->id("PULLUP"), Property::State::S0));
+                            extra_attrs.emplace_back(std::make_pair(id_PULLUP, Property::State::S0));
                         else
                             log_error("Invalid value '%s' for -pullup (on line %d)\n", value.c_str(), lineno);
                     } else if (setting == "-pullup_resistor") {
                         const auto &value = words.at(++args_end);
-                        if (ctx->args.type != ArchArgs::UP5K)
-                            log_error("Pullup resistance can only be set on UP5K (on line %d)\n", lineno);
+                        if (ctx->args.type != ArchArgs::UP5K && ctx->args.type != ArchArgs::UP3K)
+                            log_error("Pullup resistance can only be set on UP5K/UP3K (on line %d)\n", lineno);
                         if (value != "3P3K" && value != "6P8K" && value != "10K" && value != "100K")
                             log_error("Invalid value '%s' for -pullup_resistor (on line %d)\n", value.c_str(), lineno);
-                        extra_attrs.emplace_back(std::make_pair(ctx->id("PULLUP_RESISTOR"), value));
+                        extra_attrs.emplace_back(std::make_pair(id_PULLUP_RESISTOR, value));
                     } else if (setting == "-nowarn") {
                         nowarn = true;
                     } else if (setting == "--warn-no-port") {
@@ -89,14 +89,14 @@ bool apply_pcf(Context *ctx, std::string filename, std::istream &in)
                     if (!nowarn)
                         log_warning("unmatched constraint '%s' (on line %d)\n", cell.c_str(), lineno);
                 } else {
-                    BelId pin_bel = ctx->getPackagePinBel(pin);
+                    BelId pin_bel = ctx->get_package_pin_bel(pin);
                     if (pin_bel == BelId())
                         log_error("package does not have a pin named '%s' (on line %d)\n", pin.c_str(), lineno);
-                    if (fnd_cell->second->attrs.count(ctx->id("BEL")))
+                    if (fnd_cell->second->attrs.count(id_BEL))
                         log_error("duplicate pin constraint on '%s' (on line %d)\n", cell.c_str(), lineno);
-                    fnd_cell->second->attrs[ctx->id("BEL")] = ctx->getBelName(pin_bel).str(ctx);
+                    fnd_cell->second->attrs[id_BEL] = ctx->getBelName(pin_bel).str(ctx);
                     log_info("constrained '%s' to bel '%s'\n", cell.c_str(),
-                             fnd_cell->second->attrs[ctx->id("BEL")].as_string().c_str());
+                             fnd_cell->second->attrs[id_BEL].as_string().c_str());
                     for (const auto &attr : extra_attrs)
                         fnd_cell->second->attrs[attr.first] = attr.second;
                 }
@@ -108,12 +108,12 @@ bool apply_pcf(Context *ctx, std::string filename, std::istream &in)
                 log_error("unsupported PCF command '%s' (on line %d)\n", cmd.c_str(), lineno);
             }
         }
-        for (auto cell : sorted(ctx->cells)) {
-            CellInfo *ci = cell.second;
+        for (auto &cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
             if (ci->type == ctx->id("$nextpnr_ibuf") || ci->type == ctx->id("$nextpnr_obuf") ||
                 ci->type == ctx->id("$nextpnr_iobuf")) {
-                if (!ci->attrs.count(ctx->id("BEL"))) {
-                    if (bool_or_default(ctx->settings, ctx->id("pcf_allow_unconstrained")))
+                if (!ci->attrs.count(id_BEL)) {
+                    if (bool_or_default(ctx->settings, id_pcf_allow_unconstrained))
                         log_warning("IO '%s' is unconstrained in PCF and will be automatically placed\n",
                                     cell.first.c_str(ctx));
                     else

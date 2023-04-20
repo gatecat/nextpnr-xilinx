@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
- *  Copyright (C) 2019  Miodrag Milanovic <miodrag@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
+ *  Copyright (C) 2019  Miodrag Milanovic <micko@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -29,6 +29,14 @@ const float slice_y1 = 0.71;
 const float slice_y2 = 0.745 + 0.0068;
 const float slice_pitch = 0.0374 + 0.0068;
 
+const float slice_comb_dx1 = 0.002;
+const float slice_comb_w = 0.007;
+const float slice_ff_dx1 = 0.011;
+const float slice_ff_w = 0.007;
+const float slice_comb_dy1 = 0.002;
+const float slice_comb_h = 0.014;
+const float slice_comb_dy2 = 0.021;
+
 const float io_cell_v_x1 = 0.76;
 const float io_cell_v_x2 = 0.95;
 const float io_cell_v_y1 = 0.05;
@@ -40,6 +48,7 @@ const float io_cell_h_y2 = 0.24;
 const float wire_distance = 0.0017f;
 const float wire_distance_small = 0.00085f;
 
+const float wire_length_lut = 0.01f;
 const float wire_length = 0.005f;
 const float wire_length_long = 0.015f;
 
@@ -54,22 +63,53 @@ void gfxTileBel(std::vector<GraphicElement> &g, int x, int y, int z, int w, int 
     GraphicElement el;
     el.type = GraphicElement::TYPE_BOX;
     el.style = style;
-    if (bel_type == id_TRELLIS_SLICE) {
-        el.x1 = x + slice_x1;
-        el.x2 = x + slice_x2;
-        el.y1 = y + slice_y1 + (z)*slice_pitch;
-        el.y2 = y + slice_y2 + (z)*slice_pitch;
+    if (bel_type == id_TRELLIS_COMB) {
+        int lc = (z >> Arch::lc_idx_shift);
+
+        el.x1 = x + slice_x1 + slice_comb_dx1;
+        el.x2 = el.x1 + slice_comb_w;
+        el.y1 = y + slice_y1 + (lc / 2) * slice_pitch + ((lc % 2) ? slice_comb_dy2 : slice_comb_dy1);
+        el.y2 = el.y1 + slice_comb_h;
         g.push_back(el);
 
         el.style = GraphicElement::STYLE_FRAME;
-        el.x1 = x + slice_x2 + 15 * wire_distance;
-        el.x2 = el.x1 + wire_distance;
-        el.y1 = y + slice_y2 - wire_distance * (TILE_WIRE_CLK3_SLICE - TILE_WIRE_DUMMY_D2 + 5 + (3 - z) * 26) +
-                3 * slice_pitch - 0.0007f;
-        el.y2 = el.y1 + wire_distance * 5;
+
+        if ((lc % 2) == 0) {
+            // SLICE frame
+            el.x1 = x + slice_x1;
+            el.x2 = x + slice_x2;
+            el.y1 = y + slice_y1 + (lc / 2) * slice_pitch;
+            el.y2 = y + slice_y2 + (lc / 2) * slice_pitch;
+            g.push_back(el);
+
+            // SLICE control set switchbox
+            el.x1 = x + slice_x2 + 15 * wire_distance;
+            el.x2 = el.x1 + wire_distance;
+            el.y1 = y + slice_y2 -
+                    wire_distance * (TILE_WIRE_CLK3_SLICE - TILE_WIRE_DUMMY_D2 + 5 + (3 - (lc / 2)) * 26) +
+                    3 * slice_pitch - 0.0007f;
+            el.y2 = el.y1 + wire_distance * 5;
+            g.push_back(el);
+        }
+
+        // LUT permutation switchbox
+        el.x1 = x + slice_x1 - wire_length_lut;
+        el.x2 = x + slice_x1 - wire_length;
+        int start_wire = (TILE_WIRE_D7 + 24 * (lc / 2) + 4 * (lc % 2));
+        el.y2 = y + slice_y2 - wire_distance * (start_wire - TILE_WIRE_FCO + 1 + (lc / 2) * 2) + 3 * slice_pitch +
+                0.25 * wire_distance;
+        el.y1 = el.y2 - 3.5 * wire_distance;
         g.push_back(el);
-    } else if (bel_type == id_TRELLIS_IO || bel_type == id_IOLOGIC || bel_type == id_SIOLOGIC ||
-               bel_type == id_DQSBUFM) {
+
+    } else if (bel_type == id_TRELLIS_FF) {
+        int lc = (z >> Arch::lc_idx_shift);
+        el.x1 = x + slice_x1 + slice_ff_dx1;
+        el.x2 = el.x1 + slice_ff_w;
+        el.y1 = y + slice_y1 + (lc / 2) * slice_pitch + ((lc % 2) ? slice_comb_dy2 : slice_comb_dy1);
+        el.y2 = el.y1 + slice_comb_h;
+        g.push_back(el);
+
+    } else if (bel_type.in(id_TRELLIS_IO, id_IOLOGIC, id_SIOLOGIC, id_DQSBUFM)) {
         bool top_bottom = (y == 0 || y == (h - 1));
         if (top_bottom) {
             el.x1 = x + io_cell_h_x1 + (z + 2) * io_cell_gap;
@@ -99,7 +139,7 @@ void gfxTileBel(std::vector<GraphicElement> &g, int x, int y, int z, int w, int 
         el.x2 = x + switchbox_x1 + (z)*0.025 + 0.020;
         el.y2 = y + 0.18;
         g.push_back(el);
-    } else if (bel_type == id_DP16KD || bel_type == id_MULT18X18D || bel_type == id_ALU54B) {
+    } else if (bel_type.in(id_DP16KD, id_MULT18X18D, id_ALU54B)) {
         el.x1 = x + slice_x1;
         el.x2 = x + slice_x2_wide;
         el.y1 = y + slice_y1 - 1 * slice_pitch;
@@ -117,8 +157,7 @@ void gfxTileBel(std::vector<GraphicElement> &g, int x, int y, int z, int w, int 
         el.y1 = y + slice_y2;
         el.y2 = y + 0.25;
         g.push_back(el);
-    } else if (bel_type == id_EXTREFB || bel_type == id_PCSCLKDIV || bel_type == id_DTR || bel_type == id_USRMCLK ||
-               bel_type == id_SEDGA || bel_type == id_GSR || bel_type == id_JTAGG || bel_type == id_OSCG) {
+    } else if (bel_type.in(id_EXTREFB, id_PCSCLKDIV, id_DTR, id_USRMCLK, id_SEDGA, id_GSR, id_JTAGG, id_OSCG)) {
         el.x1 = x + slice_x1;
         el.x2 = x + slice_x2_wide;
         el.y1 = y + slice_y1 + (z)*slice_pitch;
@@ -130,8 +169,7 @@ void gfxTileBel(std::vector<GraphicElement> &g, int x, int y, int z, int w, int 
         el.y1 = y + dll_cell_y1;
         el.y2 = y + dll_cell_y2;
         g.push_back(el);
-    } else if (bel_type == id_DLLDELD || bel_type == id_CLKDIVF || bel_type == id_ECLKSYNCB ||
-               bel_type == id_TRELLIS_ECLKBUF || bel_type == id_ECLKBRIDGECS) {
+    } else if (bel_type.in(id_DLLDELD, id_CLKDIVF, id_ECLKSYNCB, id_TRELLIS_ECLKBUF, id_ECLKBRIDGECS)) {
         el.x1 = x + 0.1 + z * 0.05;
         el.x2 = x + 0.14 + z * 0.05;
         el.y1 = y + 0.475;
@@ -479,8 +517,14 @@ void gfxTileWire(std::vector<GraphicElement> &g, int x, int y, int w, int h, IdS
 
         else if (tilewire >= TILE_WIRE_FCO && tilewire <= TILE_WIRE_FCI) {
             int gap = (tilewire - TILE_WIRE_FCO) / 24;
+            int purpose = (tilewire - TILE_WIRE_FCO) % 24;
             el.x1 = x + switchbox_x2;
-            el.x2 = x + slice_x1 - wire_length;
+            if (purpose >= (TILE_WIRE_D7 - TILE_WIRE_FCO) && purpose <= (TILE_WIRE_A6 - TILE_WIRE_FCO)) {
+                // Space for the LUT permutation switchbox
+                el.x2 = x + slice_x1 - wire_length_lut;
+            } else {
+                el.x2 = x + slice_x1 - wire_length;
+            }
             el.y1 = y + slice_y2 - wire_distance * (tilewire - TILE_WIRE_FCO + 1 + gap * 2) + 3 * slice_pitch;
             el.y2 = el.y1;
             g.push_back(el);
@@ -1153,6 +1197,17 @@ void straightLine(std::vector<GraphicElement> &g, GraphicElement &el, int x, int
     g.push_back(el);
 }
 
+void lutPermPip(std::vector<GraphicElement> &g, GraphicElement &el, int x, int y, int w, int h, WireId src,
+                IdString src_type, GfxTileWireId src_id, WireId dst, IdString dst_type, GfxTileWireId dst_id)
+{
+    int gap = (src_id - TILE_WIRE_FCO) / 24;
+    el.x1 = src.location.x + slice_x1 - wire_length_lut;
+    el.y1 = src.location.y + slice_y2 - wire_distance * (src_id - TILE_WIRE_FCO + 1 + gap * 2) + 3 * slice_pitch;
+    el.x2 = src.location.x + slice_x1 - wire_length;
+    el.y2 = src.location.y + slice_y2 - wire_distance * (dst_id - TILE_WIRE_FCO_SLICE + 1 + gap * 2) + 3 * slice_pitch;
+    g.push_back(el);
+}
+
 void toSameSideHor(std::vector<GraphicElement> &g, GraphicElement &el, int x, int y, int w, int h, WireId src,
                    IdString src_type, GfxTileWireId src_id, WireId dst, IdString dst_type, GfxTileWireId dst_id,
                    GraphicElement::style_t style, int idx)
@@ -1439,15 +1494,13 @@ void gfxTilePip(std::vector<GraphicElement> &g, int x, int y, int w, int h, Wire
                         dst_id - TILE_WIRE_JCE0);
     }
 
-    if ((src_type == id_WIRE_TYPE_H02 || src_type == id_WIRE_TYPE_V00 || src_type == id_WIRE_TYPE_V01 ||
-         src_type == id_WIRE_TYPE_V02) &&
+    if ((src_type.in(id_WIRE_TYPE_H02, id_WIRE_TYPE_V00, id_WIRE_TYPE_V01, id_WIRE_TYPE_V02)) &&
         dst_type == id_WIRE_TYPE_NONE &&
         ((dst_id >= TILE_WIRE_FCO && dst_id <= TILE_WIRE_FCI) ||
          (dst_id >= TILE_WIRE_JCE0 && dst_id <= TILE_WIRE_JQ7))) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
-    if ((dst_type == id_WIRE_TYPE_H02 || dst_type == id_WIRE_TYPE_V00 || dst_type == id_WIRE_TYPE_V01 ||
-         dst_type == id_WIRE_TYPE_V02) &&
+    if ((dst_type.in(id_WIRE_TYPE_H02, id_WIRE_TYPE_V00, id_WIRE_TYPE_V01, id_WIRE_TYPE_V02)) &&
         src_type == id_WIRE_TYPE_NONE &&
         ((src_id >= TILE_WIRE_FCO && src_id <= TILE_WIRE_FCI) ||
          (src_id >= TILE_WIRE_JCE0 && src_id <= TILE_WIRE_JQ7))) {
@@ -1463,34 +1516,42 @@ void gfxTilePip(std::vector<GraphicElement> &g, int x, int y, int w, int h, Wire
         toSameSideVer(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id, style, src_id - TILE_WIRE_JCE0);
     }
 
+    if (dst_type == id_WIRE_TYPE_SLICE && src_type == id_WIRE_TYPE_NONE) {
+        if (src_id >= TILE_WIRE_FCO && src_id <= TILE_WIRE_FCI && dst_id >= TILE_WIRE_FCO_SLICE &&
+            dst_id <= TILE_WIRE_FCI_SLICE) {
+            // LUT permutation pseudo-pip
+            int src_purpose = (src_id - TILE_WIRE_FCO) % 24;
+            int dst_purpose = (dst_id - TILE_WIRE_FCO_SLICE) % 24;
+            if (src_purpose >= (TILE_WIRE_D7 - TILE_WIRE_FCO) && src_purpose <= (TILE_WIRE_A6 - TILE_WIRE_FCO) &&
+                dst_purpose >= (TILE_WIRE_D7_SLICE - TILE_WIRE_FCO_SLICE) &&
+                dst_purpose <= (TILE_WIRE_A6_SLICE - TILE_WIRE_FCO_SLICE)) {
+                lutPermPip(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
+            }
+        }
+    }
+
     if (src_type == id_WIRE_TYPE_NONE &&
-        (dst_type == id_WIRE_TYPE_PLL || dst_type == id_WIRE_TYPE_GSR || dst_type == id_WIRE_TYPE_JTAG ||
-         dst_type == id_WIRE_TYPE_OSC || dst_type == id_WIRE_TYPE_SED || dst_type == id_WIRE_TYPE_DTR ||
-         dst_type == id_WIRE_TYPE_EXTREF || dst_type == id_WIRE_TYPE_DCU || dst_type == id_WIRE_TYPE_PCSCLKDIV ||
-         dst_type == id_WIRE_TYPE_DDRDLL || dst_type == id_WIRE_TYPE_CCLK || dst_type == id_WIRE_TYPE_DQS ||
-         dst_type == id_WIRE_TYPE_IOLOGIC || dst_type == id_WIRE_TYPE_SIOLOGIC || dst_type == id_WIRE_TYPE_EBR ||
-         dst_type == id_WIRE_TYPE_MULT18 || dst_type == id_WIRE_TYPE_ALU54) &&
+        (dst_type.in(id_WIRE_TYPE_PLL, id_WIRE_TYPE_GSR, id_WIRE_TYPE_JTAG, id_WIRE_TYPE_OSC, id_WIRE_TYPE_SED,
+                     id_WIRE_TYPE_DTR, id_WIRE_TYPE_EXTREF, id_WIRE_TYPE_DCU, id_WIRE_TYPE_PCSCLKDIV,
+                     id_WIRE_TYPE_DDRDLL, id_WIRE_TYPE_CCLK, id_WIRE_TYPE_DQS, id_WIRE_TYPE_IOLOGIC,
+                     id_WIRE_TYPE_SIOLOGIC, id_WIRE_TYPE_EBR, id_WIRE_TYPE_MULT18, id_WIRE_TYPE_ALU54)) &&
         (src_id >= TILE_WIRE_JCE0 && src_id <= TILE_WIRE_JQ7)) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
     if (dst_type == id_WIRE_TYPE_NONE &&
-        (src_type == id_WIRE_TYPE_PLL || src_type == id_WIRE_TYPE_GSR || src_type == id_WIRE_TYPE_JTAG ||
-         src_type == id_WIRE_TYPE_OSC || src_type == id_WIRE_TYPE_SED || src_type == id_WIRE_TYPE_DTR ||
-         src_type == id_WIRE_TYPE_EXTREF || src_type == id_WIRE_TYPE_DCU || src_type == id_WIRE_TYPE_PCSCLKDIV ||
-         src_type == id_WIRE_TYPE_DDRDLL || src_type == id_WIRE_TYPE_CCLK || src_type == id_WIRE_TYPE_DQS ||
-         src_type == id_WIRE_TYPE_IOLOGIC || src_type == id_WIRE_TYPE_SIOLOGIC || src_type == id_WIRE_TYPE_EBR ||
-         src_type == id_WIRE_TYPE_MULT18 || src_type == id_WIRE_TYPE_ALU54) &&
+        (src_type.in(id_WIRE_TYPE_PLL, id_WIRE_TYPE_GSR, id_WIRE_TYPE_JTAG, id_WIRE_TYPE_OSC, id_WIRE_TYPE_SED,
+                     id_WIRE_TYPE_DTR, id_WIRE_TYPE_EXTREF, id_WIRE_TYPE_DCU, id_WIRE_TYPE_PCSCLKDIV,
+                     id_WIRE_TYPE_DDRDLL, id_WIRE_TYPE_CCLK, id_WIRE_TYPE_DQS, id_WIRE_TYPE_IOLOGIC,
+                     id_WIRE_TYPE_SIOLOGIC, id_WIRE_TYPE_EBR, id_WIRE_TYPE_MULT18, id_WIRE_TYPE_ALU54)) &&
         (dst_id >= TILE_WIRE_JCE0 && dst_id <= TILE_WIRE_JQ7)) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
 
-    if (src_type == id_WIRE_TYPE_NONE &&
-        (dst_type == id_WIRE_TYPE_IOLOGIC || dst_type == id_WIRE_TYPE_SIOLOGIC || dst_type == id_WIRE_TYPE_PIO) &&
+    if (src_type == id_WIRE_TYPE_NONE && (dst_type.in(id_WIRE_TYPE_IOLOGIC, id_WIRE_TYPE_SIOLOGIC, id_WIRE_TYPE_PIO)) &&
         (src_id >= TILE_WIRE_JDIA && src_id <= TILE_WIRE_ECLKD)) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
-    if (dst_type == id_WIRE_TYPE_NONE &&
-        (src_type == id_WIRE_TYPE_IOLOGIC || src_type == id_WIRE_TYPE_SIOLOGIC || src_type == id_WIRE_TYPE_PIO) &&
+    if (dst_type == id_WIRE_TYPE_NONE && (src_type.in(id_WIRE_TYPE_IOLOGIC, id_WIRE_TYPE_SIOLOGIC, id_WIRE_TYPE_PIO)) &&
         (dst_id >= TILE_WIRE_JDIA && dst_id <= TILE_WIRE_ECLKD)) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
@@ -1510,7 +1571,7 @@ void gfxTilePip(std::vector<GraphicElement> &g, int x, int y, int w, int h, Wire
          (dst_id >= TILE_WIRE_CLK0 && dst_id <= TILE_WIRE_FCI))) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
-    if ((dst_type == id_WIRE_TYPE_H01 || dst_type == id_WIRE_TYPE_V01) && src_type == id_WIRE_TYPE_G_HPBX) {
+    if ((dst_type.in(id_WIRE_TYPE_H01, id_WIRE_TYPE_V01)) && src_type == id_WIRE_TYPE_G_HPBX) {
         straightLine(g, el, x, y, w, h, src, src_type, src_id, dst, dst_type, dst_id);
     }
 }

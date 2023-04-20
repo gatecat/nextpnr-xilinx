@@ -25,13 +25,13 @@ NEXTPNR_NAMESPACE_BEGIN
 
 void USPacker::pack_dsps()
 {
-    const std::vector<IdString> dsp_subcell_names = {
-            ctx->id("DSP_PREADD_DATA"), ctx->id("DSP_PREADD"), ctx->id("DSP_A_B_DATA"), ctx->id("DSP_MULTIPLIER"),
-            ctx->id("DSP_C_DATA"),      ctx->id("DSP_M_DATA"), ctx->id("DSP_ALU"),      ctx->id("DSP_OUTPUT")};
+    const std::vector<IdString> dsp_subcell_names = {id_DSP_PREADD_DATA, id_DSP_PREADD, id_DSP_A_B_DATA,
+                                                     id_DSP_MULTIPLIER,  id_DSP_C_DATA, id_DSP_M_DATA,
+                                                     id_DSP_ALU,         id_DSP_OUTPUT};
 
-    for (auto cell : sorted(ctx->cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->type != ctx->id("DSP48E2"))
+    for (auto &cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
+        if (ci->type != id_DSP48E2)
             continue;
 
         // First of all, trim pins that are connected to "ground" in synthesis but really should be floating if
@@ -42,7 +42,7 @@ void USPacker::pack_dsps()
                 boost::starts_with(name, "PCIN")) {
                 NetInfo *pn = port.second.net;
                 if (pn->name == ctx->id("$PACKER_GND_NET"))
-                    disconnect_port(ctx, ci, port.first);
+                    ci->disconnectPort(port.first);
             }
         }
 
@@ -50,7 +50,7 @@ void USPacker::pack_dsps()
          * DSP primitives in UltraScale+ (but not xc7) are complex "macros" that expand to more than one BEL
          * we must track the mapping here for useful import on the other side; and preservation of parameters
          */
-        std::unordered_map<IdString, PortInfo> orig_ports = ci->ports;
+        dict<IdString, PortInfo> orig_ports = ci->ports;
         std::vector<CellInfo *> subcells;
 
         for (auto ctype : dsp_subcell_names) {
@@ -59,12 +59,14 @@ void USPacker::pack_dsps()
 
             if (!subcells.empty()) {
                 // FIXME: add constraints for cascaded DSP chains
-                subcell->constr_parent = subcells.front();
+                subcell->cluster = subcells.front()->name;
                 subcells.front()->constr_children.push_back(subcell.get());
                 subcell->constr_x = 0;
                 subcell->constr_y = 0;
                 subcell->constr_z = int(subcells.size());
                 subcell->constr_abs_z = false;
+            } else {
+                subcell->cluster = subcell->name;
             }
 
             CellInfo *sci = subcell.get();
@@ -73,33 +75,33 @@ void USPacker::pack_dsps()
         }
 
         for (int i = 0; i < 30; i++)
-            replace_port(ci, ctx->id("A[" + std::to_string(i) + "]"), subcells[BEL_DSP_A_B_DATA],
-                         ctx->id("A[" + std::to_string(i) + "]"));
+            ci->movePortTo(ctx->id("A[" + std::to_string(i) + "]"), subcells[BEL_DSP_A_B_DATA],
+                           ctx->id("A[" + std::to_string(i) + "]"));
         for (int i = 0; i < 18; i++)
-            replace_port(ci, ctx->id("B[" + std::to_string(i) + "]"), subcells[BEL_DSP_A_B_DATA],
-                         ctx->id("B[" + std::to_string(i) + "]"));
+            ci->movePortTo(ctx->id("B[" + std::to_string(i) + "]"), subcells[BEL_DSP_A_B_DATA],
+                           ctx->id("B[" + std::to_string(i) + "]"));
         for (int i = 0; i < 48; i++)
-            replace_port(ci, ctx->id("C[" + std::to_string(i) + "]"), subcells[BEL_DSP_C_DATA],
-                         ctx->id("C[" + std::to_string(i) + "]"));
+            ci->movePortTo(ctx->id("C[" + std::to_string(i) + "]"), subcells[BEL_DSP_C_DATA],
+                           ctx->id("C[" + std::to_string(i) + "]"));
         for (int i = 0; i < 27; i++)
-            replace_port(ci, ctx->id("D[" + std::to_string(i) + "]"), subcells[BEL_DSP_PREADD_DATA],
-                         ctx->id("DIN[" + std::to_string(i) + "]"));
+            ci->movePortTo(ctx->id("D[" + std::to_string(i) + "]"), subcells[BEL_DSP_PREADD_DATA],
+                           ctx->id("DIN[" + std::to_string(i) + "]"));
         for (auto port : ci->ports) {
             IdString p = port.first;
             NetInfo *pn = port.second.net;
             if (pn == nullptr)
                 continue;
-            disconnect_port(ctx, ci, p);
+            ci->disconnectPort(p);
             for (auto sc : subcells)
                 if (sc->ports.count(p))
-                    connect_port(ctx, pn, sc, p);
+                    sc->connectPort(p, pn);
         }
         // Copy parameters from the original cell to all subcells
         for (auto sc : subcells)
             sc->params = ci->params;
         // Add ports of DSP "super-cell" as attributes
         for (auto sc : subcells) {
-            sc->attrs[ctx->id("X_ORIG_MACRO_PRIM")] = ci->type.str(ctx);
+            sc->attrs[id_X_ORIG_MACRO_PRIM] = ci->type.str(ctx);
             for (auto &p : sc->ports) {
                 std::string macro_ports;
                 for (auto &orig : orig_ports) {
@@ -125,7 +127,7 @@ void USPacker::pack_dsps()
     flush_cells();
 
     // Expand bus ports and set orig ports/type correctly
-    std::unordered_map<IdString, XFormRule> dsp_rules;
+    dict<IdString, XFormRule> dsp_rules;
     for (auto sctype : dsp_subcell_names)
         dsp_rules[sctype].new_type = sctype;
     generic_xform(dsp_rules);

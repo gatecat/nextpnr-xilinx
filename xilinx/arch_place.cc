@@ -34,7 +34,7 @@ inline NetInfo *port_or_nullptr(const CellInfo *cell, IdString name)
     return found->second.net;
 }
 
-//#define DEBUG_VALIDITY
+// #define DEBUG_VALIDITY
 #ifdef DEBUG_VALIDITY
 #define DBG() log_info("invalid: %s %d\n", __FILE__, __LINE__)
 #else
@@ -220,8 +220,8 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                 out5 = lut6->lutInfo.output_sigs[1];
             else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
                 out5 = lut5->lutInfo.output_sigs[0];
-            if (out5 != nullptr && (out5->users.size() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
-                                                               (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
+            if (out5 != nullptr && (out5->users.entries() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
+                                                                  (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
                 mux_output_used = true;
             }
 
@@ -235,8 +235,8 @@ bool Arch::xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             }
             if (out_fmux != nullptr) {
                 NetInfo *f7f8 = out_fmux->muxInfo.out;
-                if (f7f8 != nullptr && (f7f8->users.size() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d) &&
-                                                                   (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
+                if (f7f8 != nullptr && (f7f8->users.entries() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d) &&
+                                                                      (ff2 == nullptr || f7f8 != ff2->ffInfo.d)))) {
                     if (mux_output_used) {
                         DBG();
                         return false; // Memory and SRLs only valid in SLICEMs
@@ -481,8 +481,8 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                 out5 = lut6->lutInfo.output_sigs[1];
             else if (lut5 != nullptr && !lut5->lutInfo.only_drives_carry)
                 out5 = lut5->lutInfo.output_sigs[0];
-            if (out5 != nullptr && (out5->users.size() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
-                                                               (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
+            if (out5 != nullptr && (out5->users.entries() > 1 || ((ff1 == nullptr || out5 != ff1->ffInfo.d) &&
+                                                                  (ff2 == nullptr || out5 != ff2->ffInfo.d)))) {
                 mux_output_used = true;
             }
 
@@ -496,7 +496,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             }
             if (out_fmux != nullptr) {
                 NetInfo *f7f8 = out_fmux->muxInfo.out;
-                if (f7f8 != nullptr && (f7f8->users.size() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d)))) {
+                if (f7f8 != nullptr && (f7f8->users.entries() > 1 || ((ff1 == nullptr || f7f8 != ff1->ffInfo.d)))) {
                     if (mux_output_used) {
                         DBG();
                         return false; // Memory and SRLs only valid in SLICEMs
@@ -584,7 +584,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
     return true;
 }
 
-bool Arch::isBelLocationValid(BelId bel) const
+bool Arch::isBelLocationValid(BelId bel, bool explain_invalid) const
 {
     IdString belTileType = getBelTileType(bel);
     if (isLogicTile(bel)) {
@@ -596,7 +596,7 @@ bool Arch::isBelLocationValid(BelId bel) const
             return xc7_logic_tile_valid(belTileType, lts);
         else
             return xcu_logic_tile_valid(belTileType, lts);
-    } else if (belTileType == id_BRAM || belTileType == id_BRAM_L || belTileType == id_BRAM_R) {
+    } else if (belTileType.in(id_BRAM, id_BRAM_L, id_BRAM_R)) {
         if (!tileStatus[bel.tile].bts)
             return true;
         BRAMTileStatus *bts = tileStatus[bel.tile].bts;
@@ -647,7 +647,7 @@ void Arch::fixupPlacement()
             CellInfo *lut5 = lt.cells[z << 4 | BEL_5LUT];
             if (lut5 == nullptr)
                 continue;
-            std::unordered_map<IdString, std::vector<int>> lut5Inputs, lut6Inputs;
+            dict<IdString, std::vector<int>> lut5Inputs, lut6Inputs;
             for (int i = 0; i < lut5->lutInfo.input_count; i++)
                 if (lut5->lutInfo.input_sigs[i])
                     lut5Inputs[lut5->lutInfo.input_sigs[i]->name].push_back(i);
@@ -663,7 +663,7 @@ void Arch::fixupPlacement()
                         lut6->ports[id_A6].name = id_A6;
                         lut6->ports[id_A6].type = PORT_IN;
                     }
-                    connect_port(getCtx(), nets[id("$PACKER_VCC_NET")].get(), lut6, id_A6);
+                    lut6->connectPort(id_A6, nets[id("$PACKER_VCC_NET")].get());
                 }
                 continue;
             }
@@ -675,11 +675,11 @@ void Arch::fixupPlacement()
             // Disconnect LUT inputs, and re-connect them to not overlap
             IdString ports[6] = {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6};
             for (auto p : ports) {
-                disconnect_port(getCtx(), lut5, p);
+                lut5->disconnectPort(p);
                 lut5->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
                 if (lut6) {
                     lut6->attrs.erase(id("X_ORIG_PORT_" + p.str(this)));
-                    disconnect_port(getCtx(), lut6, p);
+                    lut6->disconnectPort(p);
                 }
             }
             int index = 0;
@@ -689,7 +689,7 @@ void Arch::fixupPlacement()
                         lut5->ports[ports[index]].name = ports[index];
                         lut5->ports[ports[index]].type = PORT_IN;
                     }
-                    connect_port(getCtx(), nets.at(i).get(), lut5, ports[index]);
+                    lut5->connectPort(ports[index], nets.at(i).get());
                     lut5->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = std::string("");
                     bool first = true;
                     for (auto inp : lut5Inputs[i]) {
@@ -703,7 +703,7 @@ void Arch::fixupPlacement()
                         lut6->ports[ports[index]].name = ports[index];
                         lut6->ports[ports[index]].type = PORT_IN;
                     }
-                    connect_port(getCtx(), nets.at(i).get(), lut6, ports[index]);
+                    lut6->connectPort(ports[index], nets.at(i).get());
 
                     lut6->attrs[id("X_ORIG_PORT_" + ports[index].str(this))] = std::string("");
                     bool first = true;
@@ -715,22 +715,22 @@ void Arch::fixupPlacement()
                 }
                 ++index;
             }
-            rename_port(getCtx(), lut5, id_O6, id_O5);
-            lut5->attrs.erase(id("X_ORIG_PORT_O6"));
-            lut5->attrs[id("X_ORIG_PORT_O5")] = std::string("O");
+            lut5->renamePort(id_O6, id_O5);
+            lut5->attrs.erase(id_X_ORIG_PORT_O6);
+            lut5->attrs[id_X_ORIG_PORT_O5] = std::string("O");
 
             if (lut6) {
                 if (!lut6->ports.count(id_A6)) {
                     lut6->ports[id_A6].name = id_A6;
                     lut6->ports[id_A6].type = PORT_IN;
                 }
-                connect_port(getCtx(), nets[id("$PACKER_VCC_NET")].get(), lut6, id_A6);
+                lut6->connectPort(id_A6, nets[id("$PACKER_VCC_NET")].get());
             }
         }
     }
-    for (auto cell : sorted(cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->type == id("PSS_ALTO_CORE")) {
+    for (auto &cell : cells) {
+        CellInfo *ci = cell.second.get();
+        if (ci->type == id_PSS_ALTO_CORE) {
             log_info("Tieing unused PSS inputs to constants...\n");
             for (IdString pname : getBelPins(ci->bel)) {
                 if (ci->ports.count(pname) && ci->ports.at(pname).net != nullptr &&
@@ -756,10 +756,10 @@ void Arch::fixupPlacement()
                 ci->ports[pname].name = pname;
                 ci->ports[pname].type = PORT_IN;
                 if (ci->ports[pname].net != nullptr) {
-                    disconnect_port(getCtx(), ci, pname);
+                    ci->disconnectPort(pname);
                     ci->attrs.erase(id("X_ORIG_PORT_" + name));
                 }
-                connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
+                ci->connectPort(pname, nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get());
             }
         } else if (ci->type == id_PS7_PS7) {
             log_info("Tieing unused PS7 inputs to constants...\n");
@@ -779,28 +779,27 @@ void Arch::fixupPlacement()
                 ci->ports[pname].name = pname;
                 ci->ports[pname].type = PORT_IN;
                 if (ci->ports[pname].net != nullptr) {
-                    disconnect_port(getCtx(), ci, pname);
+                    ci->disconnectPort(pname);
                     ci->attrs.erase(id("X_ORIG_PORT_" + name));
                 }
-                connect_port(getCtx(), nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci, pname);
+                ci->connectPort(pname, nets[constval ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get());
             }
-        } else if (ci->type == id("BITSLICE_CONTROL_BEL")) {
-            std::unordered_map<IdString, bool> constpins;
-            constpins[id("EN_VTC")] = true;
-            constpins[id("DLY_TEST_IN")] = false;
-            constpins[id("RIU_NIBBLE_SEL")] = false;
-            constpins[id("TBYTE_IN0")] = false;
-            constpins[id("TBYTE_IN1")] = false;
-            constpins[id("TBYTE_IN2")] = false;
-            constpins[id("TBYTE_IN3")] = false;
+        } else if (ci->type == id_BITSLICE_CONTROL_BEL) {
+            dict<IdString, bool> constpins;
+            constpins[id_EN_VTC] = true;
+            constpins[id_DLY_TEST_IN] = false;
+            constpins[id_RIU_NIBBLE_SEL] = false;
+            constpins[id_TBYTE_IN0] = false;
+            constpins[id_TBYTE_IN1] = false;
+            constpins[id_TBYTE_IN2] = false;
+            constpins[id_TBYTE_IN3] = false;
 
             for (auto p : constpins) {
-                if (get_net_or_empty(ci, p.first) != nullptr)
+                if (ci->getPort(p.first) != nullptr)
                     continue;
                 ci->ports[p.first].name = p.first;
                 ci->ports[p.first].type = PORT_IN;
-                connect_port(getCtx(), nets[p.second ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get(), ci,
-                             p.first);
+                ci->connectPort(p.first, nets[p.second ? id("$PACKER_VCC_NET") : id("$PACKER_GND_NET")].get());
             }
         }
     }
@@ -925,10 +924,10 @@ void Arch::fixupRouting()
      * then specifying the permutation as a new physical-to-logical mapping using X_ORIG_PORT. This keeps RapidWright
      * and Vivado happy, preserving the original logical netlist
      */
-    std::unordered_map<int, std::vector<int>> used_perm_pips; // tile -> [extra_data] for LUT perm pips
+    dict<int, std::vector<int>> used_perm_pips; // tile -> [extra_data] for LUT perm pips
 
-    for (auto net : sorted(nets)) {
-        NetInfo *ni = net.second;
+    for (auto &net : nets) {
+        NetInfo *ni = net.second.get();
         for (auto &wire : ni->wires) {
             PipId pip = wire.second.pip;
             if (pip == PipId())
@@ -955,18 +954,18 @@ void Arch::fixupRouting()
                 continue;
             auto &pp = used_perm_pips.at(ti);
             // from -> to
-            std::unordered_map<IdString, std::vector<IdString>> new_connections;
+            dict<IdString, std::vector<IdString>> new_connections;
             IdString ports[6] = {id_A1, id_A2, id_A3, id_A4, id_A5, id_A6};
             for (auto pip : pp) {
                 if (((pip >> 8) & 0xF) != z)
                     continue;
                 new_connections[ports[(pip >> 4) & 0xF]].push_back(ports[pip & 0xF]);
             }
-            std::unordered_map<IdString, NetInfo *> orig_nets;
-            std::unordered_map<IdString, std::string> orig_ports_l6, orig_ports_l5;
+            dict<IdString, NetInfo *> orig_nets;
+            dict<IdString, std::string> orig_ports_l6, orig_ports_l5;
             for (int i = 0; i < 6; i++) {
-                NetInfo *l6net = lut6 ? get_net_or_empty(lut6, ports[i]) : nullptr;
-                NetInfo *l5net = lut5 ? get_net_or_empty(lut5, ports[i]) : nullptr;
+                NetInfo *l6net = lut6 ? lut6->getPort(ports[i]) : nullptr;
+                NetInfo *l5net = lut5 ? lut5->getPort(ports[i]) : nullptr;
                 orig_nets[ports[i]] = (l6net ? l6net : l5net);
                 if (lut6)
                     orig_ports_l6[ports[i]] = str_or_default(lut6->attrs, id("X_ORIG_PORT_" + ports[i].str(this)));
@@ -975,14 +974,14 @@ void Arch::fixupRouting()
             }
             for (auto &nc : new_connections) {
                 if (lut6)
-                    disconnect_port(getCtx(), lut6, nc.first);
+                    lut6->disconnectPort(nc.first);
                 if (lut5)
-                    disconnect_port(getCtx(), lut5, nc.first);
+                    lut5->disconnectPort(nc.first);
                 for (auto &dst : nc.second) {
                     if (lut6)
-                        disconnect_port(getCtx(), lut6, dst);
+                        lut6->disconnectPort(dst);
                     if (lut5)
-                        disconnect_port(getCtx(), lut5, dst);
+                        lut5->disconnectPort(dst);
                 }
             }
             for (int i = 0; i < 6; i++) {
@@ -1000,7 +999,7 @@ void Arch::fixupRouting()
                         lut6->ports[p].name = p;
                         lut6->ports[p].type = PORT_IN;
                     }
-                    connect_port(getCtx(), orig_nets[new_connections.at(p).front()], lut6, p);
+                    lut6->connectPort(p, orig_nets[new_connections.at(p).front()]);
                     lut6->attrs[id("X_ORIG_PORT_" + p.str(this))] = std::string("");
                     auto &orig_attr = lut6->attrs[id("X_ORIG_PORT_" + p.str(this))].str;
                     bool first = true;
@@ -1016,7 +1015,7 @@ void Arch::fixupRouting()
                         lut5->ports[p].name = p;
                         lut5->ports[p].type = PORT_IN;
                     }
-                    connect_port(getCtx(), orig_nets[new_connections.at(p).front()], lut5, p);
+                    lut5->connectPort(p, orig_nets[new_connections.at(p).front()]);
                     lut5->attrs[id("X_ORIG_PORT_" + p.str(this))] = std::string("");
                     auto &orig_attr = lut5->attrs[id("X_ORIG_PORT_" + p.str(this))].str;
                     bool first = true;
@@ -1037,7 +1036,7 @@ void Arch::fixupRouting()
         if (src == dst)
             return;
         std::queue<WireId> visit;
-        std::unordered_map<WireId, PipId> backtrace;
+        dict<WireId, PipId> backtrace;
         visit.push(dst);
         WireId cursor;
         while (!visit.empty()) {
@@ -1068,10 +1067,10 @@ void Arch::fixupRouting()
             bindPip(uh, net, STRENGTH_STRONG);
         }
     };
-    for (auto cell : sorted(cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->type == id("IOB_PAD")) {
-            NetInfo *pad_net = ci->ports[id("PAD")].net;
+    for (auto &cell : cells) {
+        CellInfo *ci = cell.second.get();
+        if (ci->type == id_IOB_PAD) {
+            NetInfo *pad_net = ci->ports[id_PAD].net;
             NPNR_ASSERT(pad_net != nullptr && nets.count(pad_net->name));
             std::vector<WireId> unbind;
             for (auto w : pad_net->wires)
@@ -1079,7 +1078,7 @@ void Arch::fixupRouting()
                     unbind.push_back(w.first);
             for (auto w : unbind)
                 unbindWire(w);
-            WireId pad_wire = getBelPinWire(ci->bel, id("PAD"));
+            WireId pad_wire = getBelPinWire(ci->bel, id_PAD);
             bindWire(pad_wire, pad_net, STRENGTH_LOCKED);
             if (pad_net->driver.cell != nullptr) {
                 WireId drv_wire = getCtx()->getNetinfoSourceWire(pad_net);
@@ -1090,7 +1089,7 @@ void Arch::fixupRouting()
             for (auto &usr : pad_net->users) {
                 if (usr.cell == ci)
                     continue;
-                route_bfs(pad_net, pad_wire, getCtx()->getNetinfoSinkWire(pad_net, usr));
+                route_bfs(pad_net, pad_wire, getCtx()->getNetinfoSinkWire(pad_net, usr, 0));
             }
         }
     }
@@ -1098,12 +1097,12 @@ void Arch::fixupRouting()
     /*
      * Legalise route through OSERDESE3s
      */
-    for (auto cell : sorted(cells)) {
-        CellInfo *ci = cell.second;
-        if (ci->type == id("OSERDESE3")) {
-            if (get_net_or_empty(ci, id("T_OUT")) != nullptr)
+    for (auto &cell : cells) {
+        CellInfo *ci = cell.second.get();
+        if (ci->type == id_OSERDESE3) {
+            if (ci->getPort(id_T_OUT) != nullptr)
                 continue;
-            ci->params[id("OSERDES_T_BYPASS")] = std::string("TRUE");
+            ci->params[id_OSERDES_T_BYPASS] = std::string("TRUE");
         }
     }
 }

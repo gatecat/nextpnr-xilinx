@@ -1,8 +1,8 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Miodrag Milanovic <miodrag@symbioticeda.com>
- *  Copyright (C) 2018  Serge Bazanski <q3k@symbioticeda.com>
+ *  Copyright (C) 2018  Miodrag Milanovic <micko@yosyshq.com>
+ *  Copyright (C) 2018  Serge Bazanski <q3k@q3k.org>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -26,7 +26,7 @@ NEXTPNR_NAMESPACE_BEGIN
 namespace TreeModel {
 
 // converts 'aa123bb432' -> ['aa', '123', 'bb', '432']
-std::vector<QString> IdStringList::alphaNumSplit(const QString &str)
+std::vector<QString> IdList::alphaNumSplit(const QString &str)
 {
     std::vector<QString> res;
     QString current_part;
@@ -53,12 +53,12 @@ std::vector<QString> IdStringList::alphaNumSplit(const QString &str)
     return res;
 }
 
-void IdStringList::updateElements(Context *ctx, std::vector<IdString> elements)
+void IdList::updateElements(Context *ctx, std::vector<IdStringList> elements)
 {
     bool changed = false;
 
     // For any elements that are not yet in managed_, created them.
-    std::unordered_set<IdString> element_set;
+    pool<IdStringList> element_set;
     for (auto elem : elements) {
         element_set.insert(elem);
         auto existing = managed_.find(elem);
@@ -97,12 +97,7 @@ void IdStringList::updateElements(Context *ctx, std::vector<IdString> elements)
         auto parts_a = alphaNumSplit(a->name());
         auto parts_b = alphaNumSplit(b->name());
 
-        // Short-circuit for different part count.
-        if (parts_a.size() != parts_b.size()) {
-            return parts_a.size() < parts_b.size();
-        }
-
-        for (size_t i = 0; i < parts_a.size(); i++) {
+        for (size_t i = 0; i < parts_a.size() && i < parts_b.size(); i++) {
             auto &part_a = parts_a.at(i);
             auto &part_b = parts_b.at(i);
 
@@ -134,12 +129,12 @@ void IdStringList::updateElements(Context *ctx, std::vector<IdString> elements)
             return part_a < part_b;
         }
 
-        // Same string.
-        return true;
+        // One string is equal to or a subset of the other, compare length.
+        return parts_a.size() < parts_b.size();
     });
 }
 
-void IdStringList::search(QList<Item *> &results, QString text, int limit)
+void IdList::search(QList<Item *> &results, QString text, int limit)
 {
     for (const auto &child : children_) {
         if (limit != -1 && results.size() > limit)
@@ -162,7 +157,7 @@ void Model::loadData(Context *ctx, std::unique_ptr<Item> data)
     endResetModel();
 }
 
-void Model::updateElements(std::vector<IdString> elements)
+void Model::updateElements(std::vector<IdStringList> elements)
 {
     if (!ctx_)
         return;

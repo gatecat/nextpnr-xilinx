@@ -17,9 +17,15 @@
  *
  */
 
-#ifndef NEXTPNR_H
-#error Include "archdefs.h" via "nextpnr.h" only.
-#endif
+#ifndef XILINX_ARCHDEFS_H
+#define XILINX_ARCHDEFS_H
+
+#include "base_clusterinfo.h"
+
+#include "hashlib.h"
+#include "idstring.h"
+#include "nextpnr_assertions.h"
+#include "nextpnr_namespaces.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
@@ -133,6 +139,7 @@ struct GroupId
 
     bool operator==(const GroupId &other) const { return (type == other.type) && (x == other.x) && (y == other.y); }
     bool operator!=(const GroupId &other) const { return (type != other.type) || (x != other.x) || (y == other.y); }
+    unsigned int hash() const { return mkhash(mkhash(x, y), int(type)); }
 };
 
 struct DecalId
@@ -151,6 +158,7 @@ struct DecalId
 
     bool operator==(const DecalId &other) const { return (type == other.type) && (index == other.index); }
     bool operator!=(const DecalId &other) const { return (type != other.type) || (index != other.index); }
+    unsigned int hash() const { return mkhash(mkhash(tile_type, index), mkhash(int(active), int(type))); }
 };
 
 struct ArchNetInfo
@@ -159,9 +167,12 @@ struct ArchNetInfo
     bool is_reset = false, is_enable = false;
 };
 
+typedef IdString BelBucketId;
+typedef IdString ClusterId;
+
 struct NetInfo;
 
-struct ArchCellInfo
+struct ArchCellInfo : BaseClusterInfo
 {
     union
     {
@@ -194,62 +205,4 @@ struct ArchCellInfo
 
 NEXTPNR_NAMESPACE_END
 
-namespace std {
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX BelId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX BelId &bel) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(bel.tile));
-        boost::hash_combine(seed, hash<int>()(bel.index));
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX WireId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX WireId &wire) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(wire.tile));
-        boost::hash_combine(seed, hash<int>()(wire.index));
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX PipId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX PipId &pip) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(pip.tile));
-        boost::hash_combine(seed, hash<int>()(pip.index));
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX GroupId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX GroupId &group) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(group.type));
-        boost::hash_combine(seed, hash<int>()(group.x));
-        boost::hash_combine(seed, hash<int>()(group.y));
-        return seed;
-    }
-};
-
-template <> struct hash<NEXTPNR_NAMESPACE_PREFIX DecalId>
-{
-    std::size_t operator()(const NEXTPNR_NAMESPACE_PREFIX DecalId &decal) const noexcept
-    {
-        std::size_t seed = 0;
-        boost::hash_combine(seed, hash<int>()(decal.type));
-        boost::hash_combine(seed, hash<int>()(decal.tile_type));
-        boost::hash_combine(seed, hash<int>()(decal.index));
-        boost::hash_combine(seed, hash<int>()(decal.active));
-        return seed;
-    }
-};
-} // namespace std
+#endif /* XILINX_ARCHDEFS_H */

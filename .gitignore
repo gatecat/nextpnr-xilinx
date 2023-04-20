@@ -3,6 +3,10 @@
 /nextpnr-generic*
 /nextpnr-ice40*
 /nextpnr-ecp5*
+/nextpnr-nexus*
+/nextpnr-fpga_interchange*
+/nextpnr-gowin*
+/nextpnr-machxo2*
 /nextpnr-rapidwright*
 /nextpnr-xilinx*
 cmake-build-*/
@@ -30,10 +34,15 @@ build/
 /Testing/*
 CTestTestfile.cmake
 install_manifest.txt
-/bbasm
+/bba/bbasm
+/bba-export.cmake
 /ImportExecutables.cmake
 *-coverage/
 *-coverage.info
+*.netlist
+*.phys
+*.dcp
+*.bit
 *.jar
 *.mf
 *.bba

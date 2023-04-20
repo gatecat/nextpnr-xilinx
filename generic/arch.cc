@@ -1,7 +1,7 @@
 /*
  *  nextpnr -- Next Generation Place and Route
  *
- *  Copyright (C) 2018  Clifford Wolf <clifford@symbioticeda.com>
+ *  Copyright (C) 2018  Claire Xenia Wolf <claire@yosyshq.com>
  *
  *  Permission to use, copy, modify, and/or distribute this software for any
  *  purpose with or without fee is hereby granted, provided that the above
@@ -25,49 +25,55 @@
 #include "router1.h"
 #include "router2.h"
 #include "util.h"
+#include "viaduct_api.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
-WireInfo &Arch::wire_info(IdString wire)
+WireId Arch::addWire(IdStringList name, IdString type, int x, int y)
 {
-    auto w = wires.find(wire);
-    if (w == wires.end())
-        NPNR_ASSERT_FALSE_STR("no wire named " + wire.str(this));
-    return w->second;
-}
-
-PipInfo &Arch::pip_info(IdString pip)
-{
-    auto p = pips.find(pip);
-    if (p == pips.end())
-        NPNR_ASSERT_FALSE_STR("no pip named " + pip.str(this));
-    return p->second;
-}
-
-BelInfo &Arch::bel_info(IdString bel)
-{
-    auto b = bels.find(bel);
-    if (b == bels.end())
-        NPNR_ASSERT_FALSE_STR("no bel named " + bel.str(this));
-    return b->second;
-}
-
-void Arch::addWire(IdString name, IdString type, int x, int y)
-{
-    NPNR_ASSERT(wires.count(name) == 0);
-    WireInfo &wi = wires[name];
+    NPNR_ASSERT(wire_by_name.count(name) == 0);
+    WireId wire(wires.size());
+    wire_by_name[name] = wire;
+    wires.emplace_back();
+    WireInfo &wi = wires.back();
     wi.name = name;
     wi.type = type;
     wi.x = x;
     wi.y = y;
-
-    wire_ids.push_back(name);
+    return wire;
 }
 
-void Arch::addPip(IdString name, IdString type, IdString srcWire, IdString dstWire, DelayInfo delay, Loc loc)
+WireId Arch::addWireAsBelInput(BelId bel, IdString name)
 {
-    NPNR_ASSERT(pips.count(name) == 0);
-    PipInfo &pi = pips[name];
+    Loc l = getBelLocation(bel);
+    WireId w = addWire(IdStringList::concat(getBelName(bel), name), name, l.x, l.y);
+    addBelInput(bel, name, w);
+    return w;
+}
+
+WireId Arch::addWireAsBelOutput(BelId bel, IdString name)
+{
+    Loc l = getBelLocation(bel);
+    WireId w = addWire(IdStringList::concat(getBelName(bel), name), name, l.x, l.y);
+    addBelOutput(bel, name, w);
+    return w;
+}
+
+WireId Arch::addWireAsBelInout(BelId bel, IdString name)
+{
+    Loc l = getBelLocation(bel);
+    WireId w = addWire(IdStringList::concat(getBelName(bel), name), name, l.x, l.y);
+    addBelInout(bel, name, w);
+    return w;
+}
+
+PipId Arch::addPip(IdStringList name, IdString type, WireId srcWire, WireId dstWire, delay_t delay, Loc loc)
+{
+    NPNR_ASSERT(pip_by_name.count(name) == 0);
+    PipId pip(pips.size());
+    pip_by_name[name] = pip;
+    pips.emplace_back();
+    PipInfo &pi = pips.back();
     pi.name = name;
     pi.type = type;
     pi.srcWire = srcWire;
@@ -75,9 +81,8 @@ void Arch::addPip(IdString name, IdString type, IdString srcWire, IdString dstWi
     pi.delay = delay;
     pi.loc = loc;
 
-    wire_info(srcWire).downhill.push_back(name);
-    wire_info(dstWire).uphill.push_back(name);
-    pip_ids.push_back(name);
+    wire_info(srcWire).downhill.push_back(pip);
+    wire_info(dstWire).uphill.push_back(pip);
 
     if (int(tilePipDimZ.size()) <= loc.x)
         tilePipDimZ.resize(loc.x + 1);
@@ -88,36 +93,26 @@ void Arch::addPip(IdString name, IdString type, IdString srcWire, IdString dstWi
     gridDimX = std::max(gridDimX, loc.x + 1);
     gridDimY = std::max(gridDimY, loc.x + 1);
     tilePipDimZ[loc.x][loc.y] = std::max(tilePipDimZ[loc.x][loc.y], loc.z + 1);
+    return pip;
 }
 
-void Arch::addAlias(IdString name, IdString type, IdString srcWire, IdString dstWire, DelayInfo delay)
+BelId Arch::addBel(IdStringList name, IdString type, Loc loc, bool gb, bool hidden)
 {
-    NPNR_ASSERT(pips.count(name) == 0);
-    PipInfo &pi = pips[name];
-    pi.name = name;
-    pi.type = type;
-    pi.srcWire = srcWire;
-    pi.dstWire = dstWire;
-    pi.delay = delay;
-
-    wire_info(srcWire).aliases.push_back(name);
-    pip_ids.push_back(name);
-}
-
-void Arch::addBel(IdString name, IdString type, Loc loc, bool gb)
-{
-    NPNR_ASSERT(bels.count(name) == 0);
+    NPNR_ASSERT(bel_by_name.count(name) == 0);
     NPNR_ASSERT(bel_by_loc.count(loc) == 0);
-    BelInfo &bi = bels[name];
+    BelId bel(bels.size());
+    bel_by_name[name] = bel;
+    bels.emplace_back();
+    BelInfo &bi = bels.back();
     bi.name = name;
     bi.type = type;
     bi.x = loc.x;
     bi.y = loc.y;
     bi.z = loc.z;
     bi.gb = gb;
+    bi.hidden = hidden;
 
-    bel_ids.push_back(name);
-    bel_by_loc[loc] = name;
+    bel_by_loc[loc] = bel;
 
     if (int(bels_by_tile.size()) <= loc.x)
         bels_by_tile.resize(loc.x + 1);
@@ -125,7 +120,7 @@ void Arch::addBel(IdString name, IdString type, Loc loc, bool gb)
     if (int(bels_by_tile[loc.x].size()) <= loc.y)
         bels_by_tile[loc.x].resize(loc.y + 1);
 
-    bels_by_tile[loc.x][loc.y].push_back(name);
+    bels_by_tile[loc.x][loc.y].push_back(bel);
 
     if (int(tileBelDimZ.size()) <= loc.x)
         tileBelDimZ.resize(loc.x + 1);
@@ -136,87 +131,85 @@ void Arch::addBel(IdString name, IdString type, Loc loc, bool gb)
     gridDimX = std::max(gridDimX, loc.x + 1);
     gridDimY = std::max(gridDimY, loc.x + 1);
     tileBelDimZ[loc.x][loc.y] = std::max(tileBelDimZ[loc.x][loc.y], loc.z + 1);
+    return bel;
 }
 
-void Arch::addBelInput(IdString bel, IdString name, IdString wire)
+void Arch::addBelInput(BelId bel, IdString name, WireId wire) { addBelPin(bel, name, wire, PORT_IN); }
+
+void Arch::addBelOutput(BelId bel, IdString name, WireId wire) { addBelPin(bel, name, wire, PORT_OUT); }
+
+void Arch::addBelInout(BelId bel, IdString name, WireId wire) { addBelPin(bel, name, wire, PORT_INOUT); }
+
+void Arch::addBelPin(BelId bel, IdString name, WireId wire, PortType type)
 {
-    NPNR_ASSERT(bel_info(bel).pins.count(name) == 0);
-    PinInfo &pi = bel_info(bel).pins[name];
+    auto &bi = bel_info(bel);
+    NPNR_ASSERT(bi.pins.count(name) == 0);
+    PinInfo &pi = bi.pins[name];
     pi.name = name;
     pi.wire = wire;
-    pi.type = PORT_IN;
+    pi.type = type;
 
-    wire_info(wire).downhill_bel_pins.push_back(BelPin{bel, name});
-    wire_info(wire).bel_pins.push_back(BelPin{bel, name});
+    if (wire != WireId())
+        wire_info(wire).bel_pins.push_back(BelPin{bel, name});
 }
 
-void Arch::addBelOutput(IdString bel, IdString name, IdString wire)
+void Arch::addGroupBel(IdStringList group, BelId bel) { groups[group].bels.push_back(bel); }
+
+void Arch::addGroupWire(IdStringList group, WireId wire) { groups[group].wires.push_back(wire); }
+
+void Arch::addGroupPip(IdStringList group, PipId pip) { groups[group].pips.push_back(pip); }
+
+void Arch::addGroupGroup(IdStringList group, IdStringList grp) { groups[group].groups.push_back(grp); }
+
+void Arch::addDecalGraphic(IdStringList decal, const GraphicElement &graphic)
 {
-    NPNR_ASSERT(bel_info(bel).pins.count(name) == 0);
-    PinInfo &pi = bel_info(bel).pins[name];
-    pi.name = name;
-    pi.wire = wire;
-    pi.type = PORT_OUT;
+    decal_graphics[DecalId(decal, false)].push_back(graphic); // inactive variant
+    decal_graphics[DecalId(decal, true)].push_back(graphic);  // active variant
 
-    wire_info(wire).uphill_bel_pin = BelPin{bel, name};
-    wire_info(wire).bel_pins.push_back(BelPin{bel, name});
-}
+    GraphicElement &active = decal_graphics[DecalId(decal, true)].back();
+    if (active.style == GraphicElement::STYLE_INACTIVE)
+        active.style = GraphicElement::STYLE_ACTIVE;
 
-void Arch::addBelInout(IdString bel, IdString name, IdString wire)
-{
-    NPNR_ASSERT(bel_info(bel).pins.count(name) == 0);
-    PinInfo &pi = bel_info(bel).pins[name];
-    pi.name = name;
-    pi.wire = wire;
-    pi.type = PORT_INOUT;
-
-    wire_info(wire).downhill_bel_pins.push_back(BelPin{bel, name});
-    wire_info(wire).bel_pins.push_back(BelPin{bel, name});
-}
-
-void Arch::addGroupBel(IdString group, IdString bel) { groups[group].bels.push_back(bel); }
-
-void Arch::addGroupWire(IdString group, IdString wire) { groups[group].wires.push_back(wire); }
-
-void Arch::addGroupPip(IdString group, IdString pip) { groups[group].pips.push_back(pip); }
-
-void Arch::addGroupGroup(IdString group, IdString grp) { groups[group].groups.push_back(grp); }
-
-void Arch::addDecalGraphic(DecalId decal, const GraphicElement &graphic)
-{
-    decal_graphics[decal].push_back(graphic);
     refreshUi();
 }
 
-void Arch::setWireDecal(WireId wire, DecalXY decalxy)
+void Arch::setWireDecal(WireId wire, float x, float y, IdStringList decal)
 {
-    wire_info(wire).decalxy = decalxy;
+    wires.at(wire.index).decalxy.x = x;
+    wires.at(wire.index).decalxy.y = y;
+    wires.at(wire.index).decalxy.decal = DecalId(decal, false);
     refreshUiWire(wire);
 }
 
-void Arch::setPipDecal(PipId pip, DecalXY decalxy)
+void Arch::setPipDecal(PipId pip, float x, float y, IdStringList decal)
 {
-    pip_info(pip).decalxy = decalxy;
+    pips.at(pip.index).decalxy.x = x;
+    pips.at(pip.index).decalxy.y = y;
+    pips.at(pip.index).decalxy.decal = DecalId(decal, false);
     refreshUiPip(pip);
 }
 
-void Arch::setBelDecal(BelId bel, DecalXY decalxy)
+void Arch::setBelDecal(BelId bel, float x, float y, IdStringList decal)
 {
-    bel_info(bel).decalxy = decalxy;
+    bels.at(bel.index).decalxy.x = x;
+    bels.at(bel.index).decalxy.y = y;
+    bels.at(bel.index).decalxy.decal = DecalId(decal, false);
     refreshUiBel(bel);
 }
 
-void Arch::setGroupDecal(GroupId group, DecalXY decalxy)
+void Arch::setGroupDecal(GroupId group, float x, float y, IdStringList decal)
 {
-    groups[group].decalxy = decalxy;
+    groups.at(group).decalxy.x = x;
+    groups.at(group).decalxy.y = y;
+    groups.at(group).decalxy.decal = DecalId(decal, false);
     refreshUiGroup(group);
 }
 
-void Arch::setWireAttr(IdString wire, IdString key, const std::string &value) { wire_info(wire).attrs[key] = value; }
+void Arch::setWireAttr(WireId wire, IdString key, const std::string &value) { wire_info(wire).attrs[key] = value; }
 
-void Arch::setPipAttr(IdString pip, IdString key, const std::string &value) { pip_info(pip).attrs[key] = value; }
+void Arch::setPipAttr(PipId pip, IdString key, const std::string &value) { pip_info(pip).attrs[key] = value; }
 
-void Arch::setBelAttr(IdString bel, IdString key, const std::string &value) { bel_info(bel).attrs[key] = value; }
+void Arch::setBelAttr(BelId bel, IdString key, const std::string &value) { bel_info(bel).attrs[key] = value; }
 
 void Arch::setLutK(int K) { args.K = K; }
 
@@ -228,34 +221,40 @@ void Arch::setDelayScaling(double scale, double offset)
 
 void Arch::addCellTimingClock(IdString cell, IdString port) { cellTiming[cell].portClasses[port] = TMG_CLOCK_INPUT; }
 
-void Arch::addCellTimingDelay(IdString cell, IdString fromPort, IdString toPort, DelayInfo delay)
+void Arch::addCellTimingDelay(IdString cell, IdString fromPort, IdString toPort, delay_t delay)
 {
     if (get_or_default(cellTiming[cell].portClasses, fromPort, TMG_IGNORE) == TMG_IGNORE)
         cellTiming[cell].portClasses[fromPort] = TMG_COMB_INPUT;
     if (get_or_default(cellTiming[cell].portClasses, toPort, TMG_IGNORE) == TMG_IGNORE)
         cellTiming[cell].portClasses[toPort] = TMG_COMB_OUTPUT;
-    cellTiming[cell].combDelays[CellDelayKey{fromPort, toPort}] = delay;
+    cellTiming[cell].combDelays[CellDelayKey{fromPort, toPort}] = DelayQuad(delay);
 }
 
-void Arch::addCellTimingSetupHold(IdString cell, IdString port, IdString clock, DelayInfo setup, DelayInfo hold)
+void Arch::addCellTimingSetupHold(IdString cell, IdString port, IdString clock, delay_t setup, delay_t hold)
 {
     TimingClockingInfo ci;
     ci.clock_port = clock;
     ci.edge = RISING_EDGE;
-    ci.setup = setup;
-    ci.hold = hold;
+    ci.setup = DelayPair(setup);
+    ci.hold = DelayPair(hold);
     cellTiming[cell].clockingInfo[port].push_back(ci);
     cellTiming[cell].portClasses[port] = TMG_REGISTER_INPUT;
 }
 
-void Arch::addCellTimingClockToOut(IdString cell, IdString port, IdString clock, DelayInfo clktoq)
+void Arch::addCellTimingClockToOut(IdString cell, IdString port, IdString clock, delay_t clktoq)
 {
     TimingClockingInfo ci;
     ci.clock_port = clock;
     ci.edge = RISING_EDGE;
-    ci.clockToQ = clktoq;
+    ci.clockToQ = DelayQuad(clktoq);
     cellTiming[cell].clockingInfo[port].push_back(ci);
     cellTiming[cell].portClasses[port] = TMG_REGISTER_OUTPUT;
+}
+
+void Arch::clearCellBelPinMap(IdString cell, IdString cell_pin) { cells.at(cell)->bel_pins[cell_pin].clear(); }
+void Arch::addCellBelPinMapping(IdString cell, IdString cell_pin, IdString bel_pin)
+{
+    cells.at(cell)->bel_pins[cell_pin].push_back(bel_pin);
 }
 
 // ---------------------------------------------------------------
@@ -263,25 +262,29 @@ void Arch::addCellTimingClockToOut(IdString cell, IdString port, IdString clock,
 Arch::Arch(ArchArgs args) : chipName("generic"), args(args)
 {
     // Dummy for empty decals
-    decal_graphics[IdString()];
+    decal_graphics[DecalId(IdStringList(), false)];
+    decal_graphics[DecalId(IdStringList(), true)];
 }
 
 void IdString::initialize_arch(const BaseCtx *ctx) {}
 
 // ---------------------------------------------------------------
 
-BelId Arch::getBelByName(IdString name) const
+BelId Arch::getBelByName(IdStringList name) const
 {
-    if (bels.count(name))
-        return name;
-    return BelId();
+    if (name.size() == 0)
+        return BelId();
+    auto fnd = bel_by_name.find(name);
+    if (fnd == bel_by_name.end())
+        NPNR_ASSERT_FALSE_STR("no bel named " + name.str(getCtx()));
+    return fnd->second;
 }
 
-IdString Arch::getBelName(BelId bel) const { return bel; }
+IdStringList Arch::getBelName(BelId bel) const { return bel_info(bel).name; }
 
 Loc Arch::getBelLocation(BelId bel) const
 {
-    auto &info = bels.at(bel);
+    auto &info = bel_info(bel);
     return Loc(info.x, info.y, info.z);
 }
 
@@ -295,7 +298,7 @@ BelId Arch::getBelByLocation(Loc loc) const
 
 const std::vector<BelId> &Arch::getBelsByTile(int x, int y) const { return bels_by_tile.at(x).at(y); }
 
-bool Arch::getBelGlobalBuf(BelId bel) const { return bels.at(bel).gb; }
+bool Arch::getBelGlobalBuf(BelId bel) const { return bel_info(bel).gb; }
 
 uint32_t Arch::getBelChecksum(BelId bel) const
 {
@@ -305,7 +308,9 @@ uint32_t Arch::getBelChecksum(BelId bel) const
 
 void Arch::bindBel(BelId bel, CellInfo *cell, PlaceStrength strength)
 {
-    bels.at(bel).bound_cell = cell;
+    if (uarch)
+        uarch->notifyBelChange(bel, cell);
+    bel_info(bel).bound_cell = cell;
     cell->bel = bel;
     cell->belStrength = strength;
     refreshUiBel(bel);
@@ -313,66 +318,80 @@ void Arch::bindBel(BelId bel, CellInfo *cell, PlaceStrength strength)
 
 void Arch::unbindBel(BelId bel)
 {
-    bels.at(bel).bound_cell->bel = BelId();
-    bels.at(bel).bound_cell->belStrength = STRENGTH_NONE;
-    bels.at(bel).bound_cell = nullptr;
+    if (uarch)
+        uarch->notifyBelChange(bel, nullptr);
+    auto &bi = bel_info(bel);
+    bi.bound_cell->bel = BelId();
+    bi.bound_cell->belStrength = STRENGTH_NONE;
+    bi.bound_cell = nullptr;
     refreshUiBel(bel);
 }
 
-bool Arch::checkBelAvail(BelId bel) const { return bels.at(bel).bound_cell == nullptr; }
+bool Arch::checkBelAvail(BelId bel) const
+{
+    return (!uarch || uarch->checkBelAvail(bel)) && (bel_info(bel).bound_cell == nullptr);
+}
 
-CellInfo *Arch::getBoundBelCell(BelId bel) const { return bels.at(bel).bound_cell; }
+CellInfo *Arch::getBoundBelCell(BelId bel) const { return bel_info(bel).bound_cell; }
 
-CellInfo *Arch::getConflictingBelCell(BelId bel) const { return bels.at(bel).bound_cell; }
+CellInfo *Arch::getConflictingBelCell(BelId bel) const { return bel_info(bel).bound_cell; }
 
-const std::vector<BelId> &Arch::getBels() const { return bel_ids; }
+linear_range<BelId> Arch::getBels() const { return linear_range<BelId>(bels.size()); }
 
-IdString Arch::getBelType(BelId bel) const { return bels.at(bel).type; }
+IdString Arch::getBelType(BelId bel) const { return bel_info(bel).type; }
 
-const std::map<IdString, std::string> &Arch::getBelAttrs(BelId bel) const { return bels.at(bel).attrs; }
+bool Arch::getBelHidden(BelId bel) const { return bel_info(bel).hidden; }
+
+const std::map<IdString, std::string> &Arch::getBelAttrs(BelId bel) const { return bel_info(bel).attrs; }
 
 WireId Arch::getBelPinWire(BelId bel, IdString pin) const
 {
-    const auto &bdata = bels.at(bel);
+    const auto &bdata = bel_info(bel);
     if (!bdata.pins.count(pin))
-        log_error("bel '%s' has no pin '%s'\n", bel.c_str(this), pin.c_str(this));
+        log_error("bel '%s' has no pin '%s'\n", getCtx()->nameOfBel(bel), pin.c_str(this));
     return bdata.pins.at(pin).wire;
 }
 
-PortType Arch::getBelPinType(BelId bel, IdString pin) const { return bels.at(bel).pins.at(pin).type; }
+PortType Arch::getBelPinType(BelId bel, IdString pin) const { return bel_info(bel).pins.at(pin).type; }
 
 std::vector<IdString> Arch::getBelPins(BelId bel) const
 {
     std::vector<IdString> ret;
-    for (auto &it : bels.at(bel).pins)
+    for (auto &it : bel_info(bel).pins)
         ret.push_back(it.first);
     return ret;
 }
 
+const std::vector<IdString> &Arch::getBelPinsForCellPin(const CellInfo *cell_info, IdString pin) const
+{
+    return cell_info->bel_pins.at(pin);
+}
+
 // ---------------------------------------------------------------
 
-WireId Arch::getWireByName(IdString name) const
+WireId Arch::getWireByName(IdStringList name) const
 {
-    if (wires.count(name))
-        return name;
-    return WireId();
+    if (name.size() == 0)
+        return WireId();
+    auto fnd = wire_by_name.find(name);
+    if (fnd == wire_by_name.end())
+        NPNR_ASSERT_FALSE_STR("no wire named " + name.str(getCtx()));
+    return fnd->second;
 }
 
-IdString Arch::getWireName(WireId wire) const { return wire; }
+IdStringList Arch::getWireName(WireId wire) const { return wire_info(wire).name; }
 
-IdString Arch::getWireType(WireId wire) const { return wires.at(wire).type; }
+IdString Arch::getWireType(WireId wire) const { return wire_info(wire).type; }
 
-const std::map<IdString, std::string> &Arch::getWireAttrs(WireId wire) const { return wires.at(wire).attrs; }
+const std::map<IdString, std::string> &Arch::getWireAttrs(WireId wire) const { return wire_info(wire).attrs; }
 
-uint32_t Arch::getWireChecksum(WireId wire) const
-{
-    // FIXME
-    return 0;
-}
+uint32_t Arch::getWireChecksum(WireId wire) const { return wire.index; }
 
 void Arch::bindWire(WireId wire, NetInfo *net, PlaceStrength strength)
 {
-    wires.at(wire).bound_net = net;
+    if (uarch)
+        uarch->notifyWireChange(wire, net);
+    wire_info(wire).bound_net = net;
     net->wires[wire].pip = PipId();
     net->wires[wire].strength = strength;
     refreshUiWire(wire);
@@ -380,55 +399,65 @@ void Arch::bindWire(WireId wire, NetInfo *net, PlaceStrength strength)
 
 void Arch::unbindWire(WireId wire)
 {
-    auto &net_wires = wires.at(wire).bound_net->wires;
+    auto &net_wires = wire_info(wire).bound_net->wires;
 
     auto pip = net_wires.at(wire).pip;
     if (pip != PipId()) {
-        pips.at(pip).bound_net = nullptr;
+        if (uarch)
+            uarch->notifyPipChange(pip, nullptr);
+        pip_info(pip).bound_net = nullptr;
         refreshUiPip(pip);
     }
 
+    if (uarch)
+        uarch->notifyWireChange(wire, nullptr);
     net_wires.erase(wire);
-    wires.at(wire).bound_net = nullptr;
+    wire_info(wire).bound_net = nullptr;
     refreshUiWire(wire);
 }
 
-bool Arch::checkWireAvail(WireId wire) const { return wires.at(wire).bound_net == nullptr; }
+bool Arch::checkWireAvail(WireId wire) const
+{
+    return (!uarch || uarch->checkWireAvail(wire)) && (wire_info(wire).bound_net == nullptr);
+}
 
-NetInfo *Arch::getBoundWireNet(WireId wire) const { return wires.at(wire).bound_net; }
+NetInfo *Arch::getBoundWireNet(WireId wire) const { return wire_info(wire).bound_net; }
 
-NetInfo *Arch::getConflictingWireNet(WireId wire) const { return wires.at(wire).bound_net; }
+NetInfo *Arch::getConflictingWireNet(WireId wire) const { return wire_info(wire).bound_net; }
 
-const std::vector<BelPin> &Arch::getWireBelPins(WireId wire) const { return wires.at(wire).bel_pins; }
+const std::vector<BelPin> &Arch::getWireBelPins(WireId wire) const { return wire_info(wire).bel_pins; }
 
-const std::vector<WireId> &Arch::getWires() const { return wire_ids; }
+linear_range<WireId> Arch::getWires() const { return linear_range<WireId>(wires.size()); }
 
 // ---------------------------------------------------------------
 
-PipId Arch::getPipByName(IdString name) const
+PipId Arch::getPipByName(IdStringList name) const
 {
-    if (pips.count(name))
-        return name;
-    return PipId();
+    if (name.size() == 0)
+        return PipId();
+    auto fnd = pip_by_name.find(name);
+    if (fnd == pip_by_name.end())
+        NPNR_ASSERT_FALSE_STR("no pip named " + name.str(getCtx()));
+    return fnd->second;
 }
 
-IdString Arch::getPipName(PipId pip) const { return pip; }
+IdStringList Arch::getPipName(PipId pip) const { return pip_info(pip).name; }
 
-IdString Arch::getPipType(PipId pip) const { return pips.at(pip).type; }
+IdString Arch::getPipType(PipId pip) const { return pip_info(pip).type; }
 
-const std::map<IdString, std::string> &Arch::getPipAttrs(PipId pip) const { return pips.at(pip).attrs; }
+const std::map<IdString, std::string> &Arch::getPipAttrs(PipId pip) const { return pip_info(pip).attrs; }
 
-uint32_t Arch::getPipChecksum(PipId wire) const
-{
-    // FIXME
-    return 0;
-}
+uint32_t Arch::getPipChecksum(PipId pip) const { return pip.index; }
 
 void Arch::bindPip(PipId pip, NetInfo *net, PlaceStrength strength)
 {
-    WireId wire = pips.at(pip).dstWire;
-    pips.at(pip).bound_net = net;
-    wires.at(wire).bound_net = net;
+    WireId wire = pip_info(pip).dstWire;
+    if (uarch) {
+        uarch->notifyPipChange(pip, net);
+        uarch->notifyWireChange(wire, net);
+    }
+    pip_info(pip).bound_net = net;
+    wire_info(wire).bound_net = net;
     net->wires[wire].pip = pip;
     net->wires[wire].strength = strength;
     refreshUiPip(pip);
@@ -437,43 +466,59 @@ void Arch::bindPip(PipId pip, NetInfo *net, PlaceStrength strength)
 
 void Arch::unbindPip(PipId pip)
 {
-    WireId wire = pips.at(pip).dstWire;
-    wires.at(wire).bound_net->wires.erase(wire);
-    pips.at(pip).bound_net = nullptr;
-    wires.at(wire).bound_net = nullptr;
+    WireId wire = pip_info(pip).dstWire;
+    if (uarch) {
+        uarch->notifyPipChange(pip, nullptr);
+        uarch->notifyWireChange(wire, nullptr);
+    }
+    wire_info(wire).bound_net->wires.erase(wire);
+    pip_info(pip).bound_net = nullptr;
+    wire_info(wire).bound_net = nullptr;
     refreshUiPip(pip);
     refreshUiWire(wire);
 }
 
-bool Arch::checkPipAvail(PipId pip) const { return pips.at(pip).bound_net == nullptr; }
+bool Arch::checkPipAvail(PipId pip) const
+{
+    return (!uarch || uarch->checkPipAvail(pip)) && (pip_info(pip).bound_net == nullptr);
+}
 
-NetInfo *Arch::getBoundPipNet(PipId pip) const { return pips.at(pip).bound_net; }
+bool Arch::checkPipAvailForNet(PipId pip, const NetInfo *net) const
+{
+    if (uarch && !uarch->checkPipAvailForNet(pip, net))
+        return false;
+    NetInfo *bound_net = pip_info(pip).bound_net;
+    return bound_net == nullptr || bound_net == net;
+}
 
-NetInfo *Arch::getConflictingPipNet(PipId pip) const { return pips.at(pip).bound_net; }
+NetInfo *Arch::getBoundPipNet(PipId pip) const { return pip_info(pip).bound_net; }
 
-WireId Arch::getConflictingPipWire(PipId pip) const { return pips.at(pip).bound_net ? pips.at(pip).dstWire : WireId(); }
+NetInfo *Arch::getConflictingPipNet(PipId pip) const { return pip_info(pip).bound_net; }
 
-const std::vector<PipId> &Arch::getPips() const { return pip_ids; }
+WireId Arch::getConflictingPipWire(PipId pip) const
+{
+    return pip_info(pip).bound_net ? pip_info(pip).dstWire : WireId();
+}
 
-Loc Arch::getPipLocation(PipId pip) const { return pips.at(pip).loc; }
+linear_range<PipId> Arch::getPips() const { return linear_range<PipId>(pips.size()); }
 
-WireId Arch::getPipSrcWire(PipId pip) const { return pips.at(pip).srcWire; }
+Loc Arch::getPipLocation(PipId pip) const { return pip_info(pip).loc; }
 
-WireId Arch::getPipDstWire(PipId pip) const { return pips.at(pip).dstWire; }
+WireId Arch::getPipSrcWire(PipId pip) const { return pip_info(pip).srcWire; }
 
-DelayInfo Arch::getPipDelay(PipId pip) const { return pips.at(pip).delay; }
+WireId Arch::getPipDstWire(PipId pip) const { return pip_info(pip).dstWire; }
 
-const std::vector<PipId> &Arch::getPipsDownhill(WireId wire) const { return wires.at(wire).downhill; }
+DelayQuad Arch::getPipDelay(PipId pip) const { return DelayQuad(pip_info(pip).delay); }
 
-const std::vector<PipId> &Arch::getPipsUphill(WireId wire) const { return wires.at(wire).uphill; }
+const std::vector<PipId> &Arch::getPipsDownhill(WireId wire) const { return wire_info(wire).downhill; }
 
-const std::vector<PipId> &Arch::getWireAliases(WireId wire) const { return wires.at(wire).aliases; }
+const std::vector<PipId> &Arch::getPipsUphill(WireId wire) const { return wire_info(wire).uphill; }
 
 // ---------------------------------------------------------------
 
-GroupId Arch::getGroupByName(IdString name) const { return name; }
+GroupId Arch::getGroupByName(IdStringList name) const { return name; }
 
-IdString Arch::getGroupName(GroupId group) const { return group; }
+IdStringList Arch::getGroupName(GroupId group) const { return group; }
 
 std::vector<GroupId> Arch::getGroups() const
 {
@@ -495,18 +540,21 @@ const std::vector<GroupId> &Arch::getGroupGroups(GroupId group) const { return g
 
 delay_t Arch::estimateDelay(WireId src, WireId dst) const
 {
-    const WireInfo &s = wires.at(src);
-    const WireInfo &d = wires.at(dst);
+    if (uarch)
+        return uarch->estimateDelay(src, dst);
+    const WireInfo &s = wire_info(src);
+    const WireInfo &d = wire_info(dst);
     int dx = abs(s.x - d.x);
     int dy = abs(s.y - d.y);
     return (dx + dy) * args.delayScale + args.delayOffset;
 }
 
-delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
+delay_t Arch::predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdString dst_pin) const
 {
-    const auto &driver = net_info->driver;
-    auto driver_loc = getBelLocation(driver.cell->bel);
-    auto sink_loc = getBelLocation(sink.cell->bel);
+    if (uarch)
+        return uarch->predictDelay(src_bel, src_pin, dst_bel, dst_pin);
+    auto driver_loc = getBelLocation(src_bel);
+    auto sink_loc = getBelLocation(dst_bel);
 
     int dx = abs(sink_loc.x - driver_loc.x);
     int dy = abs(sink_loc.y - driver_loc.y);
@@ -515,14 +563,16 @@ delay_t Arch::predictDelay(const NetInfo *net_info, const PortRef &sink) const
 
 bool Arch::getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay_t &budget) const { return false; }
 
-ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
+BoundingBox Arch::getRouteBoundingBox(WireId src, WireId dst) const
 {
-    ArcBounds bb;
+    if (uarch)
+        return uarch->getRouteBoundingBox(src, dst);
+    BoundingBox bb;
 
-    int src_x = wires.at(src).x;
-    int src_y = wires.at(src).y;
-    int dst_x = wires.at(dst).x;
-    int dst_y = wires.at(dst).y;
+    int src_x = wire_info(src).x;
+    int src_y = wire_info(src).y;
+    int dst_x = wire_info(dst).x;
+    int dst_y = wire_info(dst).y;
 
     bb.x0 = src_x;
     bb.y0 = src_y;
@@ -543,18 +593,20 @@ ArcBounds Arch::getRouteBoundingBox(WireId src, WireId dst) const
 
 bool Arch::place()
 {
+    if (uarch)
+        uarch->prePlace();
     std::string placer = str_or_default(settings, id("placer"), defaultPlacer);
     if (placer == "heap") {
         bool have_iobuf_or_constr = false;
-        for (auto cell : sorted(cells)) {
-            CellInfo *ci = cell.second;
-            if (ci->type == id("GENERIC_IOB") || ci->bel != BelId() || ci->attrs.count(id("BEL"))) {
+        for (auto &cell : cells) {
+            CellInfo *ci = cell.second.get();
+            if (ci->isPseudo() || ci->type == id("GENERIC_IOB") || ci->bel != BelId() || ci->attrs.count(id("BEL"))) {
                 have_iobuf_or_constr = true;
                 break;
             }
         }
         bool retVal;
-        if (!have_iobuf_or_constr) {
+        if (!have_iobuf_or_constr && !uarch) {
             log_warning("Unable to use HeAP due to a lack of IO buffers or constrained cells as anchors; reverting to "
                         "SA.\n");
             retVal = placer1(getCtx(), Placer1Cfg(getCtx()));
@@ -563,11 +615,15 @@ bool Arch::place()
             cfg.ioBufTypes.insert(id("GENERIC_IOB"));
             retVal = placer_heap(getCtx(), cfg);
         }
+        if (uarch)
+            uarch->postPlace();
         getCtx()->settings[getCtx()->id("place")] = 1;
         archInfoToAttributes();
         return retVal;
     } else if (placer == "sa") {
         bool retVal = placer1(getCtx(), Placer1Cfg(getCtx()));
+        if (uarch)
+            uarch->postPlace();
         getCtx()->settings[getCtx()->id("place")] = 1;
         archInfoToAttributes();
         return retVal;
@@ -578,6 +634,8 @@ bool Arch::place()
 
 bool Arch::route()
 {
+    if (uarch)
+        uarch->preRoute();
     std::string router = str_or_default(settings, id("router"), defaultRouter);
     bool result;
     if (router == "router1") {
@@ -588,6 +646,8 @@ bool Arch::route()
     } else {
         log_error("iCE40 architecture does not support router '%s'\n", router.c_str());
     }
+    if (uarch)
+        uarch->postRoute();
     getCtx()->settings[getCtx()->id("route")] = 1;
     archInfoToAttributes();
     return result;
@@ -598,23 +658,37 @@ bool Arch::route()
 const std::vector<GraphicElement> &Arch::getDecalGraphics(DecalId decal) const
 {
     if (!decal_graphics.count(decal)) {
-        std::cerr << "No decal named " << decal.str(this) << std::endl;
-        log_error("No decal named %s!\n", decal.c_str(this));
+        std::cerr << "No decal named " << decal.name.str(getCtx()) << std::endl;
     }
     return decal_graphics.at(decal);
 }
 
-DecalXY Arch::getBelDecal(BelId bel) const { return bels.at(bel).decalxy; }
+DecalXY Arch::getBelDecal(BelId bel) const
+{
+    DecalXY result = bel_info(bel).decalxy;
+    result.decal.active = getBoundBelCell(bel) != nullptr;
+    return result;
+}
 
-DecalXY Arch::getWireDecal(WireId wire) const { return wires.at(wire).decalxy; }
+DecalXY Arch::getWireDecal(WireId wire) const
+{
+    DecalXY result = wire_info(wire).decalxy;
+    result.decal.active = getBoundWireNet(wire) != nullptr;
+    return result;
+}
 
-DecalXY Arch::getPipDecal(PipId pip) const { return pips.at(pip).decalxy; }
+DecalXY Arch::getPipDecal(PipId pip) const
+{
+    DecalXY result = pip_info(pip).decalxy;
+    result.decal.active = getBoundPipNet(pip) != nullptr;
+    return result;
+}
 
 DecalXY Arch::getGroupDecal(GroupId group) const { return groups.at(group).decalxy; }
 
 // ---------------------------------------------------------------
 
-bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const
+bool Arch::getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayQuad &delay) const
 {
     if (!cellTiming.count(cell->name))
         return false;
@@ -649,23 +723,10 @@ TimingClockingInfo Arch::getPortClockingInfo(const CellInfo *cell, IdString port
     return tmg.clockingInfo.at(port).at(index);
 }
 
-bool Arch::isValidBelForCell(CellInfo *cell, BelId bel) const
+bool Arch::isBelLocationValid(BelId bel, bool explain_invalid) const
 {
-    std::vector<const CellInfo *> cells;
-    cells.push_back(cell);
-    Loc loc = getBelLocation(bel);
-    for (auto tbel : getBelsByTile(loc.x, loc.y)) {
-        if (tbel == bel)
-            continue;
-        CellInfo *bound = getBoundBelCell(tbel);
-        if (bound != nullptr)
-            cells.push_back(bound);
-    }
-    return cellsCompatible(cells.data(), int(cells.size()));
-}
-
-bool Arch::isBelLocationValid(BelId bel) const
-{
+    if (uarch)
+        return uarch->isBelLocationValid(bel, explain_invalid);
     std::vector<const CellInfo *> cells;
     Loc loc = getBelLocation(bel);
     for (auto tbel : getBelsByTile(loc.x, loc.y)) {
@@ -676,32 +737,31 @@ bool Arch::isBelLocationValid(BelId bel) const
     return cellsCompatible(cells.data(), int(cells.size()));
 }
 
-#ifdef WITH_HEAP
 const std::string Arch::defaultPlacer = "heap";
-#else
-const std::string Arch::defaultPlacer = "sa";
-#endif
 
-const std::vector<std::string> Arch::availablePlacers = {"sa",
-#ifdef WITH_HEAP
-                                                         "heap"
-#endif
-};
+const std::vector<std::string> Arch::availablePlacers = {"sa", "heap"};
 
 const std::string Arch::defaultRouter = "router1";
 const std::vector<std::string> Arch::availableRouters = {"router1", "router2"};
 
 void Arch::assignArchInfo()
 {
+    int index = 0;
     for (auto &cell : getCtx()->cells) {
         CellInfo *ci = cell.second.get();
         if (ci->type == id("GENERIC_SLICE")) {
             ci->is_slice = true;
-            ci->slice_clk = get_net_or_empty(ci, id("CLK"));
+            ci->slice_clk = ci->getPort(id("CLK"));
         } else {
             ci->is_slice = false;
         }
         ci->user_group = int_or_default(ci->attrs, id("PACK_GROUP"), -1);
+        // If no manual cell->bel pin rule has been created; assign a default one
+        for (auto &p : ci->ports)
+            if (!ci->bel_pins.count(p.first))
+                ci->bel_pins.emplace(p.first, std::vector<IdString>{p.first});
+        ci->flat_index = index;
+        ++index;
     }
 }
 

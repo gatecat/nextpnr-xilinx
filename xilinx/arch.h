@@ -19,13 +19,13 @@
  *
  */
 
-#ifndef NEXTPNR_H
-#error Include "arch.h" via "nextpnr.h" only.
-#endif
+#ifndef XILINX_ARCH_H
+#define XILINX_ARCH_H
 
 #include <boost/iostreams/device/mapped_file.hpp>
 
 #include <iostream>
+#include "base_arch.h"
 
 NEXTPNR_NAMESPACE_BEGIN
 
@@ -673,13 +673,29 @@ struct ArchArgs
     std::string chipdb;
 };
 
-struct Arch : BaseCtx
+struct ArchRanges : BaseArchRanges
+{
+    using ArchArgsT = ArchArgs;
+    // Bels
+    using AllBelsRangeT = BelRange;
+    using TileBelsRangeT = BelRange;
+    using BelPinsRangeT = std::vector<IdString>;
+    // Wires
+    using AllWiresRangeT = WireRange;
+    using DownhillPipRangeT = DownhillPipRange;
+    using UphillPipRangeT = UphillPipRange;
+    using WireBelPinRangeT = BelPinRange;
+    // Pips
+    using AllPipsRangeT = AllPipRange;
+};
+
+struct Arch : BaseArch<ArchRanges>
 {
     boost::iostreams::mapped_file_source blob_file;
     const ChipInfoPOD *chip_info;
 
-    mutable std::unordered_map<std::string, int> tile_by_name;
-    mutable std::unordered_map<std::string, std::pair<int, int>> site_by_name;
+    mutable dict<std::string, int> tile_by_name;
+    mutable dict<std::string, std::pair<int, int>> site_by_name;
 
     dict<WireId, NetInfo *> wire_to_net;
     dict<PipId, NetInfo *> pip_to_net;
@@ -730,7 +746,7 @@ struct Arch : BaseCtx
 
     std::string getChipName() const;
 
-    IdString archId() const { return id("xilinx"); }
+    IdString archId() const { return id_xilinx; }
     ArchArgs archArgs() const { return args; }
     IdString archArgsToId(ArchArgs args) const;
 
@@ -745,18 +761,18 @@ struct Arch : BaseCtx
 
     void setup_byname() const;
 
-    BelId getBelByName(IdString name) const;
+    BelId getBelByName(IdStringList name) const override;
 
-    IdString getBelName(BelId bel) const
+    IdStringList getBelName(BelId bel) const
     {
         NPNR_ASSERT(bel != BelId());
         int site = locInfo(bel).bel_data[bel.index].site;
         if (site != -1) {
-            return id(std::string(chip_info->tile_insts[bel.tile].site_insts[site].name.get()) + "/" +
-                      IdString(locInfo(bel).bel_data[bel.index].name).str(this));
+            return IdStringList({id(std::string(chip_info->tile_insts[bel.tile].site_insts[site].name.get()) + "/" +
+                                    IdString(locInfo(bel).bel_data[bel.index].name).str(this))});
         } else {
-            return id(std::string(chip_info->tile_insts[bel.tile].name.get()) + "/" +
-                      IdString(locInfo(bel).bel_data[bel.index].name).str(this));
+            return IdStringList({id(std::string(chip_info->tile_insts[bel.tile].name.get()) + "/" +
+                                    IdString(locInfo(bel).bel_data[bel.index].name).str(this))});
         }
     }
 
@@ -879,8 +895,7 @@ struct Arch : BaseCtx
     {
         // if (chip_info->height > 600 && (bel.tile / chip_info->width) < 752) // constrain to SLR0
         //    return true;
-        if ((getBelType(bel) == id_PSEUDO_GND || getBelType(bel) == id_PSEUDO_VCC) &&
-            ((bel.tile % chip_info->width) != 0))
+        if ((getBelType(bel).in(id_PSEUDO_GND, id_PSEUDO_VCC)) && ((bel.tile % chip_info->width) != 0))
             return true; // PSEUDO drivers must be at x=0 to have access to the global pseudo-network
         return false;
     }
@@ -956,9 +971,9 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
 
-    mutable std::unordered_map<IdString, WireId> wire_by_name_cache;
+    mutable dict<IdString, WireId> wire_by_name_cache;
 
-    WireId getWireByName(IdString name) const;
+    WireId getWireByName(IdStringList name) const;
 
     const TileWireInfoPOD &wireInfo(WireId wire) const
     {
@@ -970,19 +985,21 @@ struct Arch : BaseCtx
         }
     }
 
-    IdString getWireName(WireId wire) const
+    IdStringList getWireName(WireId wire) const
     {
         NPNR_ASSERT_MSG(wire != WireId(), "uninitialized wire");
         if (wire.tile != -1 && locInfo(wire).wire_data[wire.index].site != -1) {
-            return id(std::string("SITEWIRE/") +
-                      chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +
-                      std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this));
+            return IdStringList({id(
+                    std::string("SITEWIRE/") +
+                    chip_info->tile_insts[wire.tile].site_insts[locInfo(wire).wire_data[wire.index].site].name.get() +
+                    std::string("/") + IdString(locInfo(wire).wire_data[wire.index].name).str(this))});
         } else {
-            return id(std::string(chip_info
-                                          ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
-                                                                       : wire.tile]
-                                          .name.get()) +
-                      "/" + IdString(wireInfo(wire).name).c_str(this));
+            return IdStringList({id(
+                    std::string(chip_info
+                                        ->tile_insts[wire.tile == -1 ? chip_info->nodes[wire.index].tile_wires[0].tile
+                                                                     : wire.tile]
+                                        .name.get()) +
+                    "/" + IdString(wireInfo(wire).name).c_str(this))});
         }
     }
 
@@ -1050,12 +1067,7 @@ struct Arch : BaseCtx
         return w2n == wire_to_net.end() ? nullptr : w2n->second;
     }
 
-    DelayInfo getWireDelay(WireId wire) const
-    {
-        DelayInfo delay;
-        delay.delay = 0;
-        return delay;
-    }
+    DelayQuad getWireDelay(WireId wire) const override { return DelayQuad(0); }
 
     TileWireRange getTileWireRange(WireId wire) const
     {
@@ -1105,9 +1117,9 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
 
-    mutable std::unordered_map<IdString, PipId> pip_by_name_cache;
+    mutable dict<IdString, PipId> pip_by_name_cache;
 
-    PipId getPipByName(IdString name) const;
+    PipId getPipByName(IdStringList name) const;
 
     void bindPip(PipId pip, NetInfo *net, PlaceStrength strength)
     {
@@ -1264,7 +1276,7 @@ struct Arch : BaseCtx
         return loc;
     }
 
-    IdString getPipName(PipId pip) const;
+    IdStringList getPipName(PipId pip) const override;
 
     IdString getPipType(PipId pip) const;
     std::vector<std::pair<IdString, std::string>> getPipAttrs(PipId pip) const;
@@ -1371,9 +1383,9 @@ struct Arch : BaseCtx
             return locInfo(wire).wire_data[wire.index].intent;
     }
 
-    DelayInfo getPipDelay(PipId pip) const
+    DelayQuad getPipDelay(PipId pip) const
     {
-        DelayInfo delay;
+        delay_t delay;
         NPNR_ASSERT(pip != PipId());
         if (locInfo(pip).pip_data[pip.index].flags == PIP_TILE_ROUTING) {
             int src_intent = wireIntent(getPipSrcWire(pip)), dst_intent = wireIntent(getPipDstWire(pip));
@@ -1384,12 +1396,12 @@ struct Arch : BaseCtx
                 if (dst_intent == ID_NODE_LOCAL || dst_intent == ID_NODE_HLONG || dst_intent == ID_NODE_VLONG ||
                     dst_intent == ID_NODE_VQUAD || dst_intent == ID_NODE_HQUAD) {
                     // Assign a high penalty from global to local
-                    delay.delay = 250;
+                    delay = 250;
                 } else {
-                    delay.delay = 100;
+                    delay = 100;
                 }
             } else if (dst_intent == ID_NODE_LAGUNA_DATA) {
-                delay.delay = 5000;
+                delay = 5000;
             } else {
                 const delay_t pip_epsilon = 35;
                 auto &pip_data = locInfo(pip).pip_data[pip.index];
@@ -1415,13 +1427,13 @@ struct Arch : BaseCtx
                     pip_delay += delay_t(
                             (float(src_timing.resistance + pip_timing.resistance) * dst_timing.capacitance) / 1e9);
                 }
-                delay.delay = std::max(pip_delay, pip_epsilon);
+                delay = std::max(pip_delay, pip_epsilon);
             }
         } else if (locInfo(pip).pip_data[pip.index].flags == PIP_LUT_ROUTETHRU) {
-            delay.delay = 300;
+            delay = 300;
         } else
-            delay.delay = 25;
-        return delay;
+            delay = 25;
+        return DelayQuad(delay);
     }
 
     DownhillPipRange getPipsDownhill(WireId wire) const
@@ -1470,8 +1482,8 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
 
-    GroupId getGroupByName(IdString name) const { return GroupId(); }
-    IdString getGroupName(GroupId group) const { return IdString(); }
+    GroupId getGroupByName(IdStringList name) const { return GroupId(); }
+    IdStringList getGroupName(GroupId group) const { return IdStringList(); }
     std::vector<GroupId> getGroups() const { return {}; }
     std::vector<BelId> getGroupBels(GroupId group) const { return {}; }
     std::vector<WireId> getGroupWires(GroupId group) const { return {}; }
@@ -1480,20 +1492,15 @@ struct Arch : BaseCtx
 
     // -------------------------------------------------
     mutable IdString gnd_glbl, gnd_row, vcc_glbl, vcc_row;
-    delay_t estimateDelay(WireId src, WireId dst, bool debug = false) const;
-    delay_t predictDelay(const NetInfo *net_info, const PortRef &sink) const;
-    ArcBounds getRouteBoundingBox(WireId src, WireId dst) const;
+    delay_t estimateDelay(WireId src, WireId dst) const override;
+    delay_t predictDelay(BelId src_bel, IdString src_pin, BelId dst_bel, IdString dst_pin) const override;
+    BoundingBox getRouteBoundingBox(WireId src, WireId dst) const;
     delay_t getBoundingBoxCost(WireId src, WireId dst, int distance) const;
     delay_t getDelayEpsilon() const { return 20; }
     delay_t getRipupDelayPenalty() const { return 120; }
     delay_t getWireRipupDelayPenalty(WireId wire) const;
     float getDelayNS(delay_t v) const { return v * 0.001; }
-    DelayInfo getDelayFromNS(float ns) const
-    {
-        DelayInfo del;
-        del.delay = delay_t(ns * 1000);
-        return del;
-    }
+    delay_t getDelayFromNS(float ns) const override { return delay_t(ns * 1000); }
     uint32_t getDelayChecksum(delay_t v) const { return v; }
     bool getBudgetOverride(const NetInfo *net_info, const PortRef &sink, delay_t &budget) const;
 
@@ -1514,12 +1521,12 @@ struct Arch : BaseCtx
     // -------------------------------------------------
 
     // Get the delay through a cell from one port to another, returning false
-    // if no path exists. This only considers combinational delays, as required by the Arch API
-    bool getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayInfo &delay) const;
+    // if no path exists
+    bool getCellDelay(const CellInfo *cell, IdString fromPort, IdString toPort, DelayQuad &delay) const override;
     // Get the port class, also setting clockInfoCount to the number of TimingClockingInfos associated with a port
-    TimingPortClass getPortTimingClass(const CellInfo *cell, IdString port, int &clockInfoCount) const;
+    TimingPortClass getPortTimingClass(const CellInfo *cell, IdString port, int &clockInfoCount) const override;
     // Get the TimingClockingInfo of a port
-    TimingClockingInfo getPortClockingInfo(const CellInfo *cell, IdString port, int index) const;
+    TimingClockingInfo getPortClockingInfo(const CellInfo *cell, IdString port, int index) const override;
 
     // -------------------------------------------------
 
@@ -1527,7 +1534,7 @@ struct Arch : BaseCtx
     // implemented in arch_place.cc)
 
     bool xc7_cell_timing_lookup(int tt_id, int inst_id, IdString variant, IdString from_port, IdString to_port,
-                                DelayInfo &delay) const;
+                                DelayQuad &delay) const;
 
     // Whether or not a given cell can be placed at a given Bel
     // This is not intended for Bel type checks, but finer-grained constraints
@@ -1535,7 +1542,7 @@ struct Arch : BaseCtx
     bool isValidBelForCell(CellInfo *cell, BelId bel) const;
 
     // Return true whether all Bels at a given location are valid
-    bool isBelLocationValid(BelId bel) const;
+    bool isBelLocationValid(BelId bel, bool explain_invalid = false) const;
 
     bool xcu_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const;
     bool xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const;
@@ -1544,24 +1551,22 @@ struct Arch : BaseCtx
     bool isLogicTile(BelId bel) const
     {
         IdString belTileType = getBelTileType(bel);
-        return (belTileType == id_CLEL_L || belTileType == id_CLEL_R || belTileType == id_CLEM ||
-                belTileType == id_CLEM_R || belTileType == id_CLBLL_L || belTileType == id_CLBLL_R ||
-                belTileType == id_CLBLM_L || belTileType == id_CLBLM_R);
+        return (belTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L,
+                               id_CLBLM_R));
     }
     bool isBRAMTile(BelId bel) const
     {
         IdString belTileType = getBelTileType(bel);
-        return belTileType == id_BRAM || belTileType == id_BRAM_L || belTileType == id_BRAM_R;
+        return belTileType.in(id_BRAM, id_BRAM_L, id_BRAM_R);
     }
-    bool isLogicTile(WireId wire) const
+    /*bool isLogicTile(WireId wire) const
     {
         if (wire.tile == -1)
             return false;
-        IdString wireTileType = chip_info->tile_insts[wire.tile].type;
-        return (wireTileType == id_CLEL_L || wireTileType == id_CLEL_R || wireTileType == id_CLEM ||
-                wireTileType == id_CLEM_R || wireTileType == id_CLBLL_L || wireTileType == id_CLBLL_R ||
-                wireTileType == id_CLBLM_L || wireTileType == id_CLBLM_R);
-    }
+        IdString wireTileType = IdString(chip_info->tile_insts[wire.tile].type);
+        return (wireTileType.in(id_CLEL_L, id_CLEL_R, id_CLEM, id_CLEM_R, id_CLBLL_L, id_CLBLL_R, id_CLBLM_L,
+    id_CLBLM_R));
+    }*/
 
     Loc getSiteLocInTile(BelId bel) const
     {
@@ -1595,11 +1600,11 @@ struct Arch : BaseCtx
     void routeVcc();
     void routeClock();
     void findSourceSinkLocations();
-    std::unordered_map<WireId, Loc> sink_locs, source_locs;
+    dict<WireId, Loc> sink_locs, source_locs;
     // -------------------------------------------------
 
     void parseXdc(std::istream &file);
-    mutable std::unordered_map<std::string, std::string> pin_to_site;
+    mutable dict<std::string, std::string> pin_to_site;
     std::string getPackagePinSite(const std::string &pin) const;
     std::string getBelPackagePin(BelId bel) const;
     std::string getBelSite(BelId bel) const
@@ -1632,3 +1637,5 @@ struct Arch : BaseCtx
 };
 
 NEXTPNR_NAMESPACE_END
+
+#endif
