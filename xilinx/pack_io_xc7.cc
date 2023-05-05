@@ -719,17 +719,20 @@ void XC7Packer::pack_iologic()
             auto io_bel_str = ctx->getBelName(io_bel).str(ctx);
             std::string ol_site = get_ologic_site(io_bel_str);
 
+            PortRef dest_port = *q->users.begin();
+            auto is_tristate = dest_port.port == id_TRI;
+
             dict<IdString, XFormRule> oddr_rules;
             if (boost::contains(io_bel_str, "IOB18"))
-                oddr_rules[id_ODDR].new_type = id_OLOGICE2_OUTFF;
+                oddr_rules[id_ODDR].new_type = is_tristate ? id_OLOGICE2_TFF : id_OLOGICE2_OUTFF;
             else
-                oddr_rules[id_ODDR].new_type = id_OLOGICE3_OUTFF;
+                oddr_rules[id_ODDR].new_type = is_tristate ? id_OLOGICE3_TFF : id_OLOGICE3_OUTFF;
             oddr_rules[id_ODDR].port_xform[id_C] = id_CK;
             oddr_rules[id_ODDR].port_xform[id_S] = id_SR;
             oddr_rules[id_ODDR].port_xform[id_R] = id_SR;
             xform_cell(oddr_rules, ci);
 
-            ci->attrs[id_BEL] = ol_site + "/OUTFF";
+            ci->attrs[id_BEL] = ol_site + (is_tristate ? "/TFF" : "/OUTFF");
         } else if (ci->type == id_OSERDESE2) {
             NetInfo *q = ci->getPort(id_OQ);
             NetInfo *ofb = ci->getPort(id_OFB);
