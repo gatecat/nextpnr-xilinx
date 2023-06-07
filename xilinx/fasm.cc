@@ -685,8 +685,11 @@ struct FasmBackend
 
     struct BankIoConfig
     {
-        bool stepdown = false;
-        bool vref = false;
+        bool stepdown  = false;
+        bool vref      = false;
+        bool tmds_33   = false;
+        bool lvds_25   = false;
+        bool only_diff = false;
     };
 
     dict<int, BankIoConfig> ioconfig_by_hclk;
@@ -720,12 +723,20 @@ struct FasmBackend
         push("IOB_Y" + std::to_string(yLoc));
 
         bool has_diff_prefix = boost::starts_with(iostandard, "DIFF_");
-        bool is_diff = iostandard == "LVDS" || has_diff_prefix;
+        bool is_tmds33 = iostandard == "TMDS_33";
+        bool is_lvds25 = iostandard == "LVDS_25";
+        bool is_lvds = boost::starts_with(iostandard, "LVDS");
+        bool only_diff = is_tmds33 || is_lvds;
+        bool is_diff = only_diff || has_diff_prefix;
         if (has_diff_prefix)
             iostandard.erase(0, 5);
         bool is_sstl = iostandard == "SSTL12" || iostandard == "SSTL135" || iostandard == "SSTL15";
 
         int hclk = ctx->getHclkForIob(pad->bel);
+
+        if (only_diff) ioconfig_by_hclk[hclk].only_diff = true;
+        if (is_tmds33) ioconfig_by_hclk[hclk].tmds_33   = true;
+        if (is_lvds25) ioconfig_by_hclk[hclk].lvds_25   = true;
 
         if (is_output) {
             // DRIVE
@@ -748,7 +759,13 @@ struct FasmBackend
                     write_bit(iostandard + ".DRIVE.I_FIXED");
                 }
             } else { // IOB33
-                if ((iostandard == "LVCMOS15" && drive == 16) || iostandard == "SSTL15")
+                if (iostandard == "TMDS_33" && yLoc == 0) {
+                    write_bit("TMDS_33.DRIVE.I_FIXED");
+                    write_bit("TMDS_33.OUT");
+                } else if (iostandard == "LVDS_25" && yLoc == 0) {
+                    write_bit("LVDS_25.DRIVE.I_FIXED");
+                    write_bit("LVDS_25.OUT");
+                } else if ((iostandard == "LVCMOS15" && drive == 16) || iostandard == "SSTL15")
                     write_bit("LVCMOS15_SSTL15.DRIVE.I16_I_FIXED");
                 else if (iostandard == "LVCMOS18" && (drive == 12 || drive == 8))
                     write_bit("LVCMOS18.DRIVE.I12_I8");
@@ -780,8 +797,10 @@ struct FasmBackend
                     write_bit("SSTL15.SLEW.SLOW");
                 else
                     write_bit("LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW");
-            } else if (slew == "SLOW")
-                write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW");
+            } else if (slew == "SLOW") {
+                if (iostandard != "LVDS_25" && iostandard != "TMDS_33")
+                    write_bit("LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW");
+            }
             else if (is_riob18)
                 write_bit(iostandard + ".SLEW.FAST");
             else if (iostandard == "SSTL135" || iostandard == "SSTL15")
@@ -825,7 +844,10 @@ struct FasmBackend
                             write_bit("LVDS.IN_USE");
                     }
                 } else {
-                    write_bit("LVDS_25_SSTL135_SSTL15.IN_DIFF");
+                    if (iostandard == "TDMS_33")
+                        write_bit("TDMS_33.IN_DIFF");
+                    else
+                        write_bit("LVDS_25_SSTL135_SSTL15.IN_DIFF");
                 }
 
                 if (pad->attrs.count(id_IN_TERM))
@@ -1094,6 +1116,9 @@ struct FasmBackend
             push(get_tile_name(hclk.first));
             write_bit("STEPDOWN", hclk.second.stepdown);
             write_bit("VREF.V_675_MV", hclk.second.vref);
+            write_bit("ONLY_DIFF_IN_USE", hclk.second.only_diff);
+            write_bit("TMDS_33_IN_USE", hclk.second.tmds_33);
+            write_bit("LVDS_25_IN_USE", hclk.second.lvds_25);
             pop();
         }
     }
