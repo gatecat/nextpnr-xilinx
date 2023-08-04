@@ -42,8 +42,11 @@ const char *IdString::c_str(const BaseCtx *ctx) const { return str(ctx).c_str();
 
 void IdString::initialize_add(const BaseCtx *ctx, const char *s, int idx)
 {
-    NPNR_ASSERT(ctx->idstring_str_to_idx->count(s) == 0);
-    NPNR_ASSERT(int(ctx->idstring_idx_to_str->size()) == idx);
+    char const *msg = "The internal IDs of nextpnr are inconsistent with the supplied chip database.\n"
+                      "This is usually the case, when the chip database was generated with an older version of nextpnr.\n"
+                      "We recommend regenerating the chip database with this version of nextpnr.\n";
+    NPNR_ASSERT_MSG(ctx->idstring_str_to_idx->count(s) == 0, msg);
+    NPNR_ASSERT_MSG(int(ctx->idstring_idx_to_str->size()) == idx, msg);
     auto insert_rc = ctx->idstring_str_to_idx->insert({s, idx});
     ctx->idstring_idx_to_str->push_back(&insert_rc.first->first);
 }
