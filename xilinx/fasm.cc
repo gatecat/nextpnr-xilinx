@@ -106,7 +106,7 @@ struct FasmBackend
     void get_pseudo_pip_data()
     {
         /*
-         * Create the mapping from pseudo pip tile type, source wire, and dest wire, to
+         * Create the mapping from pseudo pip tile type, dest wire, and source wire, to
          * the config bits set when that pseudo pip is used
          */
         for (std::string s : {"L", "R"})
