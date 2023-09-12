@@ -292,7 +292,7 @@ void XC7Packer::pack_io()
             pad->attrs[id_LOC] = pad->attrs.at(id_PACKAGE_PIN);
         }
         if (pad->attrs.count(id_LOC)) {
-            std::string loc = pad->attrs.at(id_LOC).as_string();
+            std::string loc = pad->attrs.at(id_LOC).to_string();
             std::string site = ctx->getPackagePinSite(loc);
             if (site.empty())
                 log_error("Unable to constrain IO '%s', device does not have a pin named '%s'\n", pad->name.c_str(ctx),

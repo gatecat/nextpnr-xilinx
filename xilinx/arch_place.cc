@@ -318,10 +318,14 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
 
             // Check 6LUT
             if (lut6 != nullptr) {
-                if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl))
-                    return false; // Memory and SRLs only valid in SLICEMs
-                if (lut6->lutInfo.is_srl && (i >= 4))
+                if (!is_slicem && (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl)) {
+                    DBG();
                     return false;
+                } // Memory and SRLs only valid in SLICEMs
+                if (lut6->lutInfo.is_srl && (i >= 4)) {
+                    DBG();
+                    return false;
+                }
                 if (lut6->lutInfo.is_memory || lut6->lutInfo.is_srl) {
                     if (wclk == nullptr)
                         wclk = lut6->lutInfo.wclk;
@@ -514,6 +518,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
 
             lts.eights[i].valid = true;
         } else if (!lts.eights[i].valid) {
+            DBG();
             return false;
         }
     }
@@ -545,27 +550,45 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                     CellInfo *ff = lts.cells[z << 4 | (BEL_FF + k)];
                     if (ff == nullptr)
                         continue;
-                    if (ff->ffInfo.is_latch && k == 1)
+                    if (ff->ffInfo.is_latch && k == 1) {
+                        DBG();
                         return false;
+                    }
                     if (found_ff[0] || found_ff[1]) {
-                        if (ff->ffInfo.clk != clk)
+                        if (ff->ffInfo.clk != clk) {
+                            DBG();
                             return false;
-                        if (ff->ffInfo.sr != sr)
+                        }
+                        if (ff->ffInfo.sr != sr) {
+                            DBG();
                             return false;
-                        if (ff->ffInfo.ce != ce)
+                        }
+                        if (ff->ffInfo.ce != ce) {
+                            DBG();
                             return false;
-                        if (ff->ffInfo.is_clkinv != clkinv)
+                        }
+                        if (ff->ffInfo.is_clkinv != clkinv) {
+                            DBG();
                             return false;
-                        if (ff->ffInfo.is_srinv != srinv)
+                        }
+                        if (ff->ffInfo.is_srinv != srinv) {
+                            DBG();
                             return false;
-                        if (ff->ffInfo.is_latch != islatch)
+                        }
+                        if (ff->ffInfo.is_latch != islatch) {
+                            DBG();
                             return false;
-                        if (ff->ffInfo.ffsync != ffsync)
+                        }
+                        if (ff->ffInfo.ffsync != ffsync) {
+                            DBG();
                             return false;
+                        }
                     } else {
                         clk = ff->ffInfo.clk;
-                        if (i == 0 && wclk != nullptr && clk != wclk)
+                        if (i == 0 && wclk != nullptr && clk != wclk) {
+                            DBG();
                             return false;
+                        }
                         sr = ff->ffInfo.sr;
                         ce = ff->ffInfo.ce;
                         clkinv = ff->ffInfo.is_clkinv;
@@ -578,6 +601,7 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
             }
             lts.halfs[i].valid = true;
         } else if (!lts.halfs[i].valid) {
+            DBG();
             return false;
         }
     }
@@ -622,8 +646,10 @@ bool Arch::isBelLocationValid(BelId bel, bool explain_invalid) const
         }
     } else {
         for (auto bel : getBelsByTile(bel.tile % chip_info->width, bel.tile / chip_info->width))
-            if (getBoundBelCell(bel) != nullptr && usp_bel_hard_unavail(bel))
+            if (getBoundBelCell(bel) != nullptr && usp_bel_hard_unavail(bel)) {
+                DBG();
                 return false;
+            }
     }
     return true;
 }
