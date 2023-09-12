@@ -106,7 +106,7 @@ struct FasmBackend
     void get_pseudo_pip_data()
     {
         /*
-         * Create the mapping from pseudo pip tile type, source wire, and dest wire, to
+         * Create the mapping from pseudo pip tile type, dest wire, and source wire, to
          * the config bits set when that pseudo pip is used
          */
         for (std::string s : {"L", "R"})
@@ -211,6 +211,8 @@ struct FasmBackend
 
     void write_pip(PipId pip, NetInfo *net)
     {
+        const bool debug_this = false;
+
         pips_by_tile[pip.tile].push_back(pip);
 
         auto dst_intent = ctx->wireIntent(ctx->getPipDstWire(pip));
@@ -218,12 +220,43 @@ struct FasmBackend
             return;
 
         auto &pd = ctx->locInfo(pip).pip_data[pip.index];
-        if (pd.flags != PIP_TILE_ROUTING)
+        if (debug_this) {
+            IdString src_debug = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name);
+            IdString dst_debug = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name);
+            std::cerr << "==> looking at pip " << ctx->getPipName(pip).str(ctx) << " on tile " << get_tile_name(pip.tile) << " from " << src_debug.c_str(ctx) << "  to " << dst_debug.c_str(ctx) << std::endl;
+        }
+
+        if (pd.flags != PIP_TILE_ROUTING && pd.flags != PIP_SITE_INTERNAL)
             return;
 
         IdString src = IdString(ctx->locInfo(pip).wire_data[pd.src_index].name);
         IdString dst = IdString(ctx->locInfo(pip).wire_data[pd.dst_index].name);
 
+        // handle certain site internal pips:
+        // this is necessary, because in tristate outputs, the
+        // ZINV_T1 bit needs to be set, because in the OLOGIC tiles the
+        // tristate control signals are inverted if this bit is not set
+        // this only applies to router1, because router2 does not generate
+        // site internal pips here.
+        if (pd.flags == PIP_SITE_INTERNAL) {
+            if (src.str(ctx) == "T1" && dst.str(ctx) == "T1INV_OUT") {
+                auto srcwire_uphill_iter = ctx->getPipsUphill(ctx->getPipSrcWire(pip));
+                auto uphill = srcwire_uphill_iter.begin();
+                if (uphill != srcwire_uphill_iter.end()) {
+                    // source wire should be like: LIOI3_X0Y73/IOI_OLOGIC1_T1
+                    auto loc = ctx->getWireName(ctx->getPipSrcWire(*uphill)).str(ctx);
+                    boost::replace_all(loc, "/", ".");
+                    boost::erase_all(loc, "_T1");
+                    boost::replace_all(loc, "IOI_OLOGIC", "OLOGIC_Y");
+                    // the replacements transformed it into : LIOI3_X0Y73.OLOGIC_Y1
+                    if (debug_this) std::cerr << "writing bit " << loc << "." << "ZINV_T1" << std::endl;
+                    out << loc << "." << "ZINV_T1" << std::endl;
+                }
+            }
+            return;
+        }
+
+        // handle tile routing pips
         PseudoPipKey ppk{IdString(ctx->locInfo(pip).type), dst, src};
 
         if (pp_config.count(ppk)) {
@@ -240,6 +273,7 @@ struct FasmBackend
                             c.replace(y0pos, 2, "Y1");
                     }
                 }
+                if (debug_this) std::cerr << "writing pp " << c << " for tile " << tile_name << std::endl;
                 out << tile_name << "." << c << std::endl;
             }
             if (!pp.empty())

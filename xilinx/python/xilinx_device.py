@@ -364,7 +364,7 @@ def import_device(name, prjxray_root, metadata_root):
 					for pipdata in vdata["pips"]:
 						bel_idx = bel_idx_by_name[pipdata["bel"]]
 						bel_data = vd.bels[bel_idx]
-						vd.pips.append(SitePIPData(bel_idx=bel_idx_by_name[pipdata["bel"]], bel_input=pipdata["from_pin"], 
+						vd.pips.append(SitePIPData(bel_idx=bel_idx_by_name[pipdata["bel"]], bel_input=pipdata["from_pin"],
 							from_wire_idx=bel_data.pins[pipdata["from_pin"]].site_wire_idx,
 							to_wire_idx=bel_data.pins[pipdata["to_pin"]].site_wire_idx))
 					# Import pins
@@ -389,7 +389,7 @@ def import_device(name, prjxray_root, metadata_root):
 	def get_tile_type_data(tiletype):
 		if tiletype not in tile_type_cache:
 			td = TileData(tiletype)
-			# Import wires and pips 
+			# Import wires and pips
 			tj = read_tile_type_json(tiletype)
 			for wire, wire_data in sorted(tj["wires"].items()):
 				wire_id = len(td.wires)
@@ -401,7 +401,7 @@ def import_device(name, prjxray_root, metadata_root):
 					if "cap" in wire_data:
 						wd.capacitance = float(wire_data["cap"])
 				td.wires.append(wd)
-				td.wires_by_name[wire] = wd					
+				td.wires_by_name[wire] = wd
 			for pip, pipdata in sorted(tj["pips"].items()):
 				# FIXME: pip/wire delays
 				pip_id = len(td.pips)
