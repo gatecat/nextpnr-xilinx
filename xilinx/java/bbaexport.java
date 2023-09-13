@@ -799,7 +799,7 @@ public class bbaexport {
             ++known_id_count;
         }
 
-        TimingModel tmg = new TimingModel(des);
+        TimingModel tmg = new TimingModel(des.getDevice());
         tmg.build();
 
         // Unique tiletypes
@@ -993,7 +993,7 @@ public class bbaexport {
         }
 
         // Nodes
-        HashSet<TileTypeEnum> intTileTypes = Utils.getIntTileTypes();
+        HashSet<TileTypeEnum> intTileTypes = new HashSet(Utils.getIntTileTypes());
         HashSet<Long> seenNodes = new HashSet<>();
         int curr = 0, total = d.getAllTiles().size();
         ArrayList<Integer> nodeWireCount = new ArrayList<>(), nodeIntent = new ArrayList<>();
