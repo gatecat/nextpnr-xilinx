@@ -130,6 +130,18 @@ void XC7Packer::pack_gbs()
     }
 }
 
+void XC7Packer::pack_cfg()
+{
+    log_info("Packing cfg...\n");
+    dict<IdString, XFormRule> cfg_rules;
+    cfg_rules[id_BSCANE2].new_type   = id_BSCAN_BSCAN;
+    cfg_rules[id_DCIRESET].new_type  = id_DCIRESET_DCIRESET;
+    cfg_rules[id_ICAPE2].new_type    = id_ICAP_ICAP;
+    cfg_rules[id_STARTUPE2].new_type = id_STARTUP_STARTUP;
+
+    generic_xform(cfg_rules);
+}
+
 void XC7Packer::pack_clocking()
 {
     pack_plls();
