@@ -1166,7 +1166,7 @@ struct FasmBackend
                 continue;
 
             push(tile_name);
-            if (ci->type == id_BSCAN_BSCAN) {
+            if (ci->type == id_BSCAN) {
                 push("BSCAN");
                 int chain = int_or_default(ci->params, id_JTAG_CHAIN, 1);
                 if (chain < 1 || 4 < chain)
