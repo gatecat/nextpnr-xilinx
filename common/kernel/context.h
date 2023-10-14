@@ -60,6 +60,26 @@ struct Context : Arch, DeterministicRNG
     delay_t getNetinfoRouteDelay(const NetInfo *net_info, const PortRef &sink) const;
     DelayQuad getNetinfoRouteDelayQuad(const NetInfo *net_info, const PortRef &sink) const;
 
+    bool net_is_constant(NetInfo *net, bool &value)
+    {
+        auto gnd = this->id("$PACKER_GND_NET");
+        auto vcc = this->id("$PACKER_VCC_NET");
+        if (net == nullptr)
+            return false;
+        if (net->name.in(gnd, vcc)) {
+            value = (net->name == vcc);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    bool net_is_constant(NetInfo *net)
+    {
+        bool unused;
+        return net_is_constant(net, unused);
+    }
+
     // provided by router1.cc
     bool checkRoutedDesign() const;
     bool getActualRouteDelay(WireId src_wire, WireId dst_wire, delay_t *delay = nullptr,

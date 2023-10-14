@@ -130,6 +130,22 @@ void XC7Packer::pack_gbs()
     }
 }
 
+void XC7Packer::pack_cfg()
+{
+    log_info("Packing cfg...\n");
+    dict<IdString, XFormRule> cfg_rules;
+    cfg_rules[id_BSCANE2].new_type      = id_BSCAN;
+    cfg_rules[id_DCIRESET].new_type     = id_DCIRESET_DCIRESET;
+    cfg_rules[id_DNA_PORT].new_type     = id_DNA_PORT_DNA_PORT;
+    cfg_rules[id_EFUSE_USR].new_type    = id_EFUSE_USR_EFUSE_USR;
+    cfg_rules[id_ICAPE2].new_type       = id_ICAP_ICAP;
+    cfg_rules[id_FRAME_ECCE2].new_type  = id_FRAME_ECC_FRAME_ECC;
+    cfg_rules[id_STARTUPE2].new_type    = id_STARTUP_STARTUP;
+    cfg_rules[id_USR_ACCESSE2].new_type = id_USR_ACCESS_USR_ACCESS;
+
+    generic_xform(cfg_rules);
+}
+
 void XC7Packer::pack_clocking()
 {
     pack_plls();
