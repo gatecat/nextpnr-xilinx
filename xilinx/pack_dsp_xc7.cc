@@ -28,6 +28,8 @@ void XC7Packer::walk_dsp(CellInfo *root, CellInfo *current_cell, int constr_z)
     CellInfo *cascaded_cell = nullptr;
 
     auto check_illegal_fanout = [&] (NetInfo *ni, std::string port) {
+        if (ni->users.entries() == 0)
+            log_error("Port %s connected to net %s has no users", port.c_str(), ni->name.c_str(ctx));
         if (ni->users.entries() > 1)
             log_error("Port %s connected to net %s has more than one user", port.c_str(), ni->name.c_str(ctx));
 
@@ -40,18 +42,20 @@ void XC7Packer::walk_dsp(CellInfo *root, CellInfo *current_cell, int constr_z)
     // see if any cascade outputs are connected
     for (auto port : current_cell->ports) {
         if (!boost::contains(port.first.str(ctx), "COUT")) continue;
+
         NetInfo *cout_net = port.second.net;
 
         if (cout_net == nullptr) continue;
 
         check_illegal_fanout(cout_net, port.first.c_str(ctx));
-        PortRef& user = *cout_net->users.end();
+        PortRef &user = *cout_net->users.begin();
+
         CellInfo *cout_cell = user.cell;
         NPNR_ASSERT(cout_cell != nullptr);
 
         if (cascaded_cell != nullptr && cout_cell != cascaded_cell)
             log_error("the cascading outputs of DSP block %s are connected to different cells",
-                current_cell->name.c_str(ctx));
+                      current_cell->name.c_str(ctx));
 
         cascaded_cell = cout_cell;
     }
@@ -87,7 +91,7 @@ void XC7Packer::pack_dsps()
     for (auto &cell : ctx->cells) {
         CellInfo *ci = cell.second.get();
 
-        auto add_const_pin = [&](PortInfo& port, std::string& pins, std::string& pin_name, std::string net) {
+        auto add_const_pin = [&](PortInfo &port, std::string &pins, std::string &pin_name, std::string net) {
             if (port.net && port.net->name == ctx->id(net)) {
                 ci->disconnectPort(port.name);
                 pins += " " + pin_name;
