@@ -159,6 +159,7 @@ void XC7Packer::pack_dsps()
     for (auto root : dsp_roots) {
         root->constr_abs_z = true;
         root->constr_z = BEL_LOWER_DSP;
+        root->cluster = root->name;
         walk_dsp(root, root, BEL_UPPER_DSP);
     }
 }
