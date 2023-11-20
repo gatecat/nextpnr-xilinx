@@ -502,7 +502,6 @@ struct FasmBackend
                 push(get_bel_name(ff->bel));
                 bool zrst = false, zinit = false;
                 zinit = (int_or_default(ff->params, id_INIT, 0) != 1);
-                IdString srsig;
                 std::string type = str_or_default(ff->attrs, id_X_ORIG_TYPE, "");
                 if (type == "FDRE") {
                     zrst = true;
