@@ -501,29 +501,29 @@ void get_tied_pins(Context *ctx, dict<IdString, dict<IdString, bool>> &tied_pins
         tied_pins[id_IOBUFDSE3][ctx->id("OSC[" + std::to_string(i) + "]")] = false;
 
     // MMCME2
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("CLKFBIN")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("CLKIN1")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("CLKIN2")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("CLKINSEL")] = true;
+    tied_pins[id_MMCME2_ADV][id_CLKFBIN] = false;
+    tied_pins[id_MMCME2_ADV][id_CLKIN1] = false;
+    tied_pins[id_MMCME2_ADV][id_CLKIN2] = false;
+    tied_pins[id_MMCME2_ADV][id_CLKINSEL] = true;
     for (int i = 0; i < 7; i++)
-        tied_pins[ctx->id("MMCME2_ADV")][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("DCLK")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("DEN")] = false;
+        tied_pins[id_MMCME2_ADV][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
+    tied_pins[id_MMCME2_ADV][id_DCLK] = false;
+    tied_pins[id_MMCME2_ADV][id_DEN] = false;
     for (int i = 0; i < 16; i++)
-        tied_pins[ctx->id("MMCME2_ADV")][ctx->id("DI[" + std::to_string(i) + "]")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("DWE")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("PSCLK")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("PSEN")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("PSINCDEC")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("PWRDWN")] = false;
-    tied_pins[ctx->id("MMCME2_ADV")][ctx->id("RST")] = false;
+        tied_pins[id_MMCME2_ADV][ctx->id("DI[" + std::to_string(i) + "]")] = false;
+    tied_pins[id_MMCME2_ADV][id_DWE] = false;
+    tied_pins[id_MMCME2_ADV][id_PSCLK] = false;
+    tied_pins[id_MMCME2_ADV][id_PSEN] = false;
+    tied_pins[id_MMCME2_ADV][id_PSINCDEC] = false;
+    tied_pins[id_MMCME2_ADV][id_PWRDWN] = false;
+    tied_pins[id_MMCME2_ADV][id_RST] = false;
 
     // MMCME4
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CDDCREQ")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKFBIN")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKIN1")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKIN2")] = false;
-    tied_pins[ctx->id("MMCME4_ADV")][ctx->id("CLKINSEL")] = true;
+    tied_pins[id_MMCME4_ADV][id_CDDCREQ] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKFBIN] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKIN1] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKIN2] = false;
+    tied_pins[id_MMCME4_ADV][id_CLKINSEL] = true;
     for (int i = 0; i < 7; i++)
         tied_pins[id_MMCME4_ADV][ctx->id("DADDR[" + std::to_string(i) + "]")] = false;
     tied_pins[id_MMCME4_ADV][id_DCLK] = false;
