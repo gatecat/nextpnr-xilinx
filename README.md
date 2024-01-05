@@ -66,7 +66,7 @@ on [arXiv](https://arxiv.org/abs/1903.10407).
   - Currently supported:
   - xc7 and xcup: LUTs (including fractured), FFs, DRAM (only RAM64X1D), carry (XORCY and MUXCY or CARRY4), SRL16E and SRLC32E (no cascading), BRAM and IO
   - xcup: OSERDESE3, ISERDESE3, IDDRE1, ODDRE1, IDELAYE3, ODELAYE3, IDELAYCTRL, BUFGCTRL, BUFG, BUFGCE, BUFG_PS, PLLE4_ADV, PLLE4_BASIC, MMCME4_ADV, MMCME4_BASIC, URAM288E, DSP48E2 (no cascading)
-  - xc7: OSERDESE2, ISERDESE2, IDDR, ODDR, IDELAYE2, ODELAYE2, IDELAYCTRL, BUFGCTRL, BUFG, PLLE2_BASIC, PLLE2_ADV, DSP48E1 (cascading works)
+  - xc7: OSERDESE2, ISERDESE2, IDDR, ODDR, IDELAYE2, ODELAYE2, IDELAYCTRL, BUFGCTRL, BUFG, PLLE2_BASE, PLLE2_ADV, MMCME2_BASE, MMCME2_ADV, DSP48E1 (cascading works)
 
   - Bels, tile wires and pips are deduplicated but nodes (connections between tile wires) are not. This means
     that databases for larger devices will be several gigabytes in size (but significantly smaller than a fully flat database).
