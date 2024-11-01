@@ -799,7 +799,7 @@ public class bbaexport {
             ++known_id_count;
         }
 
-        TimingModel tmg = new TimingModel(des);
+        TimingModel tmg = new TimingModel(d);
         tmg.build();
 
         // Unique tiletypes
@@ -993,7 +993,7 @@ public class bbaexport {
         }
 
         // Nodes
-        HashSet<TileTypeEnum> intTileTypes = Utils.getIntTileTypes();
+        Set<TileTypeEnum> intTileTypes = Utils.getIntTileTypes();
         HashSet<Long> seenNodes = new HashSet<>();
         int curr = 0, total = d.getAllTiles().size();
         ArrayList<Integer> nodeWireCount = new ArrayList<>(), nodeIntent = new ArrayList<>();
@@ -1153,7 +1153,7 @@ public class bbaexport {
         bba.printf("ref pip_timing_classes\n");
         // Chip info
         bba.println("label chip_info");
-        bba.printf("str |%s|\n", d.getDeviceName()); //device name
+        bba.printf("str |%s|\n", d.getName()); //device name
         bba.printf("str |RapidWright|\n"); //generator
         bba.printf("u32 %d\n", 1); //version
         bba.printf("u32 %d\n", d.getColumns()); //width

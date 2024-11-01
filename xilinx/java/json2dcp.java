@@ -390,23 +390,21 @@ public class json2dcp {
         }
 
         EDIFCell top = des.getNetlist().getTopCell();
-        EDIFNet edif_gnd = EDIFTools.getStaticNet(NetType.GND, top, des.getNetlist());
-        EDIFNet edif_vcc = EDIFTools.getStaticNet(NetType.VCC, top, des.getNetlist());
 
         for (NextpnrNet nn : ndes.nets.values()) {
             //System.out.println("create net " + nn.name);
             Net n;
             if (nn.name.equals("$PACKER_VCC_NET")) {
-                n = new Net("GLOBAL_LOGIC1", edif_vcc);
+                n = new Net("GLOBAL_LOGIC1", NetType.GND);
                 des.addNet(n);
             } else if (nn.name.equals("$PACKER_GND_NET")) {
-                n = new Net("GLOBAL_LOGIC0", edif_gnd);
+                n = new Net("GLOBAL_LOGIC0", NetType.VCC);
                 des.addNet(n);
             } else if (nn.name.contains("$subnet$")) {
-                n = new Net(escape_name(nn.name), (EDIFNet)null);
+                n = new Net(escape_name(nn.name), NetType.WIRE);
                 des.addNet(n);
             } else {
-                n = new Net(escape_name(nn.name), new EDIFNet(escape_name(nn.name), des.getTopEDIFCell()));
+                n = new Net(escape_name(nn.name), NetType.UNKNOWN);
                 des.addNet(n);
             }
             nn.rwNet = n;
@@ -428,7 +426,7 @@ public class json2dcp {
                         // Special case where no logical pin exists, mostly where we tie A6 high for a fractured LUT
                         BELPin belPin = usr.cell.rwCell.getBEL().getPin(usr.name);
                         if (belPin != null && belPin.getConnectedSitePinName() != null) {
-                            n.createPin(false, belPin.getConnectedSitePinName(), usr.cell.rwCell.getSiteInst());
+                            n.createPin(belPin.getConnectedSitePinName(), usr.cell.rwCell.getSiteInst());
                         }
                     }
 
