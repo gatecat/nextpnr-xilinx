@@ -222,16 +222,16 @@ void XilinxPacker::pack_ffs()
     // ff_rules[id_FDSE].param_xform[id_IS_S_INVERTED] = id_IS_SR_INVERTED;
 
     ff_rules[id_FDCE_1] = XFormRule(ff_rules[id_FDCE]);
-    ff_rules[id_FDCE_1].set_params.emplace_back(id_IS_C_INVERTED, 1);
+    ff_rules[id_FDCE_1].set_params.emplace_back(id_IS_CLK_INVERTED, 1);
 
     ff_rules[id_FDPE_1] = XFormRule(ff_rules[id_FDPE]);
-    ff_rules[id_FDPE_1].set_params.emplace_back(id_IS_C_INVERTED, 1);
+    ff_rules[id_FDPE_1].set_params.emplace_back(id_IS_CLK_INVERTED, 1);
 
     ff_rules[id_FDRE_1] = XFormRule(ff_rules[id_FDRE]);
-    ff_rules[id_FDRE_1].set_params.emplace_back(id_IS_C_INVERTED, 1);
+    ff_rules[id_FDRE_1].set_params.emplace_back(id_IS_CLK_INVERTED, 1);
 
     ff_rules[id_FDSE_1] = XFormRule(ff_rules[id_FDSE]);
-    ff_rules[id_FDSE_1].set_params.emplace_back(id_IS_C_INVERTED, 1);
+    ff_rules[id_FDSE_1].set_params.emplace_back(id_IS_CLK_INVERTED, 1);
 
     generic_xform(ff_rules, true);
 }
