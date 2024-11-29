@@ -1157,6 +1157,50 @@ struct FasmBackend
         }
     }
 
+    void write_cfg()
+    {
+        for (auto &cell : ctx->cells) {
+            CellInfo *ci = cell.second.get();
+            auto tile_name = get_tile_name(ci->bel.tile);
+            if (!boost::starts_with(tile_name, "CFG_CENTER_"))
+                continue;
+
+            push(tile_name);
+            if (ci->type == id_BSCAN) {
+                push("BSCAN");
+                int chain = int_or_default(ci->params, id_JTAG_CHAIN, 1);
+                if (chain < 1 || 4 < chain)
+                    log_error("Invalid JTAG_CHAIN number of '%d\n'. Allowed values are: 1-4.", chain);
+                write_bit("JTAG_CHAIN_" + std::to_string(chain));
+                pop();
+            }
+
+            if (ci->type == id_DCIRESET_DCIRESET) {
+                write_bit("DCIRESET.ENABLED");
+            }
+
+            if (ci->type == id_ICAP_ICAP) {
+                push("ICAP");
+                std::string width = str_or_default(ci->params, id_ICAP_WIDTH, "X32");
+                if (width != "X32" && width != "X16" && width != "X8")
+                    log_error("Unknown ICAP_WIDTH of '%s\n'. Allowed values are: X32, X16 and X8.", width.c_str());
+                if (width == "X16") write_bit("ICAP_WIDTH_X16");
+                if (width == "X8") write_bit("ICAP_WIDTH_X8");
+                pop();
+            }
+
+            if (ci->type == id_STARTUP_STARTUP) {
+                std::string prog_usr = str_or_default(ci->params, id_PROG_USR, "FALSE");
+                if (prog_usr != "TRUE" && prog_usr != "FALSE")
+                    log_error("Invalid PROG_USR attribute in STARTUPE2 of '%s\n'. Allowed values are: TRUE, FALSE.", prog_usr.c_str());
+                write_bit("STARTUP.PROG_USR", prog_usr == "TRUE");
+                write_bit("STARTUP.USRCCLKO_CONNECTED", !ctx->net_is_constant(ci->getPort(id_USRCCLKO)));
+            }
+
+            pop();
+        }
+    }
+
     std::vector<std::string> used_wires_starting_with(int tile, const std::string &prefix, bool is_source)
     {
         std::vector<std::string> wires;
@@ -1618,6 +1662,7 @@ struct FasmBackend
     {
         get_invertible_pins(ctx, invertible_pins);
         write_logic();
+        write_cfg();
         write_io();
         write_routing();
         write_bram();
