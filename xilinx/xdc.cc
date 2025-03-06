@@ -81,14 +81,15 @@ void Arch::parseXdc(std::istream &in)
         if (str.empty() || str.front() != '[')
             log_error("failed to parse target (on line %d)\n", lineno);
         str = str.substr(1, str.size() - 2);
-        auto split = split_to_args(str, false);
+        auto split = split_to_args(str, true);
         if (split.size() < 1)
             log_error("failed to parse target (on line %d)\n", lineno);
         if (split.front() != "get_ports")
             log_error("targets other than 'get_ports' are not supported (on line %d)\n", lineno);
         if (split.size() < 2)
             log_error("failed to parse target (on line %d)\n", lineno);
-        IdString cellname = id(strip_quotes(split.at(1)));
+        auto cellnames = split_to_args(strip_quotes(split.at(1)), false); // Handle braces
+        IdString cellname = id(cellnames.at(0));
         if (cells.count(cellname))
             tgt_cells.push_back(cells.at(cellname).get());
         return tgt_cells;
@@ -99,14 +100,18 @@ void Arch::parseXdc(std::istream &in)
         if (str.empty() || str.front() != '[')
             log_error("failed to parse target (on line %d)\n", lineno);
         str = str.substr(1, str.size() - 2);
-        auto split = split_to_args(str, false);
+        auto split = split_to_args(str, true);
         if (split.size() < 1)
             log_error("failed to parse target (on line %d)\n", lineno);
         if (split.front() != "get_ports" && split.front() != "get_nets")
             log_error("targets other than 'get_ports' or 'get_nets' are not supported (on line %d)\n", lineno);
         if (split.size() < 2)
             log_error("failed to parse target (on line %d)\n", lineno);
-        IdString netname = id(split.at(1));
+        auto netnames = split_to_args(strip_quotes(split.at(1)), false);
+        str = netnames.at(0);
+        if (str.empty())
+            return tgt_nets;
+        IdString netname = id(str);
         NetInfo *maybe_net = getNetByAlias(netname);
         if (maybe_net != nullptr)
             tgt_nets.push_back(maybe_net);
