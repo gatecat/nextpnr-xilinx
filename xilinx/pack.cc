@@ -413,8 +413,13 @@ void XilinxPacker::pack_srls()
     srl_rules[id_SRLC32E].port_xform[id_CE] = id_WE;
     srl_rules[id_SRLC32E].port_xform[id_D] = id_DI1;
     srl_rules[id_SRLC32E].port_xform[id_Q] = id_O6;
+    // Cascade shift-out: SRLC32E.Q31 maps to the SLICE_LUTX MC31 bel pin,
+    // which then drives the DOUTMUX:MC31 site pip used to feed the next
+    // SRLC32E.D in a cascade.  Without this xform, routing fails with
+    // "No wire found for port Q31 on source cell" whenever Yosys
+    // synthesises a chain of SRLC32E primitives.
+    srl_rules[id_SRLC32E].port_xform[ctx->id("Q31")] = id_MC31;
     srl_rules[id_SRLC32E].set_attrs.emplace_back(id_X_LUT_AS_SRL, "1");
-    // FIXME: Q31 support
     generic_xform(srl_rules, true);
     // Fixup SRL inputs
     for (auto &cell : ctx->cells) {
@@ -955,6 +960,7 @@ void Arch::assignCellInfo(CellInfo *cell)
         cell->lutInfo.di1_net = cell->getPort(id_DI1);
         cell->lutInfo.di2_net = cell->getPort(id_DI2);
         cell->lutInfo.wclk = cell->getPort(id_CLK);
+        cell->lutInfo.we = cell->getPort(id_WE);
         cell->lutInfo.memory_group = 0; // fixme
         cell->lutInfo.is_srl = cell->attrs.count(id_X_LUT_AS_SRL);
         cell->lutInfo.is_memory = cell->attrs.count(id_X_LUT_AS_DRAM);
