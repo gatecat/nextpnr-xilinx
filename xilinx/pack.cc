@@ -881,18 +881,56 @@ void XilinxPacker::pack_inverters()
     }
 }
 
+static void remove_nextpnr_iobs(Context *ctx)
+{
+    log_info("Skipping IO buffer insertion (--no-iobs / --out-of-context)\n");
+    auto is_nextpnr_iob = [&](IdString type) {
+        return type == ctx->id("$nextpnr_ibuf") || type == ctx->id("$nextpnr_obuf") ||
+               type == ctx->id("$nextpnr_iobuf");
+    };
+    std::vector<IdString> to_remove;
+    for (auto &cell : ctx->cells) {
+        CellInfo *ci = cell.second.get();
+        if (is_nextpnr_iob(ci->type)) {
+            for (auto &p : ci->ports)
+                ci->disconnectPort(p.first);
+            to_remove.push_back(ci->name);
+        }
+    }
+    // ctx->port_cells holds raw pointers into ctx->cells.  Erase them
+    // here before the underlying unique_ptrs go away so downstream
+    // passes (XDC handling, timing analysis) never dereference a
+    // dangling pointer.
+    std::vector<IdString> port_cells_to_remove;
+    for (auto &pcell : ctx->port_cells) {
+        if (pcell.second != nullptr && is_nextpnr_iob(pcell.second->type))
+            port_cells_to_remove.push_back(pcell.first);
+    }
+    for (auto &name : port_cells_to_remove)
+        ctx->port_cells.erase(name);
+    for (auto &name : to_remove)
+        ctx->cells.erase(name);
+    log_info("    Removed %zu IO buffer cells\n", to_remove.size());
+}
+
 bool Arch::pack()
 {
+    bool disable_iobs = bool_or_default(settings, id("disable_iobs"));
     if (xc7) {
         XC7Packer packer;
         packer.ctx = getCtx();
         packer.pack_constants();
         packer.pack_inverters();
-        packer.pack_io();
+        if (!disable_iobs) {
+            packer.pack_io();
+        } else {
+            remove_nextpnr_iobs(getCtx());
+        }
         // packer.prepare_iologic();
         packer.prepare_clocking();
         packer.pack_constants();
-        packer.pack_iologic();
+        if (!disable_iobs)
+            packer.pack_iologic();
         packer.pack_idelayctrl();
         packer.pack_clocking();
         packer.pack_muxfs();
@@ -910,11 +948,16 @@ bool Arch::pack()
         packer.ctx = getCtx();
         packer.pack_constants();
         packer.pack_inverters();
-        packer.pack_io();
-        packer.prepare_iologic();
+        if (!disable_iobs) {
+            packer.pack_io();
+            packer.prepare_iologic();
+        } else {
+            remove_nextpnr_iobs(getCtx());
+        }
         packer.prepare_clocking();
         packer.pack_constants();
-        packer.pack_iologic();
+        if (!disable_iobs)
+            packer.pack_iologic();
         packer.pack_idelayctrl();
         packer.pack_clocking();
         packer.pack_muxfs();

@@ -50,6 +50,10 @@ po::options_description UspCommandHandler::getArchOptions()
     specific.add_options()("chipdb", po::value<std::string>(), "name of chip database binary");
     specific.add_options()("xdc", po::value<std::vector<std::string>>(), "XDC-style constraints file");
     specific.add_options()("fasm", po::value<std::string>(), "fasm bitstream file to write");
+    specific.add_options()("no-iobs", "disable automatic IO buffer insertion (out-of-context mode)");
+    specific.add_options()("out-of-context",
+                           "alias for --no-iobs: skip IO buffer insertion and enable nextpnr's "
+                           "out-of-context timing analysis (arch.ooc)");
 
     return specific;
 }
@@ -69,7 +73,19 @@ std::unique_ptr<Context> UspCommandHandler::createContext(dict<std::string, Prop
         log_error("chip database binary must be provided\n");
     }
     chipArgs.chipdb = vm["chipdb"].as<std::string>();
-    return std::unique_ptr<Context>(new Context(chipArgs));
+    auto ctx = std::unique_ptr<Context>(new Context(chipArgs));
+    if (vm.count("no-iobs") || vm.count("out-of-context")) {
+        // Skip IO buffer insertion so designs whose top-level port count
+        // exceeds the device pin count can still place and route.
+        ctx->settings[ctx->id("disable_iobs")] = Property::State::S1;
+        // Align with nextpnr's generic out-of-context timing analysis:
+        // without arch.ooc, common/kernel/timing.cc never seeds top-level
+        // inputs as topological start points, so all combinational paths
+        // sourced at unbuffered inputs are silently dropped from the
+        // timing report.  Matches the pattern used by nextpnr-ecp5.
+        ctx->settings[ctx->id("arch.ooc")] = Property::State::S1;
+    }
+    return ctx;
 }
 
 void UspCommandHandler::customAfterLoad(Context *ctx)
