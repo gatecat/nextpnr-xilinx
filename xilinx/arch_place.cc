@@ -543,6 +543,32 @@ bool Arch::xc7_logic_tile_valid(IdString tileType, LogicTileStatus &lts) const
                     }
                 }
             }
+            // The WEMUX driving the SRL/DRAM WE pin is shared across the
+            // bottom half of a SLICEM, so all memory/SRL cells in that
+            // half-tile must agree on the WE net.  Without this check, two
+            // SRLs from independent write-enable domains can both be placed
+            // into the same SLICEM half and then fail routing on
+            // SITEWIRE/SLICE_*/WEMUX_OUT.
+            if (i == 0) {
+                NetInfo *we = nullptr;
+                for (int z = 4 * i; z < 4 * (i + 1); z++) {
+                    for (int k = 0; k < 2; k++) {
+                        CellInfo *lut = lts.cells[z << 4 | (BEL_6LUT + k)];
+                        if (lut == nullptr)
+                            continue;
+                        if (!lut->lutInfo.is_memory && !lut->lutInfo.is_srl)
+                            continue;
+                        if (lut->lutInfo.we == nullptr)
+                            continue;
+                        if (we == nullptr) {
+                            we = lut->lutInfo.we;
+                        } else if (we != lut->lutInfo.we) {
+                            DBG();
+                            return false;
+                        }
+                    }
+                }
+            }
             NetInfo *clk = nullptr, *sr = nullptr, *ce = nullptr;
             bool clkinv = false, srinv = false, islatch = false, ffsync = false;
             for (int z = 4 * i; z < 4 * (i + 1); z++) {
