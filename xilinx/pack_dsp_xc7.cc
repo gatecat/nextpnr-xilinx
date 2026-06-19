@@ -31,7 +31,7 @@ void XC7Packer::walk_dsp(CellInfo *root, CellInfo *current_cell, int constr_z)
         if (ni->users.entries() > 1)
             log_error("Port %s connected to net %s has more than one user", port.c_str(), ni->name.c_str(ctx));
 
-        PortRef& user = *ni->users.end();
+        PortRef& user = *ni->users.begin();
         if (user.cell->type != id_DSP48E1_DSP48E1)
             log_error("User %s of net %s is not a DSP block, but %s",
                 user.cell->name.c_str(ctx), ni->name.c_str(ctx), user.cell->type.c_str(ctx));
@@ -45,7 +45,7 @@ void XC7Packer::walk_dsp(CellInfo *root, CellInfo *current_cell, int constr_z)
         if (cout_net == nullptr) continue;
 
         check_illegal_fanout(cout_net, port.first.c_str(ctx));
-        PortRef& user = *cout_net->users.end();
+        PortRef& user = *cout_net->users.begin();
         CellInfo *cout_cell = user.cell;
         NPNR_ASSERT(cout_cell != nullptr);
 
@@ -156,6 +156,12 @@ void XC7Packer::pack_dsps()
         root->constr_abs_z = true;
         root->constr_z = BEL_LOWER_DSP;
         walk_dsp(root, root, BEL_UPPER_DSP);
+        // If walk_dsp registered any cascaded children under this root, mark
+        // the root as its own cluster so HeAPPlacer's cluster2cells picks up
+        // the chain (otherwise cluster children would never get cell_locs
+        // entries, triggering dict::at() during total_hpwl).
+        if (!root->constr_children.empty())
+            root->cluster = root->name;
     }
 }
 
